@@ -1,0 +1,62 @@
+package com.patris.security;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@RequiredArgsConstructor
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+    private final CustomUserDetailsService customUserDetailsService;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+
+        String path = request.getServletPath();
+
+        // ✅ Ignore les endpoints publics
+        if (path.startsWith("/auth/login") || path.startsWith("/utilisateurs/register")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            String bearer = request.getHeader("Authorization");
+            String token = null;
+
+            if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) {
+                token = bearer.substring(7);
+            }
+
+            if (token != null && jwtService.validateToken(token)) {
+                String username = jwtService.getUsernameFromToken(token);
+                UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
+
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+
+                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            }
+        } catch (Exception ex) {
+            // tu peux loguer l'erreur si besoin
+            // ex.printStackTrace();
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}

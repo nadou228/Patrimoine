@@ -1,0 +1,18 @@
+package com.patris.enums;
+
+public enum role {
+
+    ADMIN,
+
+    AGENT_INVENTAIRE,
+
+    GESTIONNAIRE_TECHNIQUE,
+
+    RESPONSABLE_PATRIMOINE,
+
+    RESPONSABLE_FINANCIER,
+
+    ELU,
+
+    AUDITEUR
+}
