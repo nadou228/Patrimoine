@@ -26,45 +26,45 @@ public class DashboardService {
 
     public DashboardStatsDTO getStats() {
 
-        // 1️⃣ Valeur totale patrimoine
-        double valeurTotale = bienRepository.findAll()
+        // 1ï¸âƒ£ Valeur totale patrimoine
+        double valeurTotale = bienRepository.findAllByArchivedFalse()
                 .stream()
                 .mapToDouble(Bien::getValeur)
                 .sum();
 
-        // 2️⃣ Taux occupation
-        long totalBiens = bienRepository.count();
+        // 2ï¸âƒ£ Taux occupation
+        long totalBiens = bienRepository.findAllByArchivedFalse().size();
         long biensOccupes = affectationRepository.countActiveAffectations();
 
         double tauxOccupation = totalBiens == 0 ? 0 :
                 (double) biensOccupes / totalBiens * 100;
 
-        // 3️⃣ Biens par état
+        // 3ï¸âƒ£ Biens par Ã©tat
         Map<String, Long> biensParEtat =
-                bienRepository.findAll()
+                bienRepository.findAllByArchivedFalse()
                         .stream()
                         .collect(Collectors.groupingBy(
                                 Bien::getEtat,
                                 Collectors.counting()
                         ));
 
-        // 4️⃣ Biens à réformer
+        // 4ï¸âƒ£ Biens Ã  rÃ©former
         long biensAReformer =
-                bienRepository.findByEtat("MAUVAIS").size();
+                bienRepository.findByEtatAndArchivedFalse("MAUVAIS").size();
 
-        // 5️⃣ Biens sans entretien (6 mois exemple)
+        // 5ï¸âƒ£ Biens sans entretien (6 mois exemple)
         LocalDate limite = LocalDate.now().minusMonths(6);
         long biensSansEntretien =
                 bienRepository.findBiensSansEntretienDepuis(limite).size();
 
-        // 6️⃣ Stock critique
+        // 6ï¸âƒ£ Stock critique
         long stockCritique =
                 stockRepository.findAll()
                         .stream()
                         .filter(s -> s.getQuantite() <= s.getSeuilAlerte())
                         .count();
 
-        // 7️⃣ Coût total entretiens
+        // 7ï¸âƒ£ CoÃ»t total entretiens
         double coutTotalEntretiens =
                 entretienRepository.findAll()
                         .stream()

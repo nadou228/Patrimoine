@@ -20,6 +20,7 @@ public class Stock {
     private int quantite;
     private int seuilAlerte;
     private String unite;
+    private Double prixUnitaireMoyen = 0.0;
 
     @ManyToOne
     @JoinColumn(name = "consommable_id")

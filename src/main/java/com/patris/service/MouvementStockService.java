@@ -35,12 +35,15 @@ public class MouvementStockService {
         Stock stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new RuntimeException("Stock introuvable"));
 
-        // Mise à jour de la quantité selon le type de mouvement
+        // Mise à jour de la quantité et CMUP
         if (mouvementStock.getTypeMouvement() == type_mouvement.ENTREE) {
+            double nouvelleValeur = (stock.getQuantite() * stock.getPrixUnitaireMoyen()) + 
+                                     (mouvementStock.getQuantite() * mouvementStock.getPrixUnitaire());
             stock.setQuantite(stock.getQuantite() + mouvementStock.getQuantite());
+            stock.setPrixUnitaireMoyen(nouvelleValeur / stock.getQuantite());
         } else if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE) {
             if (stock.getQuantite() < mouvementStock.getQuantite()) {
-                throw new RuntimeException("Stock insuffisant pour effectuer la sortie");
+                throw new RuntimeException("Stock insuffisant");
             }
             stock.setQuantite(stock.getQuantite() - mouvementStock.getQuantite());
         }

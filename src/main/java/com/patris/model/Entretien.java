@@ -14,6 +14,7 @@ import lombok.*;
 @Entity
 @Setter
 @Getter
+@NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "entretien")
 public class Entretien {

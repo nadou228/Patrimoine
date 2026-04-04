@@ -19,7 +19,7 @@ import lombok.RequiredArgsConstructor;
 
 
 @RestController
-@RequestMapping("/api/sinistre")
+@RequestMapping("/api/sinistres")
 @RequiredArgsConstructor
 public class SinistreController {
 

@@ -33,6 +33,8 @@ public class MouvementStock {
     private int quantite;
     private LocalDateTime dateMouvement;
     private String destination;
+    private Double prixUnitaire;
+    private String referencePiece;
 
     @ManyToOne
     @JoinColumn(name = "stock_id")

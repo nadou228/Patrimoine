@@ -12,7 +12,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 
 @RestController
-@RequestMapping("/utilisateurs")
+@RequestMapping("/api/utilisateurs")
 @RequiredArgsConstructor
 public class UtilisateurController {
 
@@ -22,14 +22,22 @@ public class UtilisateurController {
     @GetMapping("/test")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> testAdmin() {
-        return ResponseEntity.ok("Accès autorisé : role ADMIN");
+        return ResponseEntity.ok("AccÃ¨s autorisÃ© : role ADMIN");
     }
 
     // ---------------- REGISTER --------------------
     @PostMapping("/register")
-    public ResponseEntity<Utilisateur> register(@RequestBody Utilisateur utilisateur) {
-        Utilisateur saved = utilisateurService.createUser(utilisateur);
-        return ResponseEntity.ok(saved);
+    public ResponseEntity<?> register(@RequestBody Utilisateur utilisateur) {
+        try {
+            Utilisateur saved = utilisateurService.createUser(utilisateur);
+            return ResponseEntity.ok(saved);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(409).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur serveur lors de la création de l'utilisateur");
+        }
     }
 
     // ---------------- GET ALL USERS ----------------
@@ -40,13 +48,13 @@ public class UtilisateurController {
         return ResponseEntity.ok(users);
     }
 
-    // 🟢 ---------------- DELETE USER ----------------
+    // ðŸŸ¢ ---------------- DELETE USER ----------------
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")  // Seul l'ADMIN peut supprimer
     public ResponseEntity<String> deleteUser(@PathVariable Long id) {
         try {
             utilisateurService.deleteUser(id);
-            return ResponseEntity.ok("Utilisateur supprimé avec succès");
+            return ResponseEntity.ok("Utilisateur supprimÃ© avec succÃ¨s");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

@@ -8,6 +8,9 @@ import com.patris.model.Services;
 import com.patris.repository.BienRepository;
 import com.patris.repository.MouvementRepository;
 import com.patris.repository.ServicesRepository;
+import com.patris.enums.statutValidation;
+import java.time.LocalDateTime;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
 public class MouvementService {
@@ -34,23 +37,30 @@ public class MouvementService {
     }
 
     public Mouvement save(Mouvement mouvement) {
-        // Résolution du bien
+        // RÃ©solution du bien
         Long bienId = mouvement.getBien().getId();
         Bien bien = bienRepository.findById(bienId)
                 .orElseThrow(() -> new RuntimeException("Bien introuvable"));
         mouvement.setBien(bien);
 
-        // Résolution du service source
+        // RÃ©solution du service source
         Long sourceId = mouvement.getServiceSource().getId();
         Services serviceSource = servicesRepository.findById(sourceId)
                 .orElseThrow(() -> new RuntimeException("Service source introuvable"));
         mouvement.setServiceSource(serviceSource);
 
-        // Résolution du service destination
+        // RÃ©solution du service destination
         Long destinationId = mouvement.getServiceDestination().getId();
         Services serviceDestination = servicesRepository.findById(destinationId)
                 .orElseThrow(() -> new RuntimeException("Service destination introuvable"));
         mouvement.setServiceDestination(serviceDestination);
+
+        if (mouvement.getDateCreation() == null) {
+            mouvement.setDateCreation(LocalDateTime.now());
+        }
+        if (mouvement.getStatutValidation() == null) {
+            mouvement.setStatutValidation(statutValidation.EN_ATTENTE);
+        }
 
         return repository.save(mouvement);
     }
@@ -60,21 +70,38 @@ public class MouvementService {
         mouvement.setType(m.getType());
         mouvement.setDateCreation(m.getDateCreation());
         mouvement.setObservation(m.getObservation());
+        if (m.getStatutValidation() != null) {
+            mouvement.setStatutValidation(m.getStatutValidation());
+        }
+        if (m.getDateValidation() != null) {
+            mouvement.setDateValidation(m.getDateValidation());
+        }
+        if (m.getValidePar() != null) {
+            mouvement.setValidePar(m.getValidePar());
+        }
 
-        // Résolution du service source
+        // RÃ©solution du service source
         if (m.getServiceSource() != null && m.getServiceSource().getId() != null) {
             Services serviceSource = servicesRepository.findById(m.getServiceSource().getId())
                     .orElseThrow(() -> new RuntimeException("Service source introuvable"));
             mouvement.setServiceSource(serviceSource);
         }
 
-        // Résolution du service destination
+        // RÃ©solution du service destination
         if (m.getServiceDestination() != null && m.getServiceDestination().getId() != null) {
             Services serviceDestination = servicesRepository.findById(m.getServiceDestination().getId())
                     .orElseThrow(() -> new RuntimeException("Service destination introuvable"));
             mouvement.setServiceDestination(serviceDestination);
         }
 
+        return repository.save(mouvement);
+    }
+
+    public Mouvement valider(Long id, statutValidation statut) {
+        Mouvement mouvement = findById(id);
+        mouvement.setStatutValidation(statut);
+        mouvement.setValidePar(SecurityContextHolder.getContext().getAuthentication().getName());
+        mouvement.setDateValidation(LocalDateTime.now());
         return repository.save(mouvement);
     }
 

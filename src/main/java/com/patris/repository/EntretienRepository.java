@@ -5,7 +5,10 @@ import org.springframework.stereotype.Repository;
 
 import com.patris.model.Entretien;
 
+import java.util.List;
+
 @Repository
 public interface EntretienRepository extends JpaRepository<Entretien, Long> {
+    List<Entretien> findByBienId(Long bienId);
 
 } 

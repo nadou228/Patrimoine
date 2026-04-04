@@ -3,6 +3,7 @@ package com.patris.model;
 import java.time.LocalDateTime;
 
 import com.patris.enums.type_mouvement;
+import com.patris.enums.statutValidation;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -43,6 +44,12 @@ public class Mouvement {
     private Services serviceDestination;
 
     private String observation; 
+
+    @Enumerated(EnumType.STRING)
+    private statutValidation statutValidation;
+
+    private String validePar;
+    private LocalDateTime dateValidation;
     
     @ManyToOne
     @JoinColumn(name = "bien_id")

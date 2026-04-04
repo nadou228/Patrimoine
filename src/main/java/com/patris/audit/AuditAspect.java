@@ -15,7 +15,7 @@ public class AuditAspect {
 
     private final AuditService auditService;
 
-    // Intercepter toutes les méthodes save()
+    // Intercepter toutes les mÃ©thodes save()
     @AfterReturning(
         pointcut = "execution(* com.patris.service.*.save*(..))",
         returning = "result"
@@ -60,7 +60,7 @@ public class AuditAspect {
         }
     }
 
-    // Méthode utilitaire pour extraire l'id
+    // MÃ©thode utilitaire pour extraire l'id
     private Long extractId(Object entity) {
         try {
             java.lang.reflect.Method method = entity.getClass().getMethod("getId");

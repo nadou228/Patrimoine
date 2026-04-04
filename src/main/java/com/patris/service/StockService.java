@@ -29,7 +29,7 @@ public class StockService {
     }
 
     public Stock save(Stock stock) {
-        // Résolution du consommable depuis la base
+        // RÃ©solution du consommable depuis la base
         if (stock.getConsommable() != null && stock.getConsommable().getId() != null) {
             Consommable consommable = consommableRepository.findById(stock.getConsommable().getId())
                     .orElseThrow(() -> new RuntimeException("Consommable introuvable"));
@@ -44,7 +44,7 @@ public class StockService {
         stock.setSeuilAlerte(s.getSeuilAlerte());
         stock.setUnite(s.getUnite());
 
-        // Mise à jour du consommable si fourni
+        // Mise Ã  jour du consommable si fourni
         if (s.getConsommable() != null && s.getConsommable().getId() != null) {
             Consommable consommable = consommableRepository.findById(s.getConsommable().getId())
                     .orElseThrow(() -> new RuntimeException("Consommable introuvable"));
@@ -56,5 +56,9 @@ public class StockService {
 
     public void delete(Long id) {
         repository.deleteById(id);
+    }
+
+    public Stock findByConsommableId(Long consommableId) {
+        return repository.findByConsommableId(consommableId);
     }
 }

@@ -9,7 +9,8 @@ import com.patris.enums.role;
 
 public interface UtilisateurRepository extends JpaRepository<Utilisateur, Long> {
     Optional<Utilisateur> findByUsername(String username);
+    Optional<Utilisateur> findByEmail(String email);
     
-    // 🟢 Compter le nombre d'utilisateurs par rôle
+    // 💡 Compter le nombre d'utilisateurs par rôle
     long countByRole(role role);
 }

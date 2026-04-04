@@ -39,4 +39,8 @@ public class Document {
     @JoinColumn(name = "bien_id")
     private Bien bien;
 
+    @ManyToOne
+    @JoinColumn(name = "sinistre_id")
+    private Sinistre sinistre;
+
 }

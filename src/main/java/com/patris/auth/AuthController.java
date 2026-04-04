@@ -14,7 +14,7 @@ import com.patris.security.CustomUserDetails;
 import com.patris.model.Utilisateur;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping({"/auth", "/api/auth"})
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class AuthController {

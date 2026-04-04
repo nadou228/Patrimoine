@@ -11,11 +11,16 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.patris.model.Document;
 import com.patris.service.DocumentService;
+import com.patris.service.FileStorageService;
+import com.patris.enums.typeDocument;
 
 import lombok.RequiredArgsConstructor;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/document")
@@ -23,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 public class DocumentController {
 
     private final DocumentService service;
+    private final FileStorageService fileStorageService;
     
     @GetMapping
     public List<Document> findAll(){
@@ -36,6 +42,23 @@ public class DocumentController {
 
     @PostMapping
     public ResponseEntity<Document> create(@RequestBody Document document){
+        return ResponseEntity.ok(service.save(document));
+    }
+
+    @PostMapping("/upload")
+    public ResponseEntity<Document> upload(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam("bienId") Long bienId,
+        @RequestParam("typeDocument") typeDocument typeDocument
+    ){
+        String url = fileStorageService.store("documents", file);
+        Document document = new Document();
+        document.setNomFichier(file.getOriginalFilename());
+        document.setTypeDocument(typeDocument);
+        document.setDateUpload(LocalDateTime.now());
+        document.setCheminFichier(url);
+        document.setBien(new com.patris.model.Bien());
+        document.getBien().setId(bienId);
         return ResponseEntity.ok(service.save(document));
     }
 

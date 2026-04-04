@@ -1,5 +1,6 @@
 package com.patris.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Entity;
@@ -41,4 +42,34 @@ public class Affectation {
     @JoinColumn(name = "service_id")
     private Services services;
 
+    @JsonProperty("detenteur")
+    public String getDetenteur() {
+        return beneficaire;
+    }
+
+    @JsonProperty("service")
+    public String getServiceName() {
+        return (services != null) ? services.getNomService() : "N/A";
+    }
+
+    @JsonProperty("bienName")
+    public String getBienName() {
+        return (bien != null) ? bien.getDesignation() : "N/A";
+    }
+    
+    // Alias pour le frontend qui utilise item.bien comme texte
+    @JsonProperty("bien")
+    public String getBienLabel() {
+        return (bien != null) ? bien.getDesignation() : "N/A";
+    }
+
+    @JsonProperty("motif")
+    public String getMotif() {
+        return fonction;
+    }
+
+    @JsonProperty("etat")
+    public String getEtat() {
+        return (dateFin == null || dateFin.isAfter(LocalDateTime.now())) ? "ACTIF" : "CLÔTURÉ";
+    }
 }

@@ -29,7 +29,12 @@ public class SecurityConfig {
                 new JwtAuthenticationFilter(jwtService, customUserDetailsService);
 
         http
+            .cors().and()
             .csrf(csrf -> csrf.disable())
+
+            .headers(headers -> headers
+                .frameOptions(frame -> frame.sameOrigin())
+            )
 
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
@@ -38,8 +43,15 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
 
                 // ENDPOINTS PUBLICS
-                .requestMatchers("/auth/login").permitAll()
+                .requestMatchers("/auth/**").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/utilisateurs/register").permitAll()
+                .requestMatchers("/h2/**").permitAll()
+                .requestMatchers("/error").permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // PERMISSIONS ENDPOINT (Authentifié seulement)
+                .requestMatchers("/api/permissions/**").authenticated()
 
                 // ADMIN SYSTEME
                 .requestMatchers("/admin/**")
@@ -50,7 +62,7 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
 
                 .requestMatchers(HttpMethod.POST, "/api/biens/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE")
+                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","MAGASINIER","RESPONSABLE_PARC_AUTOMOBILE")
 
                 .requestMatchers(HttpMethod.PUT, "/api/biens/**")
                     .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
@@ -78,6 +90,29 @@ public class SecurityConfig {
                 // AUDIT & LOGS
                 .requestMatchers("/api/audit/**")
                     .hasAnyRole("ADMIN","AUDITEUR")
+
+                // INVENTAIRES CERTIFIES
+                .requestMatchers(HttpMethod.GET, "/api/inventaires/**")
+                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
+
+                .requestMatchers(HttpMethod.POST, "/api/inventaires/**")
+                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
+
+                .requestMatchers(HttpMethod.PUT, "/api/inventaires/**")
+                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
+
+                // REFORME / SORTIE
+                .requestMatchers(HttpMethod.GET, "/api/reformes/**")
+                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","AUDITEUR")
+
+                .requestMatchers(HttpMethod.POST, "/api/reformes/**")
+                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER")
+
+                .requestMatchers(HttpMethod.PUT, "/api/reformes/**")
+                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER")
+
+                .requestMatchers(HttpMethod.DELETE, "/api/reformes/**")
+                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE")
 
                 // AUTRES ENDPOINTS API
                 .requestMatchers("/api/**")

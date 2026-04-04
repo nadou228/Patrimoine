@@ -29,10 +29,10 @@ public class ServicesService {
     }
 
     public Services save(Services service) {
-        // Résolution de la région depuis la base
+        // RÃ©solution de la rÃ©gion depuis la base
         if (service.getRegion() != null && service.getRegion().getId() != null) {
             Region region = regionRepository.findById(service.getRegion().getId())
-                    .orElseThrow(() -> new RuntimeException("Région introuvable"));
+                    .orElseThrow(() -> new RuntimeException("RÃ©gion introuvable"));
             service.setRegion(region);
         }
         return repository.save(service);
@@ -42,10 +42,10 @@ public class ServicesService {
         Services service = findById(id);
         service.setNomService(s.getNomService());
 
-        // Mise à jour de la région si elle est fournie
+        // Mise Ã  jour de la rÃ©gion si elle est fournie
         if (s.getRegion() != null && s.getRegion().getId() != null) {
             Region region = regionRepository.findById(s.getRegion().getId())
-                    .orElseThrow(() -> new RuntimeException("Région introuvable"));
+                    .orElseThrow(() -> new RuntimeException("RÃ©gion introuvable"));
             service.setRegion(region);
         }
 

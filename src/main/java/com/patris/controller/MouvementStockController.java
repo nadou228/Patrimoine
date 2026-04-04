@@ -12,8 +12,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.patris.dto.MouvementStockCreateDTO;
+import com.patris.enums.type_mouvement;
 import com.patris.model.MouvementStock;
+import com.patris.model.Stock;
 import com.patris.service.MouvementStockService;
+import com.patris.service.StockService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -23,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 public class MouvementStockController {
 
     private final MouvementStockService service;
+    private final StockService stockService;
 
     @GetMapping
     public List<MouvementStock> findAll(){
@@ -36,6 +41,25 @@ public class MouvementStockController {
 
     @PostMapping
     public ResponseEntity<MouvementStock> create(@RequestBody MouvementStock mouvementStock){
+        return ResponseEntity.ok(service.save(mouvementStock));
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<MouvementStock> createFromDTO(@RequestBody MouvementStockCreateDTO dto){
+        // Trouver le stock associé au consommable
+        Stock stock = stockService.findByConsommableId(dto.getConsommableId());
+        if (stock == null) {
+            throw new RuntimeException("Aucun stock trouvé pour ce consommable");
+        }
+
+        // Créer le mouvement de stock
+        MouvementStock mouvementStock = new MouvementStock();
+        mouvementStock.setStock(stock);
+        mouvementStock.setTypeMouvement(type_mouvement.valueOf(dto.getTypeOperation().toUpperCase()));
+        mouvementStock.setQuantite(dto.getQuantite());
+        mouvementStock.setDateMouvement(dto.getDateOperation());
+        mouvementStock.setDestination(dto.getPieceJustificative());
+
         return ResponseEntity.ok(service.save(mouvementStock));
     }
 

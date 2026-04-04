@@ -14,5 +14,7 @@ public enum role {
 
     ELU,
 
-    AUDITEUR
+    AUDITEUR,
+    MAGASINIER,
+    RESPONSABLE_PARC_AUTOMOBILE
 }

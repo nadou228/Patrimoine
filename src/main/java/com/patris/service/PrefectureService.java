@@ -25,13 +25,13 @@ public class PrefectureService {
 
     public Prefecture findById(Long id) {
         return prefectureRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Préfecture introuvable"));
+                .orElseThrow(() -> new RuntimeException("PrÃ©fecture introuvable"));
     }
 
     public Prefecture save(Prefecture prefecture) {
         Long regionId = prefecture.getRegion().getId();
         Region region = regionRepository.findById(regionId)
-                .orElseThrow(() -> new RuntimeException("Région introuvable"));
+                .orElseThrow(() -> new RuntimeException("RÃ©gion introuvable"));
         prefecture.setRegion(region);
         return prefectureRepository.save(prefecture);
     }
@@ -40,10 +40,10 @@ public class PrefectureService {
         Prefecture prefecture = findById(id);
         prefecture.setNomPrefecture(p.getNomPrefecture());
 
-        // Mise à jour de la région si elle est fournie
+        // Mise Ã  jour de la rÃ©gion si elle est fournie
         if (p.getRegion() != null && p.getRegion().getId() != null) {
             Region region = regionRepository.findById(p.getRegion().getId())
-                    .orElseThrow(() -> new RuntimeException("Région introuvable"));
+                    .orElseThrow(() -> new RuntimeException("RÃ©gion introuvable"));
             prefecture.setRegion(region);
         }
 

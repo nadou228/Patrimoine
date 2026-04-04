@@ -23,7 +23,7 @@ public class JwtService {
 
     @PostConstruct
     public void init() {
-        // clé symétrique depuis la chaîne secrète
+        // clÃ© symÃ©trique depuis la chaÃ®ne secrÃ¨te
         key = Keys.hmacShaKeyFor(secret.getBytes());
     }
 

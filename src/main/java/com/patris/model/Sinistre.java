@@ -8,6 +8,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import lombok.*;
 
 @Entity
@@ -23,15 +25,19 @@ public class Sinistre {
     private Long id;
 
     private String dateSinistre;
-
     private String type;
-
-    private String degats;
-
-    private Double coutEstime;
+    private Double montantEstime;
+    private Double montantRembourse;
+    private String description;
+    
+    private String referenceAssurance;
+    private String lieuSinistre;
+    private java.time.LocalDate dateCloture;
+    
+    @Enumerated(EnumType.STRING)
+    private com.patris.enums.statutSinistre statut;
 
     @ManyToOne
     @JoinColumn(name = "bien_id")
     private Bien bien;
-
 }

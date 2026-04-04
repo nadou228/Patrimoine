@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -44,8 +45,20 @@ public class EntretienService {
         return repository.save(entretien);
     }
 
+    public Entretien cloturer(Long id){
+        Entretien entretien = findById(id);
+        entretien.setDateRealisee(LocalDate.now());
+        return repository.save(entretien);
+    }
+
     public void delete(Long id) {
         repository.deleteById(id);
+    }
+
+    public Double calculerCoutTotalEntretiens(Long bienId) {
+        return repository.findByBienId(bienId).stream()
+                       .mapToDouble(Entretien::getCout)
+                       .sum();
     }
 }
 

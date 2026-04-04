@@ -29,7 +29,7 @@ public class SinistreService {
     }
 
     public Sinistre save(Sinistre sinistre) {
-        // Résolution du bien depuis la base
+        // RÃ©solution du bien depuis la base
         if (sinistre.getBien() != null && sinistre.getBien().getId() != null) {
             Bien bien = bienRepository.findById(sinistre.getBien().getId())
                     .orElseThrow(() -> new RuntimeException("Bien introuvable"));
@@ -42,10 +42,11 @@ public class SinistreService {
         Sinistre sinistre = findById(id);
         sinistre.setDateSinistre(s.getDateSinistre());
         sinistre.setType(s.getType());
-        sinistre.setDegats(s.getDegats());
-        sinistre.setCoutEstime(s.getCoutEstime());
+        sinistre.setDescription(s.getDescription());
+        sinistre.setMontantEstime(s.getMontantEstime());
+        sinistre.setStatut(s.getStatut());
 
-        // Mise à jour du bien si fourni
+        // Mise Ã  jour du bien si fourni
         if (s.getBien() != null && s.getBien().getId() != null) {
             Bien bien = bienRepository.findById(s.getBien().getId())
                     .orElseThrow(() -> new RuntimeException("Bien introuvable"));

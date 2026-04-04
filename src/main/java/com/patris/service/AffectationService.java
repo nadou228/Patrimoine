@@ -1,5 +1,6 @@
 package com.patris.service;
 
+import com.patris.dto.AffectationDto;
 import com.patris.model.Affectation;
 import com.patris.model.Bien;
 import com.patris.model.Services;
@@ -9,6 +10,8 @@ import com.patris.repository.ServicesRepository;
 
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -32,24 +35,57 @@ public class AffectationService {
         return repository.findById(id).orElseThrow(()-> new RuntimeException("Affectation introuvable"));
     }
 
-    public Affectation save(Affectation affectation) {
-        Long bienId = affectation.getBien().getId();
-        Long servicesId = affectation.getServices().getId();
-        Bien bien = bienRepository.findById(bienId).orElseThrow(()-> new RuntimeException("Bien introuvable"));
-        Services services = servicesRepository.findById(servicesId).orElseThrow(()-> new RuntimeException("Services introuvable"));
-        affectation.setBien(bien);
-        affectation.setServices(services);
+    public Affectation saveFromDto(AffectationDto dto) {
+        Affectation affectation = new Affectation();
+        affectation.setBeneficaire(dto.getDetenteur());
+        affectation.setFonction(dto.getFonction() != null ? dto.getFonction() : dto.getMotif());
         
+        if (dto.getDateAffectation() != null && !dto.getDateAffectation().isBlank()) {
+            try {
+                affectation.setDateAffectation(LocalDate.parse(dto.getDateAffectation()).atStartOfDay());
+            } catch (Exception e) {
+                affectation.setDateAffectation(LocalDateTime.now());
+            }
+        } else {
+            affectation.setDateAffectation(LocalDateTime.now());
+        }
+
+        // Recherche du bien
+        if (dto.getBien() != null && !dto.getBien().isBlank()) {
+            try {
+                Long bienId = Long.parseLong(dto.getBien());
+                bienRepository.findById(bienId).ifPresent(affectation::setBien);
+            } catch (NumberFormatException e) {
+                bienRepository.findByDesignation(dto.getBien()).ifPresent(affectation::setBien);
+            }
+        }
+
+        // Recherche du service
+        if (dto.getService() != null && !dto.getService().isBlank()) {
+            try {
+                Long serviceId = Long.parseLong(dto.getService());
+                servicesRepository.findById(serviceId).ifPresent(affectation::setServices);
+            } catch (NumberFormatException e) {
+                servicesRepository.findByNomService(dto.getService()).ifPresent(affectation::setServices);
+            }
+        }
+
         return repository.save(affectation);
     }
 
-    public Affectation update(Long id, Affectation a){
+    public Affectation updateFromDto(Long id, AffectationDto dto) {
         Affectation affectation = findById(id);
-        affectation.setDateAffectation(a.getDateAffectation());
-        affectation.setDateFin(a.getDateFin());
+        if (dto.getDetenteur() != null) affectation.setBeneficaire(dto.getDetenteur());
+        if (dto.getFonction() != null) affectation.setFonction(dto.getFonction());
         
+        if (dto.getDateAffectation() != null && !dto.getDateAffectation().isBlank()) {
+            try {
+                affectation.setDateAffectation(LocalDate.parse(dto.getDateAffectation()).atStartOfDay());
+            } catch (Exception ignored) {}
+        }
+
         return repository.save(affectation);
-    }  
+    }
 
     public void delete(Long id){
         repository.deleteById(id);
