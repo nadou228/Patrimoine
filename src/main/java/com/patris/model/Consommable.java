@@ -19,13 +19,11 @@ public class Consommable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String codeArticle;
     private String nomProduit;
     private int seuilAlerte;
     private String unite;
-
-    private LocalDate dateEntree;
-    private LocalDate dateSortie;
-
+    private Double prixMoyenPondere = 0.0;
     private String serviceAffiche;
 
     @ManyToOne

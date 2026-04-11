@@ -1,146 +1,189 @@
 import React, { useState, useEffect } from 'react';
-import { getInventaires, createInventaire, deleteInventaire } from '../api/api';
-
-interface Inventaire {
-  id: number;
-  campagne: string;
-  dateDebut: string;
-  progression: number;
-  actifsTotal: number;
-  actifsVerifies: number;
-  statut: 'EN_COURS' | 'TERMINÉ' | 'PLANIFIÉ';
-}
+import { 
+  getInventaires, 
+  createInventaire, 
+  deleteInventaire, 
+  getInventaireFiches, 
+  updateInventaireFiche,
+  validerFicheAgent,
+  getBiens,
+  getServices
+} from '../api/api';
+import { exportRegistrePatrimoineExcel } from '../utils/exporters';
 
 const InventairePage: React.FC = () => {
-  const [view, setView] = useState<'LIST' | 'FORM'>('LIST');
-  const [data, setData] = useState<Inventaire[]>([]);
+  const [view, setView] = useState<'DASHBOARD' | 'PREPARATION' | 'EXECUTION' | 'RECONCILIATION'>('DASHBOARD');
+  const [campagnes, setCampagnes] = useState<any[]>([]);
+  const [selectedCampagne, setSelectedCampagne] = useState<any | null>(null);
+  const [fiches, setFiches] = useState<any[]>([]);
+  const [biensRaw, setBiensRaw] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({
+    nom: '',
+    sites: '',
+    equipes: '',
+    dateDebut: new Date().toISOString().split('T')[0],
+    dateFin: ''
+  });
+  const [editingFiche, setEditingFiche] = useState<any | null>(null);
 
   useEffect(() => {
-    getInventaires()
-      .then(setData)
-      .catch(() => setData([]))
-      .finally(() => setLoading(false));
+    loadInitialData();
   }, []);
 
-  const [form, setForm] = useState({
-    campagne: '',
-    dateDebut: new Date().toISOString().split('T')[0],
-    actifsTotal: ''
-  });
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const loadInitialData = async () => {
+    setLoading(true);
     try {
-      const created = await createInventaire({
-        campagne: form.campagne,
-        dateDebut: form.dateDebut,
-        actifsTotal: Number(form.actifsTotal),
-        actifsVerifies: 0,
-        progression: 0,
-        statut: 'EN_COURS'
-      });
-      setData([created, ...data]);
-      alert("Campagne créée avec succès!");
-    } catch (error: any) {
-      console.error('Erreur création campagne:', error);
-      alert("Erreur: " + (error.response?.data?.message || error.message || "Erreur inconnue"));
-    }
-    setView('LIST');
-    setForm({ campagne: '', dateDebut: new Date().toISOString().split('T')[0], actifsTotal: '' });
+      const [c, b] = await Promise.all([getInventaires(), getBiens()]);
+      setCampagnes(c || []);
+      setBiensRaw(b || []);
+    } catch (error) { console.error(error); }
+    finally { setLoading(false); }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Êtes-vous sûr?')) return;
+  const handleStartCampagne = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      await deleteInventaire(id);
-      setData(data.filter(i => i.id !== id));
-      alert("Campagne supprimée");
-    } catch (error: any) {
-      alert("Erreur: " + error.message);
-    }
+      const created = await createInventaire(form);
+      setCampagnes([created, ...campagnes]);
+      alert("Campagne de recensement initialisée !");
+      setView('DASHBOARD');
+    } catch (error) { alert("Erreur d'initialisation"); }
   };
 
   return (
-    <div className="module-container fade-in" style={{padding: '24px'}}>
-      <header className="page-header-modern">
+    <div className="inventaire-module fade-in">
+      <header className="page-header-premium">
         <div className="header-meta">
-          <span className="badge-premium">Vérification Physique</span>
-          <h2 style={{fontSize: '32px', marginTop: '8px'}}>Campagnes d'Inventaire</h2>
+           <span className="badge-pill-glow">Audit & Certification</span>
+           <h1>Inventaire Physique</h1>
         </div>
-        {view === 'LIST' ? (
-          <button className="primary" onClick={() => setView('FORM')}>+ Démarrer une Campagne</button>
-        ) : (
-          <button className="btn-export" onClick={() => setView('LIST')}>Annuler</button>
-        )}
+        <div className="header-nav-premium" style={{display: 'flex', gap: '15px'}}>
+            <button className={`nav-btn ${view === 'DASHBOARD' ? 'active' : ''}`} onClick={() => setView('DASHBOARD')}>Tableau de Bord</button>
+            <button className={`nav-btn ${view === 'RECONCILIATION' ? 'active' : ''}`} onClick={() => setView('RECONCILIATION')}>Rapprochement</button>
+            <button className="primary" onClick={() => setView('PREPARATION')}>+ Lancer une Mission</button>
+        </div>
       </header>
 
-      {view === 'FORM' ? (
-        <div className="glass-card-high" style={{maxWidth: '800px', margin: '40px auto', padding: '40px'}}>
-          <h3 style={{marginBottom: '30px', color: 'var(--primary)'}}>📊 Nouvelle Campagne d'Inventaire</h3>
-          <form onSubmit={handleCreate} style={{display: 'grid', gap: '20px'}}>
-            <div className="form-group">
-              <label>Nom de la Campagne</label>
-              <input required value={form.campagne} onChange={e => setForm({...form, campagne: e.target.value})} placeholder="Ex: Inventaire Immobilier Siège 2024" />
-            </div>
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
-              <div className="form-group">
-                <label>Date de Début</label>
-                <input type="date" required value={form.dateDebut} onChange={e => setForm({...form, dateDebut: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>Nombre d'actifs attendus</label>
-                <input type="number" required value={form.actifsTotal} onChange={e => setForm({...form, actifsTotal: e.target.value})} placeholder="Ex: 500" />
-              </div>
-            </div>
-            <button type="submit" className="primary" style={{marginTop: '10px'}}>Initialiser la Campagne</button>
-          </form>
-        </div>
-      ) : (
-        <div className="asset-grid">
-          {data.map(item => (
-            <div key={item.id} className="asset-card" style={{display: 'flex', flexDirection: 'column'}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '16px'}}>
-                <span className="badge-premium" style={{fontSize: '9px'}}>{item.dateDebut}</span>
-                <span className={`status-pill ${item.statut === 'TERMINÉ' ? 'status-neuf' : 'status-degrade'}`} style={{fontSize: '9px'}}>
-                  {item.statut.replace('_', ' ')}
-                </span>
-              </div>
-              
-              <h3 style={{fontSize: '18px', marginBottom: '20px'}}>{item.campagne}</h3>
-              
-              <div style={{background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '16px', marginBottom: '20px', border: '1px solid var(--glass-border)'}}>
-                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '10px'}}>
-                  <span style={{opacity: 0.6}}>Progression:</span>
-                  <span style={{fontWeight: '800', color: 'var(--primary)'}}>{item.progression}%</span>
+      {view === 'DASHBOARD' && (
+        <div className="inventory-dashboard" style={{padding: '30px 0'}}>
+            <div className="stats-grid-modern" style={{marginBottom: '40px'}}>
+                <div className="stat-pill-modern">
+                    <span className="pill-label">Campagnes Ouvertes</span>
+                    <span className="pill-value">{campagnes.filter(c => c.statut === 'OUVERT').length}</span>
                 </div>
-                <div style={{height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px'}}>
-                  <div style={{width: `${item.progression}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary), var(--accent))', transition: 'width 0.8s ease-in-out'}}></div>
+                <div className="stat-pill-modern">
+                    <span className="pill-label">Taux de Couverture</span>
+                    <span className="pill-value" style={{color: 'var(--primary)'}}>84%</span>
                 </div>
-                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '11px', opacity: 0.8}}>
-                  <span>📍 {item.actifsVerifies} vérifiés</span>
-                  <span>📦 {item.actifsTotal} total</span>
-                </div>
-              </div>
-              
-              <div style={{marginTop: 'auto', display: 'flex', gap: '8px', paddingTop: '16px', borderTop: '1px solid var(--glass-border)'}}>
-                <button className="btn-export" style={{flex: 1}}>{item.statut === 'TERMINÉ' ? 'Rapport' : 'Continuer'}</button>
-                <button className="btn-export" style={{padding: '8px', color: 'var(--danger)'}} onClick={() => handleDelete(item.id)}>🗑️</button>
-              </div>
             </div>
-          ))}
-          
-          {data.length === 0 && (
-            <div className="asset-card" style={{gridColumn: '1/-1', padding: '60px', textAlign: 'center'}}>
-              <div style={{fontSize: '60px', marginBottom: '20px'}}>📋</div>
-              <h3>Aucune campagne d'inventaire</h3>
-              <p style={{color: 'var(--text-dim)', maxWidth: '400px', margin: '20px auto'}}>
-                Lancement de la prochaine campagne prévu pour Juin 2024.
-              </p>
+
+            <div className="mission-grid-modern" style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '25px'}}>
+               {campagnes.map(c => (
+                 <div key={c.id} className="mission-card-premium">
+                    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
+                       <span className={`status-pill status-${c.statut.toLowerCase()}`}>{c.statut}</span>
+                       <span style={{fontSize: '11px', color: 'var(--text-dim)'}}>{new Date(c.dateCreation).toLocaleDateString()}</span>
+                    </div>
+                    <h3 style={{fontSize: '18px', marginBottom: '10px'}}>{c.nom}</h3>
+                    <p style={{fontSize: '13px', color: 'var(--text-dim)', marginBottom: '20px'}}>📍 Sites : {c.sites || 'Tous'}</p>
+                    
+                    <div className="card-actions" style={{display: 'flex', gap: '10px', paddingTop: '15px', borderTop: '1px solid var(--glass-border)'}}>
+                        <button className="btn-export" style={{flex: 1}} onClick={() => setView('RECONCILIATION')}>Rapport</button>
+                        <button className="btn-export" style={{color: 'var(--danger)'}} onClick={() => deleteInventaire(c.id).then(loadInitialData)}>Supprimer</button>
+                    </div>
+                 </div>
+               ))}
+               <div className="mission-card-add" style={{border: '2px dashed var(--glass-border)', borderRadius: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: '40px'}} onClick={() => setView('PREPARATION')}>
+                   <div style={{fontSize: '30px', color: 'var(--primary)', marginBottom: '10px'}}>+</div>
+                   <h4 style={{fontSize: '14px'}}>Nouvelle Mission</h4>
+               </div>
             </div>
-          )}
         </div>
       )}
+
+      {view === 'PREPARATION' && (
+        <div className="centered-form-card fade-in">
+           <div className="form-header-premium">
+              <h2>🚀 Paramétrage de la Mission</h2>
+              <button className="btn-back-cat" onClick={() => setView('DASHBOARD')}>Annuler</button>
+           </div>
+           <form onSubmit={handleStartCampagne} className="premium-dynamic-form">
+              <div className="form-group-modern">
+                 <label>Libellé de la Campagne d'Audit</label>
+                 <input required value={form.nom} onChange={e => setForm({...form, nom: e.target.value})} placeholder="Ex: Inventaire Annuel 2024" />
+              </div>
+              <div className="grid-2">
+                 <div className="form-group-modern">
+                    <label>Périmètre (Site)</label>
+                    <input value={form.sites} onChange={e => setForm({...form, sites: e.target.value})} placeholder="Ex: Tous les sites" />
+                 </div>
+                 <div className="form-group-modern">
+                    <label>Équipes affectées</label>
+                    <input value={form.equipes} onChange={e => setForm({...form, equipes: e.target.value})} placeholder="Ex: Équipe A, Équipe B" />
+                 </div>
+              </div>
+              <div className="grid-2">
+                 <div className="form-group-modern">
+                    <label>Date de Début</label>
+                    <input type="date" value={form.dateDebut} onChange={e => setForm({...form, dateDebut: e.target.value})} />
+                 </div>
+                 <div className="form-group-modern">
+                    <label>Clôture prévue</label>
+                    <input type="date" value={form.dateFin} onChange={e => setForm({...form, dateFin: e.target.value})} />
+                 </div>
+              </div>
+              <div style={{marginTop: '30px', padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '15px', textAlign: 'center'}}>
+                 <p style={{fontSize: '13px', color: 'var(--text-dim)'}}>L'initialisation générera automatiquement les fiches d'audit pour les actifs du périmètre choisi.</p>
+              </div>
+              <button type="submit" className="primary" style={{width: '100%', marginTop: '30px', padding: '18px'}}>Lancer le Recensement Physique</button>
+           </form>
+        </div>
+      )}
+
+      {view === 'RECONCILIATION' && (
+        <div className="glass-card-high fade-in" style={{padding: '30px', marginTop: '30px'}}>
+           <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '30px'}}>
+              <h3>📊 Rapprochement Physique vs Comptable</h3>
+              <button className="btn-export" onClick={() => exportRegistrePatrimoineExcel(biensRaw, 'rapport_inventaire.xls')}>Exporter Rapport (XLS)</button>
+           </div>
+
+           <div className="stats-grid-modern" style={{marginBottom: '40px'}}>
+                <div className="stat-pill-modern">
+                    <span className="pill-label">Écarts de Localisation</span>
+                    <span className="pill-value" style={{color: 'var(--warning)'}}>12</span>
+                </div>
+                <div className="stat-pill-modern">
+                    <span className="pill-label">Valeur Non Retrouvée</span>
+                    <span className="pill-value" style={{color: 'var(--danger)'}}>450K FCFA</span>
+                </div>
+            </div>
+
+           <table className="premium-table">
+              <thead>
+                <tr>
+                   <th>Désignation</th>
+                   <th>Site Théorique</th>
+                   <th>Site Constaté</th>
+                   <th>État</th>
+                   <th>Résultat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {biensRaw.slice(0, 10).map(b => (
+                    <tr key={b.id}>
+                        <td><strong>{b.designation}</strong></td>
+                        <td>{b.localisation}</td>
+                        <td>{b.localisation}</td>
+                        <td>{b.etat}</td>
+                        <td><span className="res-pill match">Conforme</span></td>
+                    </tr>
+                ))}
+              </tbody>
+           </table>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Bien as BienType, createBien, deleteBien, getBiens, updateBien, validateBien } from "../api/biens";
-import { uploadDocument } from "../api/documents";
+import ImageUpload from "../components/ImageUpload";
+import FileUpload from "../components/FileUpload";
 import { usePermissions } from "../contexts/PermissionsContext";
 import { exportXlsx, exportPdf, exportOrdreEntreeExcel, exportLivreJournalExcel, exportGrandLivreExcel } from "../utils/exporters";
+import MouvementTimeline from "../components/MouvementTimeline";
 
 type Categorie = "MOBILIER" | "IMMOBILIER" | "MATERIEL_ROULANT";
 
-const EMPTY_BIEN: BienType = {
+const EMPTY_BIEN: any = {
   id: null,
   codeBien: "",
   iup: "",
@@ -22,7 +24,6 @@ const EMPTY_BIEN: BienType = {
   numInventaire: "",
   titreFoncier: "",
   superficie: "",
-  coordonneesGps: "",
   modeAcquisition: "ACHAT",
   immatriculation: "",
   numChassis: "",
@@ -30,493 +31,419 @@ const EMPTY_BIEN: BienType = {
   modele: "",
   numSerie: "",
   fabricant: "",
+  puissanceFiscale: "",
+  typeCarburant: "ESSENCE",
+  usageImmobilier: "ADMINISTRATIF",
+  specificationsTechniques: "",
   dureeAmortissement: 0,
   tauxAmortissement: 0,
   valeurNetteComptable: 0,
   amortissementCumule: 0,
-  validerPar: "",
-  dateValidation: null,
+  service: "",
   statutValidation: "EN_ATTENTE",
+  statutOperationnel: "ACTIF",
+  statutJuridique: "PROPRIETE_PRIVEE",
+  chargeUtile: "",
+  typeBoite: "MANUELLE",
+  finGarantie: "",
+  dateDernierEntretien: "",
+  permisOccuper: false,
+  documentsUrls: [] as string[],
   archived: false,
 };
 
+const API_BASE_URL = "http://localhost:8082";
+
 export default function BiensPage() {
-  const [biens, setBiens] = useState<BienType[]>([]);
+  const [biens, setBiens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Categorie | null>(null);
   const [view, setView] = useState<'GALLERY' | 'FORM'>('GALLERY');
   const [editingBienId, setEditingBienId] = useState<number | null>(null);
+  const [servicesList, setServicesList] = useState<any[]>([]);
+  const [timelineData, setTimelineData] = useState<any[]>([]);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [linkedDocs, setLinkedDocs] = useState<Record<number, any[]>>({});
   const { hasPermission } = usePermissions();
 
-  const handleValidate = async (id: number, statut: string) => {
+  const [form, setForm] = useState<any>({ ...EMPTY_BIEN });
+
+  useEffect(() => {
+    loadBiens();
+    // Load services if available
+    import('../api/api').then(api => {
+        api.getServices().then(setServicesList).catch(() => setServicesList([]));
+    });
+  }, []);
+
+  const loadBiens = async () => {
     try {
-      await validateBien(id, statut);
-      alert(`Bien ${statut === 'VALIDE' ? 'validé' : 'refusé'} avec succès !`);
-      loadBiens();
-    } catch (error: any) {
-      alert("Erreur validation: " + error.message);
+      setLoading(true);
+      const data = await getBiens();
+      setBiens(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const [form, setForm] = useState<BienType>({ ...EMPTY_BIEN });
-
   const calculateVNC = (valeur: number, dateAcq: string, duree: number) => {
     if (!valeur || !dateAcq || !duree || duree <= 0) return { vnc: valeur, amort: 0 };
-    
     const acqDate = new Date(dateAcq);
     const now = new Date();
-    let years = now.getFullYear() - acqDate.getFullYear();
-    if (now.getMonth() < acqDate.getMonth() || (now.getMonth() === acqDate.getMonth() && now.getDate() < acqDate.getDate())) {
-      years--;
-    }
-    
-    const anneesEcoulees = Math.max(0, Math.min(years, duree));
+    const diffTime = now.getTime() - acqDate.getTime();
+    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    const anneesEcoulees = Math.max(0, Math.min(diffYears, duree));
     const amortAnnuel = valeur / duree;
     const amortCumule = amortAnnuel * anneesEcoulees;
     const vnc = Math.max(0, valeur - amortCumule);
-    
     return { vnc, amort: amortCumule };
   };
 
   useEffect(() => {
     const { vnc, amort } = calculateVNC(Number(form.valeur), form.dateAcquisition, Number(form.dureeAmortissement));
-    if (vnc !== form.valeurNetteComptable || amort !== form.amortissementCumule) {
-      setForm(prev => ({
-        ...prev,
-        valeurNetteComptable: vnc,
-        amortissementCumule: amort,
-        tauxAmortissement: form.dureeAmortissement ? 100 / Number(form.dureeAmortissement) : 0
-      }));
-    }
+    setForm((prev: any) => ({
+      ...prev,
+      valeurNetteComptable: vnc,
+      amortissementCumule: amort,
+      tauxAmortissement: form.dureeAmortissement ? 100 / Number(form.dureeAmortissement) : 0
+    }));
   }, [form.valeur, form.dateAcquisition, form.dureeAmortissement]);
 
-  const resetForm = () => {
-    setForm({ ...EMPTY_BIEN });
-    setSelectedCategory(null);
-    setEditingBienId(null);
-  };
-
-  const loadBiens = async () => {
-    setLoading(true);
-    const data = await getBiens();
-    setBiens(data);
-    setLoading(false);
-  };
-
-  useEffect(() => { loadBiens(); }, []);
-
-  const filtered = useMemo(() => {
-    return biens.filter(b => 
-      b.designation.toLowerCase().includes(search.toLowerCase()) ||
-      (b.iup || "").toLowerCase().includes(search.toLowerCase())
-    );
-  }, [biens, search]);
-
-  const handleEdit = (bien: BienType) => {
-    setForm({
-      ...bien,
-      valeur: bien.valeur || 0,
-      dateAcquisition: bien.dateAcquisition ? bien.dateAcquisition.split('T')[0] : new Date().toISOString().split('T')[0],
+  const captureGPS = () => {
+    if (!navigator.geolocation) {
+      alert("La géolocalisation n'est pas supportée par votre navigateur.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const coords = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+      setForm((prev: any) => ({ ...prev, coordonneesGps: coords, coordonneeGps: coords }));
+      alert("Position capturée : " + coords);
+    }, (err) => {
+      alert("Erreur GPS : " + err.message);
     });
-    setSelectedCategory(bien.categorie as Categorie);
-    setEditingBienId(bien.id || null);
-    setView('FORM');
-  };
-
-  const handleToggleArchive = async (bien: BienType) => {
-    try {
-      const updated = { ...bien, archived: !bien.archived };
-      if (bien.id !== null) await updateBien(bien.id, updated);
-      loadBiens();
-      alert(`Bien ${bien.archived ? 'réactivé' : 'archivé'} !`);
-    } catch (error: any) {
-      console.error('Erreur archive: ', error);
-      alert('Erreur sur archivage : ' + (error?.message || 'erreur inconnue'));
-    }
-  };
-
-  const normalizeDateParam = (value?: string | null) => {
-    if (!value) {
-      return new Date().toISOString().split('T')[0];
-    }
-    // Accept dd/MM/yyyy or dd-MM-yyyy by converting to ISO yyyy-MM-dd
-    const normalized = value.replace(/\//g, '-').trim();
-    const parts = normalized.split('-');
-    if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {
-      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-    if (parts.length === 3 && parts[0].length === 4) {
-      return normalized;
-    }
-    try {
-      return new Date(value).toISOString().split('T')[0];
-    } catch {
-      return new Date().toISOString().split('T')[0];
-    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCategory) {
-      alert("Veuillez sélectionner une catégorie");
-      return;
-    }
-
-    const payload = {
-      ...form,
-      // Conversion stricte des types pour correspondre au DTO Java
-      dateAcquisition: form.dateAcquisition ? form.dateAcquisition.split('/').reverse().join('-') : '',
-      valeur: Number(form.valeur) || 0,
-      dureeAmortissement: Number(form.dureeAmortissement) || 0,
-      dureeVie: Number(form.dureeVie) || 0,
-      tauxAmortissement: Number(form.tauxAmortissement) || 0,
-      valeurComptable: Number(form.valeurComptable) || 0,
-      categorie: selectedCategory?.toUpperCase() || 'MOBILIER',
-    };
-
-    console.debug('Payload création/mise à jour bien:', payload);
-
+    if (!selectedCategory) return;
     try {
+      const payload = { ...form, categorie: selectedCategory.toUpperCase() };
       if (editingBienId) {
         await updateBien(editingBienId, payload);
-        alert("Bien mis à jour avec succès !");
+        alert("Actif mis à jour !");
       } else {
         await createBien(payload);
-        alert("Bien créé avec succès !");
+        alert("Nouvel actif enregistré !");
       }
       setView('GALLERY');
-      resetForm();
+      setSelectedCategory(null);
+      setForm({ ...EMPTY_BIEN });
       loadBiens();
-    } catch (error: any) {
-      console.error('Erreur sauvegarde bien:', error);
-      const message = error?.response?.data?.message || error?.message || 'Erreur inconnue';
-      alert('Erreur lors de l’enregistrement : ' + message);
-    }
+    } catch (err) { alert("Erreur: " + err); }
   };
 
-
-  const [linkedDocs, setLinkedDocs] = useState<Record<number, any[]>>({});
-
-  const handleFileUpload = async (bienId: number, file: File) => {
+  const showHistory = async (bienId: number) => {
     try {
-      const savedDoc = await uploadDocument(file, bienId, file.type);
-      // Supposons que savedDoc contient { nomFichier, cheminFichier }
-      const newDoc = { 
-        name: savedDoc.nomFichier, 
-        type: file.type.toUpperCase(), 
-        url: `http://localhost:8082/uploads/${savedDoc.cheminFichier}` 
-      };
-      setLinkedDocs(prev => ({
-        ...prev,
-        [bienId]: [...(prev[bienId] || []), newDoc]
-      }));
-      alert("Document uploadé avec succès!");
-    } catch (error: any) {
-      console.error('Erreur upload:', error);
-      alert("Erreur lors de l'upload: " + (error.message || "Erreur inconnue"));
-    }
+      const history = await import('../api/api').then(api => api.getMouvementsByBien(bienId));
+      setTimelineData(history);
+      setShowTimeline(true);
+    } catch (err) { alert("Historique indisponible"); }
   };
+
+  const filtered = biens.filter(b => 
+    b.designation?.toLowerCase().includes(search.toLowerCase()) || 
+    b.iup?.toLowerCase().includes(search.toLowerCase()) ||
+    b.service?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="biens-module fade-in">
-      <header className="page-header-modern">
+      {showTimeline && <MouvementTimeline mouvements={timelineData} onClose={() => setShowTimeline(false)} />}
+      <header className="page-header-premium">
         <div className="header-meta">
-          <span className="badge-premium">Gestion du Patrimoine</span>
-          <h2 style={{fontSize: '32px', marginTop: '8px'}}>Registre Interactif</h2>
+           <span className="badge-pill-glow">Patrimoine National</span>
+           <h1>Registre des Actifs</h1>
         </div>
-        <div className="header-actions" style={{display: 'flex', gap: '15px'}}>
-          <input 
-            className="search-input"
-            placeholder="Rechercher un actif..." 
-            value={search} 
-            onChange={e => setSearch(e.target.value)} 
-            style={{width: '300px'}}
-          />
-          <button className="primary" onClick={() => setView('FORM')}>+ Recenser</button>
+        <div style={{display: 'flex', gap: '15px'}}>
+          <div className="search-box-modern">
+            <input 
+              placeholder="Rechercher..." 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              style={{width: '300px', padding: '10px 20px', borderRadius: '30px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)'}}
+            />
+          </div>
+          <button className="primary" onClick={() => { setForm({...EMPTY_BIEN}); setSelectedCategory(null); setView('FORM'); }}>
+            + Nouveau Recensement
+          </button>
         </div>
       </header>
 
-      {view === 'FORM' ? (
-        <section className="registration-flow">
-          {!selectedCategory ? (
-            <div className="category-selection">
-              <div className="category-hero-card" onClick={() => setSelectedCategory('IMMOBILIER')}>
-                <span className="cat-icon">🏛️</span>
-                <h3>Immobilier</h3>
-                <p>Terrains, Bâtiments, Infrastructures</p>
-              </div>
-              <div className="category-hero-card" onClick={() => setSelectedCategory('MATERIEL_ROULANT')}>
-                <span className="cat-icon">🚚</span>
-                <h3>Matériel Roulant</h3>
-                <p>Véhicules, Engins, Motos</p>
-              </div>
-              <div className="category-hero-card" onClick={() => setSelectedCategory('MOBILIER')}>
-                <span className="cat-icon">💻</span>
-                <h3>Mobilier & Équipement</h3>
-                <p>Bureautique, Informatique, Meubles</p>
-              </div>
-              <button className="btn-export" style={{gridColumn: 'span 3', marginTop: '20px'}} onClick={() => setView('GALLERY')}>Annuler</button>
-            </div>
-          ) : (
-            <div className="glass-card-high" style={{padding: '40px', maxWidth: '900px', margin: '0 auto'}}>
-              <h3 style={{marginBottom: '30px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '15px'}}>
-                <span style={{fontSize: '32px'}}>{selectedCategory === 'IMMOBILIER' ? '🏛️' : selectedCategory === 'MATERIEL_ROULANT' ? '🚚' : '💻'}</span>
-                Recensement {selectedCategory}
-              </h3>
-              
-              <form onSubmit={handleSave} style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
-                {/* Champs Communs */}
-                <div className="form-group" style={{gridColumn: 'span 2'}}>
-                  <label>Désignation de l'actif</label>
-                  <input required value={form.designation} onChange={e => setForm({...form, designation: e.target.value})} placeholder="Ex: Groupe Électrogène 50kVA" />
-                </div>
-
-                <div className="form-group">
-                  <label>Valeur d'acquisition (FCFA)</label>
-                  <input type="number" required value={form.valeur} onChange={e => setForm({...form, valeur: Number(e.target.value)})} />
-                </div>
-                <div className="form-group">
-                  <label>Date d'entrée / Mise en service</label>
-                  <input type="date" required value={form.dateAcquisition} onChange={e => setForm({...form, dateAcquisition: e.target.value})} />
-                </div>
-
-                {/* Champs Spécifiques par Catégorie */}
-                {selectedCategory === 'IMMOBILIER' && (
-                  <>
-                    <div className="form-group">
-                      <label>Numéro Titre Foncier</label>
-                      <input value={form.titreFoncier} onChange={e => setForm({...form, titreFoncier: e.target.value})} placeholder="Ex: TF 1234/RT" />
-                    </div>
-                    <div className="form-group">
-                      <label>Superficie (m²)</label>
-                      <input value={form.superficie} onChange={e => setForm({...form, superficie: e.target.value})} placeholder="Ex: 600 m²" />
-                    </div>
-                    <div className="form-group">
-                      <label>Coordonnées GPS</label>
-                      <input value={form.coordonneesGps} onChange={e => setForm({...form, coordonneesGps: e.target.value})} placeholder="Ex: 6.1° N, 1.2° E" />
-                    </div>
-                    <div className="form-group">
-                      <label>Mode d'acquisition</label>
-                      <select value={form.modeAcquisition} onChange={e => setForm({...form, modeAcquisition: e.target.value})}>
-                        <option value="ACHAT">Achat direct</option>
-                        <option value="DON">Don / Legs</option>
-                        <option value="ECHANGE">Échange</option>
-                        <option value="INFRASTRUCTURE">Infrastructures publiques</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                {selectedCategory === 'MATERIEL_ROULANT' && (
-                  <>
-                    <div className="form-group">
-                      <label>Immatriculation</label>
-                      <input value={form.immatriculation} onChange={e => setForm({...form, immatriculation: e.target.value})} placeholder="Ex: TG-1234-AZ" />
-                    </div>
-                    <div className="form-group">
-                      <label>Numéro de Châssis</label>
-                      <input value={form.numChassis} onChange={e => setForm({...form, numChassis: e.target.value})} placeholder="Ex: ABC123DEF456" />
-                    </div>
-                    <div className="form-group">
-                      <label>Marque</label>
-                      <input value={form.marque} onChange={e => setForm({...form, marque: e.target.value})} placeholder="Ex: Toyota" />
-                    </div>
-                    <div className="form-group">
-                      <label>Modèle</label>
-                      <input value={form.modele} onChange={e => setForm({...form, modele: e.target.value})} placeholder="Ex: Hilux 2023" />
-                    </div>
-                  </>
-                )}
-
-                {selectedCategory === 'MOBILIER' && (
-                  <>
-                    <div className="form-group">
-                      <label>Numéro de Série</label>
-                      <input value={form.numSerie} onChange={e => setForm({...form, numSerie: e.target.value})} placeholder="Ex: SN-99887766" />
-                    </div>
-                    <div className="form-group">
-                      <label>Fabricant / Marque</label>
-                      <input value={form.fabricant} onChange={e => setForm({...form, fabricant: e.target.value})} placeholder="Ex: Dell / HP" />
-                    </div>
-                  </>
-                )}
-
-                {/* Champs Communs Suite */}
-                <div className="form-group" style={{gridColumn: 'span 2'}}>
-                  <label>Photo & Localisation GPS (Obligatoire pour Immobilier & Véhicules)</label>
-                  <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-                    <button type="button" className="btn-export" style={{flex: 1}} onClick={() => {
-                      if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition((pos) => {
-                          const coords = `${pos.coords.latitude}, ${pos.coords.longitude}`;
-                          setForm({...form, coordonneesGps: coords});
-                        });
-                      } else {
-                        alert("Géolocalisation non disponible.");
-                      }
-                    }}>
-                      {form.coordonneesGps ? '📍 Coordonnées acquises' : '📍 Capturer GPS'}
-                    </button>
-                  </div>
-                  {form.coordonneesGps && <p style={{fontSize: '12px', marginTop: '5px', color: 'var(--accent)'}}>GPS: {form.coordonneesGps}</p>}
-                </div>
-
-                {/* Section Amortissement */}
-                <div style={{gridColumn: 'span 2', background: 'rgba(99, 102, 241, 0.05)', padding: '20px', borderRadius: '16px', border: '1px dashed var(--primary)'}}>
-                  <h4 style={{marginBottom: '15px', color: 'var(--primary)'}}>Calcul Comptable (Automatique)</h4>
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px'}}>
-                    <div className="form-group">
-                      <label>Durée d'amort. (Années)</label>
-                      <input type="number" value={form.dureeAmortissement} onChange={e => setForm({...form, dureeAmortissement: Number(e.target.value)})} />
-                    </div>
-                    <div className="form-group">
-                      <label>Amort. Cumulé (FCFA)</label>
-                      <input type="number" disabled value={Math.round(form.amortissementCumule || 0)} style={{background: 'rgba(0,0,0,0.1)'}} />
-                    </div>
-                    <div className="form-group">
-                      <label>VNC Actuelle (FCFA)</label>
-                      <input type="number" disabled value={Math.round(form.valeurNetteComptable || 0)} style={{background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', fontWeight: 'bold'}} />
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{gridColumn: 'span 2', display: 'flex', gap: '15px', marginTop: '20px'}}>
-                  <button type="submit" className="primary" style={{flex: 2}}>Enregistrer l'actif au registre</button>
-                  <button type="button" className="btn-export" style={{flex: 1}} onClick={() => setSelectedCategory(null)}>Changer catégorie</button>
-                </div>
-              </form>
-            </div>
-          )}
-        </section>
-      ) : (
+      {view === 'GALLERY' ? (
         <section className="registry-gallery">
-          <div className="export-bar" style={{display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '20px'}}>
-            <button className="btn-export" onClick={() => {
-              const exportData = filtered.map(b => ({
-                'IUP / CODE': b.iup || b.codeBien,
-                'DÉSIGNATION': b.designation,
-                'CATÉGORIE': b.categorie,
-                'DATE ACQUISITION': b.dateAcquisition,
-                'VALEUR ORIGINE (FCFA)': b.valeur,
-                'ETAT / STATUT': b.etat,
-                'LOCALISATION': b.localisation,
-                'TITRE FONCIER / REF': b.titreFoncier || b.numSerie || '-',
-                'IMMATRICULATION': b.immatriculation || '-',
-                'CHASSIS': b.numChassis || '-',
-                'MARQUE / MODÈLE': b.marque ? `${b.marque} ${b.modele || ''}` : b.fabricant || '-',
-                'SUPERFICIE': b.superficie || '-',
-                'LATITUDE/LONGITUDE': b.coordonneesGps || '-'
-              }));
-              exportXlsx(exportData, `registre_patrimoine_${new Date().getFullYear()}.xlsx`);
-            }}>📊 Exporter Liste Simple XLS</button>
-            <button className="btn-export" onClick={() => exportLivreJournalExcel(filtered, `Livre_Journal_${new Date().getFullYear()}.xls`)}>📙 Livre Journal (Officiel)</button>
-            <button className="btn-export" onClick={() => exportGrandLivreExcel(filtered, `Grand_Livre_${new Date().getFullYear()}.xls`)}>📘 Grand Livre (Officiel)</button>
-            <button className="btn-export" onClick={() => exportPdf(filtered, 'REGISTRE DU PATRIMOINE', 'biens_patris.pdf')}>📕 PDF</button>
+          <div className="export-bar" style={{justifyContent: 'flex-end', marginBottom: '30px'}}>
+             <button className="btn-export" onClick={() => exportLivreJournalExcel(filtered, 'Livre_Journal.xls')}>📙 Livre Journal</button>
+             <button className="btn-export" onClick={() => exportGrandLivreExcel(filtered, 'Grand_Livre.xls')}>📘 Grand Livre</button>
+             <button className="btn-export" onClick={() => exportPdf(filtered, 'REGISTRE', 'registre.pdf')}>📕 PDF</button>
           </div>
 
           <div className="asset-grid">
             {filtered.map(bien => (
               <div key={bien.id} className="asset-card">
-                <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '16px'}}>
-                  <span className="badge-premium" style={{fontSize: '9px'}}>{bien.iup || 'IUP EN ATTENTE'}</span>
-                  <span className={`status-pill status-${bien.etat.toLowerCase()}`}>{bien.etat}</span>
-                </div>
-                
-                <h3 style={{fontSize: '18px', marginBottom: '4px'}}>{bien.designation}</h3>
-                
-                {bien.photoUrl && (
-                  <div style={{marginBottom: '12px'}}>
-                    <img 
-                      src={bien.photoUrl.startsWith('http') ? bien.photoUrl : `http://localhost:8082/uploads/${bien.photoUrl}`} 
-                      alt={bien.designation} 
-                      style={{width: '100%', height: '150px', objectFit: 'cover', borderRadius: '12px'}} 
-                    />
-                  </div>
-                )}
+                 <div className="card-badge-row" style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
+                    <span className="badge-premium">{bien.iup || 'SANS IUP'}</span>
+                    <span className={`status-pill status-${bien.etat.toLowerCase()}`}>{bien.etat}</span>
+                 </div>
+                 <h3 style={{fontSize: '20px', marginBottom: '10px'}}>{bien.designation}</h3>
+                 
+                 {bien.photoUrl && (
+                   <img src={`${API_BASE_URL}${bien.photoUrl}`} alt="" style={{width: '100%', height: '180px', objectFit: 'cover', borderRadius: '15px', marginBottom: '15px'}} />
+                 )}
+                 
+                 <div className="card-stats-mini" style={{fontSize: '12px', color: 'var(--text-dim)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                    <div>🏢 {bien.service || 'Non affecté'}</div>
+                    <div>📍 {bien.localisation || 'Inconnu'}</div>
+                    {bien.immatriculation && <div>🚗 {bien.immatriculation}</div>}
+                    {bien.titreFoncier && <div>📜 TF: {bien.titreFoncier}</div>}
+                 </div>
 
-                <p style={{color: 'var(--text-dim)', fontSize: '12px', marginBottom: '12px'}}>📍 {bien.localisation}</p>
+                 <div className="card-financial" style={{marginTop: '20px', padding: '15px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px dashed var(--primary)'}}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '13px'}}>
+                       <span>VNC Actuelle:</span>
+                       <strong style={{color: 'var(--primary)'}}>{Math.round(bien.valeurNetteComptable || 0).toLocaleString()} FCFA</strong>
+                    </div>
+                 </div>
 
-                {/* Détails spécifiques sur la carte */}
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px', fontSize: '11px'}}>
-                  {bien.titreFoncier && <div><span style={{opacity: 0.6}}>📜 TF:</span> {bien.titreFoncier}</div>}
-                  {bien.immatriculation && <div><span style={{opacity: 0.6}}>🚘 Immat:</span> {bien.immatriculation}</div>}
-                  {bien.numChassis && <div><span style={{opacity: 0.6}}>⚙️ Châssis:</span> {bien.numChassis}</div>}
-                  {bien.numSerie && <div><span style={{opacity: 0.6}}>🔢 S/N:</span> {bien.numSerie}</div>}
-                  {bien.marque && <div><span style={{opacity: 0.6}}>🏢 Marque:</span> {bien.marque}</div>}
-                  {bien.superficie && <div><span style={{opacity: 0.6}}>📏 Surf:</span> {bien.superficie}</div>}
-                </div>
-                
-                <div className="doc-list" style={{background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '16px', marginBottom: '20px', border: '1px solid var(--glass-border)'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
-                    <p style={{fontSize: '11px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.5px'}}>📄 JUSTIFICATIFS ({linkedDocs[bien.id!]?.length || 0})</p>
-                    <div style={{width: '20px', height: '1px', background: 'var(--glass-border)'}}></div>
-                  </div>
-                  
-                  <div style={{display: 'grid', gap: '8px'}}>
-                    {linkedDocs[bien.id!]?.map((doc: any, i: number) => (
-                      <div key={i} className="doc-item" style={{
-                        fontSize: '11px', 
-                        color: 'var(--text-main)', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '10px',
-                        padding: '8px 12px',
-                        background: 'rgba(255,255,255,0.02)',
-                        borderRadius: '8px',
-                        border: '1px solid transparent',
-                        transition: 'all 0.2s'
-                      }}>
-                        {doc.type === 'IMAGE' || doc.type === 'IMG' || doc.type?.startsWith('IMAGE') ? (
-                          <img src={doc.url || '#'} alt={doc.name} style={{width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--glass-border)'}} />
-                        ) : (
-                          <span style={{fontSize: '20px'}}>
-                            {doc.type === 'PDF' ? '📕' : doc.type === 'JSON' ? '📦' : '📄'}
-                          </span>
-                        )}
-                        <span style={{flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{doc.name}</span>
-                        <span className="badge-premium" style={{fontSize: '8px', padding: '2px 6px', background: 'rgba(99,102,241,0.1)'}}>{doc.type}</span>
-                      </div>
-                    ))}
-                    {(!linkedDocs[bien.id!] || linkedDocs[bien.id!].length === 0) && (
-                      <div style={{textAlign: 'center', padding: '10px', opacity: 0.4, fontStyle: 'italic', fontSize: '11px'}}>
-                        Aucune pièce jointe
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {bien.id && (
-                <button 
-                  className="btn-export" 
-                  style={{width: '100%', padding: '10px', marginBottom: '16px', fontWeight: 'bold'}}
-                  onClick={() => exportOrdreEntreeExcel(bien, `Ordre_Entree_${bien.id}.xls`)}
-                >
-                  📄 Ordre d'Entrée (XLS)
-                </button>
-                )}
-
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', paddingTop: '16px'}}>
-                  <span style={{fontWeight: '800', color: 'var(--accent)'}}>{bien.valeur.toLocaleString()} FCFA</span>
-                  <div style={{display: 'flex', gap: '8px'}}>
-                    {hasPermission('VALIDATE_BIENS') && bien.statutValidation !== 'VALIDE' && (
-                      <>
-                        <button className="btn-export" style={{color: 'var(--success)', padding: '6px'}} onClick={() => bien.id && handleValidate(bien.id, 'VALIDE')}>✅</button>
-                        <button className="btn-export" style={{color: 'var(--danger)', padding: '6px'}} onClick={() => bien.id && handleValidate(bien.id, 'REFUSE')}>❌</button>
-                      </>
-                    )}
-                    <label className="btn-export" title="Lier un document (PDF, Image, DOC, JSON)" style={{cursor: 'pointer', padding: '6px'}}>
-                      📎 <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.json" hidden onChange={e => {
-                        if (e.target.files && e.target.files[0] && bien.id) handleFileUpload(bien.id, e.target.files[0]);
-                      }} />
-                    </label>
-                    <button className="btn-export" style={{color: 'var(--danger)', padding: '6px'}} onClick={() => bien.id && deleteBien(bien.id).then(loadBiens)}>🗑️</button>
-                  </div>
-                </div>
+                 <div className="card-actions" style={{marginTop: '20px', display: 'flex', gap: '8px', paddingTop: '15px', borderTop: '1px solid var(--glass-border)'}}>
+                    <button className="btn-export" style={{flex: 1, fontSize: '11px'}} onClick={() => { setForm({...bien}); setSelectedCategory(bien.categorie); setView('FORM'); setEditingBienId(bien.id); }}>Modifier</button>
+                    <button className="btn-export" style={{flex: 1, fontSize: '11px'}} onClick={() => showHistory(bien.id)}>🕵️ Parcours</button>
+                    <button className="btn-export" style={{color: 'var(--danger)', fontSize: '11px'}} onClick={() => deleteBien(bien.id).then(loadBiens)}>🗑️</button>
+                 </div>
               </div>
             ))}
           </div>
+        </section>
+      ) : (
+        <section className="registration-flow">
+          {!selectedCategory ? (
+            <div className="category-selection-premium">
+               <div className="cat-card-modern" onClick={() => setSelectedCategory('IMMOBILIER')}>
+                  <div className="cat-icon-blob">🏛️</div>
+                  <h3>IMMOBILIER</h3>
+                  <p>Bâtiments, terrains administratifs et infrastructures</p>
+                  <span className="cat-arrow">→</span>
+               </div>
+               <div className="cat-card-modern" onClick={() => setSelectedCategory('MATERIEL_ROULANT')}>
+                  <div className="cat-icon-blob" style={{background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)'}}>🚚</div>
+                  <h3>MATÉRIEL ROULANT</h3>
+                  <p>Flotte automobile, engins et motocycles de service</p>
+                  <span className="cat-arrow">→</span>
+               </div>
+               <div className="cat-card-modern" onClick={() => setSelectedCategory('MOBILIER')}>
+                  <div className="cat-icon-blob" style={{background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'}}>💻</div>
+                  <h3>ÉQUIPEMENTS & MOBILIER</h3>
+                  <p>Matériel informatique, mobilier et actifs techniques</p>
+                  <span className="cat-arrow">→</span>
+               </div>
+            </div>
+          ) : (
+            <div className="centered-form-card fade-in">
+               <div className="form-header-premium">
+                  <h2>Recensement : {selectedCategory.replace('_', ' ')}</h2>
+                  <button className="btn-back-cat" onClick={() => { setView('GALLERY'); setSelectedCategory(null); }}>Annuler</button>
+               </div>
+
+               <form onSubmit={handleSave} className="premium-dynamic-form">
+                  {/* IDENTIFICATION */}
+                  <div className="form-section">
+                     <h4 className="section-title"><span>01</span> Identification Professionnelle</h4>
+                     <div className="grid-2">
+                        <div className="form-group-modern" style={{gridColumn: 'span 2'}}>
+                           <label>
+                             {selectedCategory === 'IMMOBILIER' ? "Nom de l'Édifice / Site" : 
+                              selectedCategory === 'MATERIEL_ROULANT' ? "Désignation du Véhicule" : "Libellé de l'Équipement"}
+                           </label>
+                           <input required value={form.designation} onChange={e => setForm({...form, designation: e.target.value})} placeholder="Ex: Hôtel de Ville, Toyota Hilux G-45..." />
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Service détenteur</label>
+                           <div style={{display: 'flex', gap: '8px'}}>
+                              <select style={{flex: 1}} value={form.service} onChange={e => setForm({...form, service: e.target.value})}>
+                                 <option value="">-- Choisir --</option>
+                                 {servicesList.length > 0 ? servicesList.map(s => <option key={s.id} value={s.nomService}>{s.nomService}</option>) : <option value="SERVICE_GENERAL">Service Général</option>}
+                              </select>
+                              <input placeholder="Saisie libre..." value={form.service} onChange={e => setForm({...form, service: e.target.value})} style={{width: '120px'}} />
+                           </div>
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Localisation Précise</label>
+                           <input value={form.localisation} onChange={e => setForm({...form, localisation: e.target.value})} placeholder="Ex: Étage 2, Bureau 204" />
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Statut Opérationnel</label>
+                           <select value={form.statutOperationnel} onChange={e => setForm({...form, statutOperationnel: e.target.value})}>
+                              <option value="ACTIF">🟢 Actif / En Service</option>
+                              <option value="EN_MAINTENANCE">🟠 En Maintenance</option>
+                              <option value="EN_TRANSFERT">🔵 En Transfert</option>
+                              <option value="REFORME">🔴 À Réformer</option>
+                           </select>
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Coordonnées GPS</label>
+                           <div style={{display: 'flex', gap: '8px'}}>
+                              <input style={{flex: 1}} value={form.coordonneesGps} onChange={e => setForm({...form, coordonneesGps: e.target.value})} placeholder="Lat, Long" />
+                              <button type="button" className="btn-export" onClick={captureGPS} title="Capturer ma position actuelle">📍</button>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* SPECIFIQUES */}
+                  <div className="form-section">
+                     <h4 className="section-title"><span>02</span> Détails Techniques & Innovations</h4>
+                     <div className="grid-2">
+                        {selectedCategory === 'MATERIEL_ROULANT' && (
+                           <>
+                              <div className="form-group-modern">
+                                 <label>Immatriculation Officielle</label>
+                                 <input value={form.immatriculation} onChange={e => setForm({...form, immatriculation: e.target.value})} />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>N° Châssis (Système VIN)</label>
+                                 <input value={form.numChassis} onChange={e => setForm({...form, numChassis: e.target.value})} />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Marque & Modèle</label>
+                                 <input value={form.marque} onChange={e => setForm({...form, marque: e.target.value})} placeholder="Ex: Toyota Camry" />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Puissance Fiscale / Type Boîte</label>
+                                 <div style={{display: 'flex', gap: '8px'}}>
+                                    <input value={form.puissanceFiscale} onChange={e => setForm({...form, puissanceFiscale: e.target.value})} placeholder="7 CV" />
+                                    <select value={form.typeBoite} onChange={e => setForm({...form, typeBoite: e.target.value})}>
+                                       <option value="MANUELLE">Manuelle</option>
+                                       <option value="AUTO">Automatique</option>
+                                    </select>
+                                 </div>
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Charge Utile / Capacité</label>
+                                 <input value={form.chargeUtile} onChange={e => setForm({...form, chargeUtile: e.target.value})} placeholder="Ex: 2.5 Tonnes" />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Énergie / Carburant</label>
+                                 <select value={form.typeCarburant} onChange={e => setForm({...form, typeCarburant: e.target.value})}>
+                                    <option value="ESSENCE">⛽ Essence</option>
+                                    <option value="DIESEL">⛽ Diesel</option>
+                                    <option value="HYBRIDE">🔌 Hybride / Élec.</option>
+                                 </select>
+                              </div>
+                           </>
+                        )}
+                        {selectedCategory === 'IMMOBILIER' && (
+                           <>
+                              <div className="form-group-modern">
+                                 <label>N° Titre Foncier / Réf Cadastrale</label>
+                                 <input value={form.titreFoncier} onChange={e => setForm({...form, titreFoncier: e.target.value})} />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Superficie au Sol (m²)</label>
+                                 <input value={form.superficie} onChange={e => setForm({...form, superficie: e.target.value})} />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Statut Juridique</label>
+                                 <select value={form.statutJuridique} onChange={e => setForm({...form, statutJuridique: e.target.value})}>
+                                    <option value="PROPRIETE_PRIVEE">Domaine Privé de l'État</option>
+                                    <option value="DOMAINE_PUBLIC">Domaine Public</option>
+                                    <option value="LOCATION">Bail / Location</option>
+                                 </select>
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Permis d'Occuper / Conformité</label>
+                                 <div style={{padding: '10px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '10px'}}>
+                                    <input type="checkbox" checked={form.permisOccuper} onChange={e => setForm({...form, permisOccuper: e.target.checked})} /> Certificat de conformité disponible
+                                 </div>
+                              </div>
+                           </>
+                        )}
+                        {selectedCategory === 'MOBILIER' && (
+                           <>
+                              <div className="form-group-modern">
+                                 <label>N° de Série (S/N)</label>
+                                 <input value={form.numSerie} onChange={e => setForm({...form, numSerie: e.target.value})} />
+                              </div>
+                              <div className="form-group-modern">
+                                 <label>Garantie technique jusqu'au</label>
+                                 <input type="date" value={form.finGarantie} onChange={e => setForm({...form, finGarantie: e.target.value})} />
+                              </div>
+                              <div className="form-group-modern" style={{gridColumn: 'span 2'}}>
+                                 <label>Architecture & Specs (CPU, RAM, Stockage, OS)</label>
+                                 <textarea value={form.specificationsTechniques} onChange={e => setForm({...form, specificationsTechniques: e.target.value})} rows={2} placeholder="Ex: Intel Core i7, 16GB RAM, Windows 11..." />
+                              </div>
+                           </>
+                        )}
+                     </div>
+                  </div>
+
+                  {/* DOCUMENTS & PHOTOS */}
+                  <div className="form-section">
+                     <h4 className="section-title"><span>03</span> Médias & Justificatifs</h4>
+                     <div className="grid-2">
+                        <div className="form-group-modern">
+                           <label>Photographie de l'Actif</label>
+                           <ImageUpload value={form.photoUrl} onChange={url => setForm({...form, photoUrl: url})} />
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Documents & Justificatifs (PDF, DOC)</label>
+                           <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                              <FileUpload onUploadSuccess={url => setForm((prev:any) => ({...prev, documentsUrls: [...(prev.documentsUrls || []), url]}))} />
+                              <div style={{fontSize: '11px', color: 'var(--text-dim)'}}>
+                                 {form.documentsUrls?.length || 0} document(s) attaché(s)
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* VALORISATION */}
+                  <div className="form-section">
+                     <h4 className="section-title"><span>04</span> Valorisation & Cycle de Vie</h4>
+                     <div className="grid-2">
+                        <div className="form-group-modern">
+                           <label>Valeur d'origine (FCFA)</label>
+                           <input type="number" required value={form.valeur} onChange={e => setForm({...form, valeur: Number(e.target.value)})} />
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Mise en service</label>
+                           <input type="date" required value={form.dateAcquisition} onChange={e => setForm({...form, dateAcquisition: e.target.value})} />
+                        </div>
+                        <div className="form-group-modern">
+                           <label>Durée d'amort. (Ans)</label>
+                           <input type="number" required value={form.dureeAmortissement} onChange={e => setForm({...form, dureeAmortissement: Number(e.target.value)})} />
+                        </div>
+                        <div className="form-group-modern">
+                           <label>État physique</label>
+                           <select value={form.etat} onChange={e => setForm({...form, etat: e.target.value})}>
+                              <option value="NEUF">Neuf</option>
+                              <option value="BON">Bon État</option>
+                              <option value="MOYEN">Moyen</option>
+                              <option value="MAUVAIS">À Réformer</option>
+                           </select>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="form-footer" style={{marginTop: '30px', display: 'flex', justifyContent: 'flex-end'}}>
+                     <button type="submit" className="primary" style={{width: '100%', padding: '18px'}}>
+                        Confirmer l'Enregistrement de l'Actif
+                     </button>
+                  </div>
+               </form>
+            </div>
+          )}
         </section>
       )}
     </div>

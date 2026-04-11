@@ -51,10 +51,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
+                System.out.println("DEBUG: Authenticated user " + username + " with authorities: " + userDetails.getAuthorities());
+            } else if (token != null) {
+                System.out.println("DEBUG: Token validation failed for token: " + token.substring(0, Math.min(token.length(), 10)) + "...");
+            } else {
+                // System.out.println("DEBUG: No token found in Authorization header for path: " + path);
             }
         } catch (Exception ex) {
-            // tu peux loguer l'erreur si besoin
-            // ex.printStackTrace();
+            System.err.println("DEBUG: Error in JwtAuthenticationFilter: " + ex.getMessage());
+            ex.printStackTrace();
         }
 
         filterChain.doFilter(request, response);

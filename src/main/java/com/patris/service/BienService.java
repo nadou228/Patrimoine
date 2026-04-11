@@ -54,10 +54,14 @@ public class BienService {
         double taux = 100.0 / bien.getDureeAmortissement();
         
         LocalDate dateDepart = bien.getDateAcquisition() != null ? bien.getDateAcquisition() : LocalDate.now();
-        int anneesEcoulees = Period.between(dateDepart, LocalDate.now()).getYears();
+        LocalDate now = LocalDate.now();
+        
+        // Calculer la différence en jours pour plus de précision
+        long joursEcoules = java.time.temporal.ChronoUnit.DAYS.between(dateDepart, now);
+        double anneesEcoulees = joursEcoules / 365.25;
         
         // Plafonner les années écoulées à la durée d'amortissement
-        anneesEcoulees = Math.max(0, Math.min(anneesEcoulees, bien.getDureeAmortissement()));
+        anneesEcoulees = Math.max(0, Math.min(anneesEcoulees, (double) bien.getDureeAmortissement()));
         
         double amortissementAnnuel = bien.getValeur() / bien.getDureeAmortissement();
         double amortissementCumule = amortissementAnnuel * anneesEcoulees;
@@ -150,6 +154,24 @@ public class BienService {
             bien.setValiderPar(dto.getValiderPar() != null ? dto.getValiderPar() : "");
             bien.setDateValidation(parseDateTime(dto.getDateValidation()));
             bien.setStatutValidation(parseStatut(dto.getStatutValidation()));
+            
+            // Nouveau statut opÃ©rationnel
+            if (dto.getStatutOperationnel() != null) {
+                try {
+                    bien.setStatutOperationnel(com.patris.enums.statutOperationnel.valueOf(dto.getStatutOperationnel()));
+                } catch (Exception e) {
+                    bien.setStatutOperationnel(com.patris.enums.statutOperationnel.ACTIF);
+                }
+            }
+            
+            // Nouveaux champs innovants
+            bien.setStatutJuridique(dto.getStatutJuridique());
+            bien.setChargeUtile(dto.getChargeUtile());
+            bien.setTypeBoite(dto.getTypeBoite());
+            bien.setFinGarantie(parseDate(dto.getFinGarantie()));
+            bien.setDateDernierEntretien(parseDate(dto.getDateDernierEntretien()));
+            bien.setPermisOccuper(dto.isPermisOccuper());
+
             bien.setArchived(dto.getArchived() != null ? dto.getArchived() : false);
 
             return bien;
@@ -241,8 +263,26 @@ public class BienService {
         bien.setValeurComptable(b.getValeurComptable());
         bien.setAmortissementCumule(b.getAmortissementCumule());
         bien.setStatutValidation(b.getStatutValidation());
-        bien.setValiderPar(b.getValiderPar());
         bien.setDateValidation(b.getDateValidation());
+        bien.setNumInventaire(b.getNumInventaire());
+        bien.setTitreFoncier(b.getTitreFoncier());
+        bien.setSuperficie(b.getSuperficie());
+        bien.setModeAcquisition(b.getModeAcquisition());
+        bien.setImmatriculation(b.getImmatriculation());
+        bien.setNumChassis(b.getNumChassis());
+        bien.setMarque(b.getMarque());
+        bien.setModele(b.getModele());
+        bien.setNumSerie(b.getNumSerie());
+        bien.setFabricant(b.getFabricant());
+        
+        // Nouveaux champs
+        bien.setStatutOperationnel(b.getStatutOperationnel());
+        bien.setStatutJuridique(b.getStatutJuridique());
+        bien.setChargeUtile(b.getChargeUtile());
+        bien.setTypeBoite(b.getTypeBoite());
+        bien.setFinGarantie(b.getFinGarantie());
+        bien.setDateDernierEntretien(b.getDateDernierEntretien());
+        bien.setPermisOccuper(b.isPermisOccuper());
 
         // Automatisation des calculs comptables
         bien.setValeurNetteComptable(calculValeurNette(bien));

@@ -24,6 +24,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+        System.out.println("DEBUG: Login attempt for user: " + request.getUsername());
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
@@ -35,6 +36,7 @@ public class AuthController {
             Utilisateur user = userDetails.getUtilisateur();
 
             String token = jwtService.generateToken(user);
+            System.out.println("DEBUG: Login successful for " + user.getUsername() + ". Role: " + user.getRole());
 
             LoginResponse response = new LoginResponse(
                     user.getId(),
@@ -47,6 +49,7 @@ public class AuthController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            System.err.println("DEBUG: Login failed for " + request.getUsername() + ": " + e.getMessage());
             return ResponseEntity.status(401).build();
         }
     }

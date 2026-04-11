@@ -61,6 +61,17 @@ CREATE TABLE IF NOT EXISTS bien (
     valider_par VARCHAR(255),
     date_validation TIMESTAMP,
     statut_validation VARCHAR(50), -- Enum statutValidation
+    statut_operationnel VARCHAR(50) DEFAULT 'ACTIF', -- Enum statutOperationnel
+    puissance_fiscale VARCHAR(255),
+    type_carburant VARCHAR(255),
+    usage_immobilier VARCHAR(255),
+    specifications_techniques TEXT,
+    statut_juridique VARCHAR(255),
+    charge_utile VARCHAR(255),
+    type_boite VARCHAR(255),
+    fin_garantie DATE,
+    date_dernier_entretien DATE,
+    permis_occuper BOOLEAN DEFAULT FALSE,
     archived BOOLEAN DEFAULT FALSE
 );
 
@@ -91,7 +102,14 @@ CREATE TABLE IF NOT EXISTS affectation (
     date_affectation TIMESTAMP,
     date_fin TIMESTAMP,
     bien_id BIGINT REFERENCES bien(id),
-    service_id BIGINT REFERENCES services(id)
+    service_id BIGINT REFERENCES services(id),
+    statut_validation VARCHAR(50) DEFAULT 'EN_ATTENTE',
+    valide_par VARCHAR(255),
+    date_validation TIMESTAMP,
+    signature_url VARCHAR(255),
+    ministere VARCHAR(255),
+    poste_comptable VARCHAR(255),
+    detenteur_a VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS mouvement (
@@ -163,4 +181,16 @@ CREATE TABLE IF NOT EXISTS mouvement_stock (
     date_mouvement TIMESTAMP,
     destination VARCHAR(255),
     stock_id BIGINT REFERENCES stock(id)
+);
+
+CREATE TABLE IF NOT EXISTS reforme (
+    id SERIAL PRIMARY KEY,
+    bien_id BIGINT REFERENCES bien(id),
+    type_reforme VARCHAR(255), -- REBUT, VENTE, DON, CESSION
+    motif TEXT,
+    rapport_technique_url VARCHAR(255),
+    valeur_residuelle DOUBLE PRECISION,
+    decision VARCHAR(255),
+    date_reforme DATE,
+    statut VARCHAR(50) -- EN_COURS, VALIDE, REJETE
 );

@@ -1,6 +1,5 @@
-package com.patris.service;
-
 import java.util.List;
+import com.patris.enums.statutOperationnel;
 
 import org.springframework.stereotype.Service;
 
@@ -25,6 +24,9 @@ public class ReformeService {
     }
 
     public Reforme create(Reforme reforme) {
+        if (reforme.getBien() != null && reforme.getBien().getId() != null) {
+            // Optionnel: On pourrait marquer le bien comme EN_TRANSFERT/EN_REFORME ici
+        }
         return repository.save(reforme);
     }
 
@@ -37,6 +39,14 @@ public class ReformeService {
         reforme.setValeurResiduelle(data.getValeurResiduelle());
         reforme.setDecision(data.getDecision());
         reforme.setDateReforme(data.getDateReforme());
+        
+        // Si le statut passe Ã  VALIDE, on met le bien en statut REFORME
+        if ("VALIDE".equals(data.getStatut()) && !"VALIDE".equals(reforme.getStatut())) {
+            if (reforme.getBien() != null) {
+                reforme.getBien().setStatutOperationnel(statutOperationnel.REFORME);
+            }
+        }
+        
         reforme.setStatut(data.getStatut());
         return repository.save(reforme);
     }

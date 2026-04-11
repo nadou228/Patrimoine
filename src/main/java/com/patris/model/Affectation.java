@@ -1,7 +1,10 @@
 package com.patris.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.patris.enums.statutValidation;
 import java.time.LocalDateTime;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -42,6 +45,16 @@ public class Affectation {
     @JoinColumn(name = "service_id")
     private Services services;
 
+    @Enumerated(EnumType.STRING)
+    private statutValidation statutValidation = statutValidation.EN_ATTENTE;
+
+    private String validePar;
+    private LocalDateTime dateValidation;
+    private String signatureUrl;
+    private String ministere;
+    private String posteComptable;
+    private String detenteurA;
+
     @JsonProperty("detenteur")
     public String getDetenteur() {
         return beneficaire;
@@ -58,7 +71,7 @@ public class Affectation {
     }
     
     // Alias pour le frontend qui utilise item.bien comme texte
-    @JsonProperty("bien")
+    @JsonProperty("bienLabel")
     public String getBienLabel() {
         return (bien != null) ? bien.getDesignation() : "N/A";
     }
@@ -72,4 +85,13 @@ public class Affectation {
     public String getEtat() {
         return (dateFin == null || dateFin.isAfter(LocalDateTime.now())) ? "ACTIF" : "CLÔTURÉ";
     }
+
+    @JsonProperty("ministere")
+    public String getMinistereVal() { return ministere; }
+
+    @JsonProperty("posteComptable")
+    public String getPosteComptableVal() { return posteComptable; }
+
+    @JsonProperty("detenteurA")
+    public String getDetenteurAVal() { return detenteurA; }
 }

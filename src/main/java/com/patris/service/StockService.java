@@ -1,8 +1,10 @@
 package com.patris.service;
 
 import com.patris.model.Consommable;
+import com.patris.model.MouvementStock;
 import com.patris.model.Stock;
 import com.patris.repository.ConsommableRepository;
+import com.patris.repository.MouvementStockRepository;
 import com.patris.repository.StockRepository;
 import org.springframework.stereotype.Service;
 import java.util.List;
@@ -12,11 +14,14 @@ public class StockService {
 
     private final StockRepository repository;
     private final ConsommableRepository consommableRepository;
+    private final MouvementStockRepository mouvementRepository;
 
     public StockService(StockRepository repository,
-                        ConsommableRepository consommableRepository) {
+                        ConsommableRepository consommableRepository,
+                        MouvementStockRepository mouvementRepository) {
         this.repository = repository;
         this.consommableRepository = consommableRepository;
+        this.mouvementRepository = mouvementRepository;
     }
 
     public List<Stock> findAll() {
@@ -28,37 +33,69 @@ public class StockService {
                 .orElseThrow(() -> new RuntimeException("Stock introuvable"));
     }
 
-    public Stock save(Stock stock) {
-        // RÃ©solution du consommable depuis la base
-        if (stock.getConsommable() != null && stock.getConsommable().getId() != null) {
-            Consommable consommable = consommableRepository.findById(stock.getConsommable().getId())
-                    .orElseThrow(() -> new RuntimeException("Consommable introuvable"));
-            stock.setConsommable(consommable);
+    /**
+     * Valide un mouvement de stock et met à jour les quantités réelles.
+     * Pour les entrées, calcule également le nouveau PMP.
+     */
+    public void validerMouvement(Long mouvementId) {
+        MouvementStock mouv = mouvementRepository.findById(mouvementId)
+                .orElseThrow(() -> new RuntimeException("Mouvement introuvable"));
+
+        if (mouv.isEstValide()) return; // Déjà validé
+
+        Stock stock = mouv.getStock();
+        Consommable article = stock.getConsommable();
+
+        if (mouv.getTypeMouvement() == com.patris.enums.type_mouvement.ENTREE) {
+            // Calcul du nouveau PMP
+            double valeurActuelle = stock.getQuantite() * article.getPrixMoyenPondere();
+            double valeurEntree = mouv.getQuantite() * (mouv.getPrixUnitaire() != null ? mouv.getPrixUnitaire() : article.getPrixMoyenPondere());
+            int nouvelleQte = stock.getQuantite() + mouv.getQuantite();
+            
+            if (nouvelleQte > 0) {
+                article.setPrixMoyenPondere((valeurActuelle + valeurEntree) / nouvelleQte);
+            }
+            
+            stock.setQuantite(nouvelleQte);
+            consommableRepository.save(article);
+        } else if (mouv.getTypeMouvement() == com.patris.enums.type_mouvement.SORTIE) {
+            if (stock.getQuantite() < mouv.getQuantite()) {
+                throw new RuntimeException("Stock insuffisant pour cette sortie");
+            }
+            stock.setQuantite(stock.getQuantite() - mouv.getQuantite());
         }
+
+        mouv.setEstValide(true);
+        repository.save(stock);
+        mouvementRepository.save(mouv);
+    }
+
+    public Stock save(Stock stock) {
         return repository.save(stock);
     }
 
-    public Stock updateStock(Long id, Stock s) {
+    public Stock findByConsommableId(Long consommableId) {
+        return repository.findAll().stream()
+                .filter(s -> s.getConsommable() != null && s.getConsommable().getId().equals(consommableId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public Stock updateStock(Long id, Stock details) {
         Stock stock = findById(id);
-        stock.setQuantite(s.getQuantite());
-        stock.setSeuilAlerte(s.getSeuilAlerte());
-        stock.setUnite(s.getUnite());
-
-        // Mise Ã  jour du consommable si fourni
-        if (s.getConsommable() != null && s.getConsommable().getId() != null) {
-            Consommable consommable = consommableRepository.findById(s.getConsommable().getId())
-                    .orElseThrow(() -> new RuntimeException("Consommable introuvable"));
-            stock.setConsommable(consommable);
-        }
-
+        stock.setQuantite(details.getQuantite());
+        stock.setSeuilAlerte(details.getSeuilAlerte());
+        stock.setUnite(details.getUnite());
+        stock.setPrixUnitaireMoyen(details.getPrixUnitaireMoyen());
+        stock.setMagasin(details.getMagasin());
         return repository.save(stock);
+    }
+
+    public List<MouvementStock> findPendingMovements() {
+        return mouvementRepository.findByEstValideFalse();
     }
 
     public void delete(Long id) {
         repository.deleteById(id);
-    }
-
-    public Stock findByConsommableId(Long consommableId) {
-        return repository.findByConsommableId(consommableId);
     }
 }

@@ -26,7 +26,11 @@ public class FileStorageService {
             }
 
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            String safeName = file.getOriginalFilename() == null ? "fichier" : file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_");
+            String originalName = file.getOriginalFilename();
+            if (originalName == null || originalName.isBlank()) {
+                originalName = "fichier_inconnu.dat";
+            }
+            String safeName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
             String filename = timestamp + "_" + safeName;
 
             Path targetDir = root.resolve(folder);

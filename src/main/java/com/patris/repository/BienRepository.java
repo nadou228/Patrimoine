@@ -28,4 +28,8 @@ public interface BienRepository extends JpaRepository<Bien, Long> {
     List<Bien> findBiensSansEntretienDepuis(@Param("limite") LocalDate limite);
 
     List<Bien> findByEtatAndArchivedFalse(String etat);
+
+    List<Bien> findByLocalisationContainingAndArchivedFalse(String localisation);
+
+    List<Bien> findByCategorieAndArchivedFalse(com.patris.enums.categorie categorie);
 }

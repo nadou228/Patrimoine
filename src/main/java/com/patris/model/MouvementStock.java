@@ -32,9 +32,16 @@ public class MouvementStock {
     private type_mouvement typeMouvement;
     private int quantite;
     private LocalDateTime dateMouvement;
-    private String destination;
-    private Double prixUnitaire;
     private String referencePiece;
+    private Double prixUnitaire;
+    private String fournisseur;
+    private String serviceDemandeur;
+    private String destination;
+    private boolean estValide = false;
+
+    @ManyToOne
+    @JoinColumn(name = "magasin_id")
+    private Magasin magasin;
 
     @ManyToOne
     @JoinColumn(name = "stock_id")

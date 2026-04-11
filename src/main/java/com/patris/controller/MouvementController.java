@@ -53,6 +53,11 @@ public class MouvementController {
         return mouvementService.valider(id, statut);
     }
 
+    @GetMapping("/bien/{bienId}")
+    public List<Mouvement> findByBien(@PathVariable Long bienId) {
+        return mouvementService.findByBienId(bienId);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Mouvement> delete(@PathVariable Long id){
         mouvementService.delete(id);

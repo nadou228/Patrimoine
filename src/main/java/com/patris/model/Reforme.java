@@ -13,6 +13,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.JoinColumn;
 
 @Entity
 @Getter
@@ -26,8 +28,9 @@ public class Reforme {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Désignation du bien réformé (texte libre)
-    private String bien;
+    @ManyToOne
+    @JoinColumn(name = "bien_id")
+    private Bien bien;
 
     private String typeReforme; // REBUT, VENTE, DON, CESSION
     private String motif;

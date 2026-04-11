@@ -42,8 +42,6 @@ public class ConsommableService {
         c.setNomProduit(cDetails.getNomProduit());
         c.setSeuilAlerte(cDetails.getSeuilAlerte());
         c.setUnite(cDetails.getUnite());
-        c.setDateEntree(cDetails.getDateEntree());
-        c.setDateSortie(cDetails.getDateSortie());
         c.setServiceAffiche(cDetails.getServiceAffiche());
         c.setCommune(cDetails.getCommune());
 

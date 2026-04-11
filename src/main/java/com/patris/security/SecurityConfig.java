@@ -29,7 +29,7 @@ public class SecurityConfig {
                 new JwtAuthenticationFilter(jwtService, customUserDetailsService);
 
         http
-            .cors().and()
+            .cors(cors -> {}) // Utilise le bean CorsConfigurationSource défini ailleurs
             .csrf(csrf -> csrf.disable())
 
             .headers(headers -> headers
@@ -45,9 +45,11 @@ public class SecurityConfig {
                 // ENDPOINTS PUBLICS
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/upload/**").permitAll()
                 .requestMatchers("/utilisateurs/register").permitAll()
                 .requestMatchers("/h2/**").permitAll()
                 .requestMatchers("/error").permitAll()
+                .requestMatchers("/uploads/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // PERMISSIONS ENDPOINT (Authentifié seulement)
@@ -73,6 +75,10 @@ public class SecurityConfig {
                 // DASHBOARD
                 .requestMatchers("/api/dashboard/**")
                     .hasAnyRole("ADMIN","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
+
+                // MODULE UTILISATEURS
+                .requestMatchers(HttpMethod.GET, "/api/utilisateurs/**")
+                    .hasAnyRole("ADMIN", "GESTIONNAIRE_TECHNIQUE", "RESPONSABLE_PATRIMOINE", "AGENT_INVENTAIRE", "AUDITEUR", "ELU")
 
                 // STOCKS
                 .requestMatchers(HttpMethod.GET, "/api/stocks/**")

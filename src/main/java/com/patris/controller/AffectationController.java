@@ -1,73 +1,66 @@
 package com.patris.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.patris.dto.AffectationDto;
 import com.patris.model.Affectation;
 import com.patris.service.AffectationService;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/affectations")
-@RequiredArgsConstructor
-@Slf4j
+@CrossOrigin("*")
 public class AffectationController {
 
     private final AffectationService service;
-    private final ObjectMapper objectMapper;
+
+    public AffectationController(AffectationService service) {
+        this.service = service;
+    }
 
     @GetMapping
-    public List<Affectation> findAll() {
+    public List<Affectation> getAll() {
         return service.findAll();
     }
 
     @GetMapping("/{id}")
-    public Affectation findById(@PathVariable Long id){
-        return service.findById(id);
+    public ResponseEntity<Affectation> getById(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(service.findById(id));
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> payload) {
-        log.debug("Requête POST /api/affectations avec payload : {}", payload);
-        try {
-            AffectationDto dto = objectMapper.convertValue(payload, AffectationDto.class);
-            Affectation saved = service.saveFromDto(dto);
-            return ResponseEntity.ok(saved);
-        } catch (Exception e) {
-            log.error("Erreur création affectation", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Internal Server Error");
-            error.put("message", e.getMessage());
-            return ResponseEntity.status(500).body(error);
-        }
+    public ResponseEntity<Affectation> create(@RequestBody AffectationDto dto) {
+        return ResponseEntity.ok(service.saveFromDto(dto));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> payload){
-        try {
-            AffectationDto dto = objectMapper.convertValue(payload, AffectationDto.class);
-            Affectation updated = service.updateFromDto(id, dto);
-            return ResponseEntity.ok(updated);
-        } catch (Exception e) {
-            log.error("Erreur update affectation", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Internal Server Error");
-            error.put("message", e.getMessage());
-            return ResponseEntity.status(500).body(error);
-        }
+    public ResponseEntity<Affectation> update(@PathVariable Long id, @RequestBody AffectationDto dto) {
+        return ResponseEntity.ok(service.updateFromDto(id, dto));
+    }
+
+    @PostMapping("/{id}/valider")
+    public ResponseEntity<Affectation> valider(@PathVariable Long id, @RequestParam String validator) {
+        return ResponseEntity.ok(service.validerAffectation(id, validator));
+    }
+
+    @PostMapping("/{id}/rejeter")
+    public ResponseEntity<Affectation> rejeter(@PathVariable Long id, @RequestParam String validator) {
+        return ResponseEntity.ok(service.rejeterAffectation(id, validator));
+    }
+    
+    @GetMapping("/origine/{bienId}")
+    public String getOrigine(@PathVariable Long bienId) {
+        return service.findPreviousHolder(bienId);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id){
         service.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok().build();
     }
 }

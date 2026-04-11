@@ -105,6 +105,10 @@ public class MouvementService {
         return repository.save(mouvement);
     }
 
+    public List<Mouvement> findByBienId(Long bienId) {
+        return repository.findByBienIdOrderByDateCreationDesc(bienId);
+    }
+
     public void delete(Long id) {
         repository.deleteById(id);
     }

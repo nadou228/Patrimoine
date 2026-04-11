@@ -16,11 +16,13 @@ D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\pat
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\DashboardController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\DocumentController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\EntretienController.java
+D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\FileUploadController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\ImmobilierController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\InventaireCampagneController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\InventaireController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\InventaireEcartController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\InventaireFicheController.java
+D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\MagasinController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\MaterielRoulantController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\MobilierController.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\controller\MouvementController.java
@@ -64,6 +66,7 @@ D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\pat
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\InventaireCampagne.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\InventaireEcart.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\InventaireFiche.java
+D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\Magasin.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\MaterielRoulant.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\Mobilier.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\model\Mouvement.java
@@ -89,6 +92,7 @@ D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\pat
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\InventaireEcartRepository.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\InventaireFicheRepository.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\InventaireRepository.java
+D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\MagasinRepository.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\MaterielRoulantRepository.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\MobilierRepository.java
 D:\MES_PROJET\gestion_biens\gestion_patrimoine\Patrimoine-\src\main\java\com\patris\repository\MouvementRepository.java

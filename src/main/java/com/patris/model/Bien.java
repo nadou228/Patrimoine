@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 
 import com.patris.enums.categorie;
 import com.patris.enums.statutValidation;
+import com.patris.enums.statutOperationnel;
 
 @Entity
 @Getter
@@ -55,6 +56,21 @@ public class Bien {
     private String modele;
     private String numSerie;
     private String fabricant;
+    
+    // Champs supplÃ©mentaires par catÃ©gorie
+    private String puissanceFiscale;
+    private String typeCarburant;
+    private String usageImmobilier;
+    private String specificationsTechniques;
+    
+    // Innovations techniques
+    private String statutJuridique; // PUBLIC / PRIVE / BAIL
+    private String chargeUtile; // Pour Roulant (ex: 3.5 Tonnes)
+    private String typeBoite; // MANUELLE / AUTO
+    private LocalDate finGarantie;
+    private LocalDate dateDernierEntretien;
+    private boolean permisOccuper = false;
+
     private Integer dureeAmortissement;
     private Integer dureeVie;
     private Double tauxAmortissement;
@@ -62,12 +78,16 @@ public class Bien {
     private Double valeurComptable;
     private Double amortissementCumule;
     private String validerPar;
+    private String service; // Service ou département détenteur
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime dateValidation; 
 
     @Enumerated(EnumType.STRING)
     private statutValidation statutValidation;
+
+    @Enumerated(EnumType.STRING)
+    private statutOperationnel statutOperationnel = statutOperationnel.ACTIF;
 
     private boolean archived = false;
 

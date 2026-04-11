@@ -127,7 +127,7 @@ function headerRT(cols: number, user?: ExportUser): string {
   const rest = cols - half;
   return `
   <tr>
-    <td colspan="${half}" class="header-left">MINISTERE / INSTITUTION</td>
+    <td colspan="${half}" class="header-left">${user?.nom && user.nom !== '......................' ? user.nom : (user as any)?.ministere || "MINISTÈRE DE L'ÉCONOMIE ET DES FINANCES"}</td>
     <td colspan="${rest}" class="header-right" style="font-size:12px; font-weight:bold;">REPUBLIQUE TOGOLAISE</td>
   </tr>
   <tr>
@@ -406,23 +406,29 @@ export function exportBordereauMutationExcel(affectation: any, filename: string,
   const items: any[] = affectation.biens?.length
     ? affectation.biens
     : [{
-        bienCode: affectation.bienCode,
-        designation: affectation.bien || affectation.designation,
-        valeur: affectation.valeur,
-        etat: affectation.etat,
-        motif: affectation.motif,
+        bienCode: (affectation.bien && (affectation.bien.iup || affectation.bien.codeBien)) || affectation.bienCode || "-",
+        designation: affectation.bien?.designation || (typeof affectation.bien === 'string' ? affectation.bien : "Actif"),
+        valeur: (affectation.bien && affectation.bien.valeur) || affectation.valeur || 0,
+        etat: affectation.etat || (affectation.bien && affectation.bien.etat) || "ACTIF",
+        motif: affectation.motif || "N/A",
       }];
+
+  const iup = items[0]?.bienCode || "N/A";
+  const dateStr = new Date(affectation.dateAffectation).toLocaleDateString();
+  const mutationHash = `BM-${affectation.id || 'N'}-${iup}-${dateStr.replace(/\//g, '')}`;
+  const qrData = encodeURIComponent(`Mutation PATRIS\nBordereau: ${mutationHash}\nIUP: ${iup}\nDétenteur: ${affectation.detenteur}\nDate: ${dateStr}`);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${qrData}`;
 
   const rows = items.map((b, i) => {
     const cls = i % 2 === 0 ? "row-odd" : "row-even";
     return `
     <tr class="${cls}">
       <td class="center">${i + 1}</td>
-      <td class="center">${fmt(b.bienCode || b.iup)}</td>
-      <td>${fmt(b.designation || b.bien)}</td>
-      <td class="right">${fmtNum(b.valeur)}</td>
+      <td class="center">${fmt(b.bienCode || b.codeBien || b.iup)}</td>
+      <td>${fmt(b.designation || b.libelle)}</td>
+      <td class="right">${fmtNum(b.valeur || b.valeurOrigine || 0)}</td>
       <td class="center">${fmt(b.etat, "ACTIF")}</td>
-      <td>${fmt(b.motif || b.observations)}</td>
+      <td>${fmt(b.motif || b.observations || "-")}</td>
     </tr>`;
   }).join("");
 
@@ -447,12 +453,15 @@ export function exportBordereauMutationExcel(affectation: any, filename: string,
     <td colspan="3" class="th-light center bold">DESTINATION</td>
   </tr>
   <tr>
-    <td colspan="3" style="padding:6px;">
-      <span style="font-weight:bold;">Détenteur A :</span> ${fmt(affectation.detenteurA, ".........................")}
+    <td colspan="4" style="padding:6px; vertical-align:top;">
+      <p style="margin:2px 0;"><span style="font-weight:bold;">Détenteur A (Cédant) :</span> ${fmt(affectation.detenteurA, ".........................")}</p>
+      <p style="margin:10px 0 2px 0;"><span style="font-weight:bold;">Détenteur B (Preneur) :</span> ${fmt(affectation.detenteurB || affectation.detenteur)}</p>
+      <p style="margin:2px 0;"><span style="font-weight:bold;">Service de Destination :</span> ${fmt(affectation.service)}</p>
     </td>
-    <td colspan="3" style="padding:6px;">
-      <span style="font-weight:bold;">Détenteur B :</span> ${fmt(affectation.detenteurB || affectation.detenteur)}
-      &nbsp;—&nbsp; Service : ${fmt(affectation.service)}
+    <td colspan="2" class="center" style="vertical-align:middle; padding:10px;">
+       <div style="font-size:8px; margin-bottom:4px; color:#2F75B6;">Vérification Numérique</div>
+       <img src="${qrUrl}" width="65" height="65" style="border:1px solid #EEE;" />
+       <div style="font-size:7px; margin-top:4px; font-family:monospace; color:#666;">ID: ${mutationHash.substring(0, 15)}</div>
     </td>
   </tr>
 
@@ -479,9 +488,12 @@ export function exportBordereauMutationExcel(affectation: any, filename: string,
   <tr><td colspan="${N}" class="no-border" style="height:6px;"></td></tr>
   <tr>
     <td colspan="${N}" style="font-size:8px; font-style:italic; border:1px dashed #999;
-        background:#FFFDE7; padding:6px;">
-      &#9888; Le présent bordereau engage la responsabilité des deux détenteurs.
-      Tout bien muté doit être enregistré dans les livres des matières sous 48h.
+        background:#FFFDE7; padding:10px; position:relative;">
+      <div style="float:right; opacity:0.15; font-size:25px; font-weight:bold; color:#2F75B6; transform:rotate(-15deg); text-transform:uppercase;">
+         ${affectation.statutValidation === 'VALIDE' ? 'VERIFIE' : 'EN ATTENTE DE VALIDATION'}
+      </div>
+      &#9888; <span style="font-weight:bold;">CERTIFICATION :</span> Le présent bordereau engage la responsabilité civile et pécuniaire des deux détenteurs mentionnés ci-dessus. Tout mouvement de matériel doit être notifié au Service de la Comptabilité des Matières sous 48 heures ouvrables.
+      <br/> <span style="font-size:7px; opacity:0.6;">Empreinte de sécurité : ${mutationHash} | Généré par Patris ERP</span>
     </td>
   </tr>
 

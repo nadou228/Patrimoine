@@ -51,5 +51,15 @@ public class BienDto {
     private String validerPar;
     private String dateValidation;
     private String statutValidation;
+    private String statutOperationnel;
+
+    // Nouveaux champs innovants 
+    private String statutJuridique;
+    private String chargeUtile;
+    private String typeBoite;
+    private String finGarantie;
+    private String dateDernierEntretien;
+    private boolean permisOccuper;
+
     private Boolean archived;
 }

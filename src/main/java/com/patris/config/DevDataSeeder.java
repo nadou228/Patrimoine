@@ -200,17 +200,22 @@ public class DevDataSeeder {
             Document doc = new Document(null, "facture_bureau.pdf", typeDocument.FACTURES, LocalDateTime.now().minusYears(2), "/docs/facture_bureau.pdf", bienMobilier, null);
             documentRepository.save(doc);
 
-            Consommable consommable = new Consommable(null, "Cartouches d'encre", 20, "Boîte", LocalDate.now().minusDays(20), null, "Magasin Central", commune);
+            Consommable consommable = new Consommable();
+            consommable.setNomProduit("Cartouches d'encre");
+            consommable.setSeuilAlerte(20);
+            consommable.setUnite("Boîte");
+            consommable.setServiceAffiche("Magasin Central");
+            consommable.setCommune(commune);
             consommableRepository.save(consommable);
 
-            Stock stock = new Stock(null, 150, 30, "Boîte", 1000.0, consommable);
+            Stock stock = new Stock(null, 150, 30, "Boîte", 1000.0, consommable, null);
             stockRepository.save(stock);
 
             MouvementStock mvStock = new MouvementStock();
             mvStock.setTypeMouvement(type_mouvement.ENTREE);
             mvStock.setQuantite(50);
             mvStock.setDateMouvement(LocalDateTime.now().minusDays(2));
-            mvStock.setDestination("Magasin Central");
+            mvStock.setReferencePiece("BL-2026-001");
             mvStock.setStock(stock);
             mouvementStockRepository.save(mvStock);
 

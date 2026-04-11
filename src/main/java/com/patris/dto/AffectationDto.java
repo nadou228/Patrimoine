@@ -19,4 +19,7 @@ public class AffectationDto {
     private String fonction;
     private String dateFin;
     private String etat;
+    private String ministere;
+    private String posteComptable;
+    private String detenteurA;
 }

@@ -25,4 +25,8 @@ public class Stock {
     @ManyToOne
     @JoinColumn(name = "consommable_id")
     private Consommable consommable;
-} 
+
+    @ManyToOne
+    @JoinColumn(name = "magasin_id")
+    private Magasin magasin;
+}

@@ -33,8 +33,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAll(Exception ex) {
         Map<String, Object> body = new HashMap<>();
-        body.put("error", "Internal Server Error");
-        body.put("message", ex.getMessage());
+        body.put("error", "Erreur backend critique: " + ex.getClass().getSimpleName());
+        body.put("message", ex.getMessage() != null ? ex.getMessage() : "Aucun détail");
+        ex.printStackTrace(); // Log in console
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }
