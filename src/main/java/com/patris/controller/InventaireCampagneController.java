@@ -49,4 +49,15 @@ public class InventaireCampagneController {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/valider-zone")
+    public ResponseEntity<Void> validerZone(@PathVariable Long id) {
+        service.validerZoneConfort(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/certifier")
+    public ResponseEntity<InventaireCampagne> certifier(@PathVariable Long id) {
+        return ResponseEntity.ok(service.certifier(id));
+    }
 }

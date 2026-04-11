@@ -1130,6 +1130,214 @@ export function exportEtatRecapitulatifExcel(biens: any[], filename: string, use
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 12. RAPPORT D'INVENTAIRE COMPLET (XLS) — Campagne + Fiches + Écarts
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function exportInventaireCompletExcel(campagne: any, fiches: any[], ecarts: any[]) {
+  // Campagne metadata
+  const nomCampagne = campagne?.nom || "Inventaire";
+  const site        = campagne?.sites || "National";
+  const equipes     = campagne?.equipes || "—";
+  const dateDebut   = campagne?.dateDebut || "—";
+  const dateFin     = campagne?.dateFin || "—";
+  const statut      = campagne?.statut || "—";
+
+  // KPIs
+  const total          = fiches.length;
+  const scannes        = fiches.filter(f => f.validationAgent === "VALIDE").length;
+  const anomalies      = fiches.filter(f => f.anomalie).length;
+  const supValides     = fiches.filter(f => f.validationSuperviseur === "VALIDE").length;
+  const ecartsTotal    = ecarts.length;
+  const ecartsResolus  = ecarts.filter(e => e.statutValidation === "VALIDE").length;
+  const progressPct    = total ? Math.round((scannes / total) * 100) : 0;
+
+  // ECARTS STATUS COLORS
+  const ecartStatusCls = (s: string) => s === "VALIDE" ? "row-even" : "row-odd";
+
+  /* ── Column widths ── */
+  const N_FICHE  = 11;
+  const N_ECART  = 6;
+  const colFiche  = [32, 90, 58, 48, 75, 75, 75, 45, 65, 65, 110];
+  const colEcart  = [42, 95, 72, 105, 72, 95];
+
+  /* ── Fiche rows ── */
+  const ficheRows = fiches.map((f, i) => {
+    const cls = i % 2 === 0 ? "row-odd" : "row-even";
+    const anomCls = f.anomalie ? "style=\"color:#C00000;font-weight:bold;\"" : "";
+    return `
+    <tr class="${cls}">
+      <td class="center">${i + 1}</td>
+      <td class="center">${fmt(f.bien?.iup || f.codeIup)}</td>
+      <td>${fmt(f.bien?.designation)}</td>
+      <td class="center">${fmt(f.bien?.categorie)}</td>
+      <td>${fmt(f.bien?.localisation)}</td>
+      <td>${fmt(f.localisationReelle)}</td>
+      <td class="center">${fmt(f.etatConstate)}</td>
+      <td class="center" ${anomCls}>${f.anomalie ? "OUI" : "NON"}</td>
+      <td class="center">${fmt(f.validationAgent)}</td>
+      <td class="center">${fmt(f.validationSuperviseur)}</td>
+      <td>${fmt(f.observation)}</td>
+    </tr>`;
+  }).join("");
+
+  /* ── Ecart rows ── */
+  const ecartRows = ecarts.map((e, i) => {
+    const cls = ecartStatusCls(e.statutValidation);
+    return `
+    <tr class="${cls}">
+      <td class="center">${i + 1}</td>
+      <td>${fmt(e.bien?.designation)}</td>
+      <td class="center">${fmt(e.bien?.iup)}</td>
+      <td class="center">${fmt(e.typeEcart)?.replace(/_/g, " ")}</td>
+      <td class="center">${fmt(e.statutValidation)}</td>
+      <td>${fmt(e.justification)}</td>
+    </tr>`;
+  }).join("");
+
+  /* ── KPI Summary Bar ── */
+  const kpiBlock = `
+  <tr><td colspan="${N_FICHE}" class="no-border" style="height:8px;"></td></tr>
+  <tr>
+    <td colspan="2" class="th-light center"><small>Avancement</small><br/><b>${progressPct}%</b></td>
+    <td colspan="2" class="th-light center"><small>Actifs Audités</small><br/><b>${scannes} / ${total}</b></td>
+    <td colspan="2" class="th-light center"><small>Anomalies</small><br/><b style="color:#C00000">${anomalies}</b></td>
+    <td colspan="2" class="th-light center"><small>Sup. Validés</small><br/><b>${supValides}</b></td>
+    <td colspan="3" class="th-light center"><small>Écarts Résolus</small><br/><b>${ecartsResolus} / ${ecartsTotal}</b></td>
+  </tr>
+  <tr><td colspan="${N_FICHE}" class="no-border" style="height:8px;"></td></tr>`;
+
+  /* ── Body ── */
+  const body = `
+  ${headerRT(N_FICHE)}
+  <tr><td colspan="${N_FICHE}" class="doc-title">RAPPORT D'INVENTAIRE PHYSIQUE CERTIFIÉ — ${nomCampagne.toUpperCase()}</td></tr>
+
+  <!-- INFOS CAMPAGNE -->
+  <tr><td colspan="${N_FICHE}" class="no-border" style="height:5px;"></td></tr>
+  <tr>
+    <td colspan="3" class="th-light bold">Site / Périmètre : ${site}</td>
+    <td colspan="4" class="th-light bold center">Équipes : ${equipes}</td>
+    <td colspan="4" class="th-light right">Statut : ${statut} &nbsp;|&nbsp; Du ${dateDebut} au ${dateFin}</td>
+  </tr>
+
+  <!-- KPIs -->
+  ${kpiBlock}
+
+  <!-- ═══ SECTION 1 : FICHES D'AUDIT TERRAIN ═══ -->
+  <tr><td colspan="${N_FICHE}" class="row-group" style="font-size:11px;">▶ SECTION 1 — FICHES D'AUDIT TERRAIN (${total} actif(s))</td></tr>
+  <tr>
+    <td class="th">N°</td>
+    <td class="th">IUP / Code</td>
+    <td class="th">Désignation</td>
+    <td class="th">Catégorie</td>
+    <td class="th">Localisation Référentiel</td>
+    <td class="th">Localisation Réelle</td>
+    <td class="th">État Constaté</td>
+    <td class="th">Anomalie</td>
+    <td class="th">Valid. Agent</td>
+    <td class="th">Valid. Superviseur</td>
+    <td class="th">Observation</td>
+  </tr>
+  ${ficheRows}
+  <tr class="row-total">
+    <td colspan="7" class="center bold">TOTAL ACTIFS AUDITÉS</td>
+    <td colspan="2" class="center bold">${scannes} scannés</td>
+    <td colspan="2" class="center bold">${anomalies} anomalie(s)</td>
+  </tr>
+
+  <!-- ═══ SECTION 2 : ÉCARTS ═══ -->
+  <tr><td colspan="${N_FICHE}" class="no-border" style="height:12px;"></td></tr>
+  <tr><td colspan="${N_FICHE}" class="row-group" style="font-size:11px;">▶ SECTION 2 — ÉCARTS PATRIMONIAUX ET DÉCISIONS (${ecartsTotal} écart(s))</td></tr>
+  <tr>
+    <td class="th">N°</td>
+    <td class="th">Bien</td>
+    <td class="th">IUP</td>
+    <td class="th">Type d'Écart</td>
+    <td class="th">Statut Validation</td>
+    <td class="th" colspan="6">Justification / Décision</td>
+  </tr>
+  ${ecartRows}
+  <tr class="row-total">
+    <td colspan="4" class="center bold">TOTAL ÉCARTS</td>
+    <td class="center bold">${ecartsResolus} résolu(s)</td>
+    <td colspan="6" class="center bold">${ecartsTotal - ecartsResolus} en attente</td>
+  </tr>
+
+  ${signatureBlock([
+    { titre: "L'Agent Comptable des Matières" },
+    { titre: "Le Superviseur d'Audit" },
+    { titre: "L'Ordonnateur des Matières" }
+  ], N_FICHE)}`;
+
+  downloadXls(wrapHtml(colFiche, body),
+    `Rapport_Inventaire_Complet_${nomCampagne.replace(/\s+/g,"_")}_${today().replace(/\//g,"-")}.xls`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 13. PROCÈS-VERBAL D'INVENTAIRE CERTIFIÉ (PDF PROFESSIONNEL)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function exportPvInventaireCertifie(campagne: any, fiches: any[], ecarts: any[]) {
+  const doc = new jsPDF({ orientation: "portrait", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+
+  // Entête
+  doc.setFontSize(10);
+  doc.text("REPUBLIQUE TOGOLAISE", 15, 15);
+  doc.setFontSize(8);
+  doc.text("Travail - Liberté - Patrie", 15, 19);
+  
+  doc.setFontSize(22);
+  doc.setTextColor(47, 117, 182);
+  doc.text("PATRIS", W - 45, 20);
+
+  doc.setDrawColor(47, 117, 182);
+  doc.setLineWidth(1);
+  doc.line(15, 30, W - 15, 30);
+  
+  doc.setFontSize(16);
+  doc.text("PROCÈS-VERBAL D'INVENTAIRE CERTIFIÉ", W/2, 40, { align: "center" });
+
+  // Sceau (Simulation visuelle avec cercle vert)
+  doc.setDrawColor(32, 128, 0);
+  doc.setLineWidth(1);
+  doc.circle(W - 40, 60, 18);
+  doc.setFontSize(8);
+  doc.setTextColor(32, 128, 0);
+  doc.text("CERTIFIÉ", W-40, 58, {align:"center"});
+  doc.text("OFFICIEL", W-40, 63, {align:"center"});
+
+  // Infos
+  doc.setTextColor(0,0,0);
+  doc.setFontSize(11);
+  doc.text(`Mission : ${campagne.nom}`, 15, 55);
+  doc.text(`Périmètre : ${campagne.sites || 'National'}`, 15, 62);
+  doc.text(`Date : ${new Date().toLocaleDateString()}`, 15, 69);
+
+  // Stats
+  doc.setFillColor(240, 240, 240);
+  doc.rect(15, 75, W-30, 20, "F");
+  doc.setFontSize(9);
+  doc.text(`Total Audités : ${fiches.length} | Anomalies : ${fiches.filter(f => f.anomalie).length} | Écarts : ${ecarts.length}`, 20, 87);
+
+  // Tableau
+  const body = ecarts.map(e => [e.bien?.iup, e.typeEcart, e.justification || "N/A", "RÉGULARISÉ"]);
+  autoTable(doc, {
+    startY: 100,
+    head: [["IUP", "TYPE ÉCART", "JUSTIFICATION", "DÉCISION"]],
+    body: body,
+    theme: "grid",
+    headStyles: { fillColor: [47, 117, 182] }
+  });
+
+  // QR
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=CERTIFIED_${campagne.id}`;
+  doc.addImage(qrUrl, "PNG", W/2 - 15, H - 40, 30, 30);
+
+  doc.save(`PV_INVENTAIRE_${campagne.id}.pdf`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 12. EXPORT PDF GÉNÉRIQUE (jsPDF + autoTable)
 // ═══════════════════════════════════════════════════════════════════════════════
 

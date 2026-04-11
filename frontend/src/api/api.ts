@@ -44,6 +44,8 @@ export const validerFicheSuperviseur = (id: number, statut: string) => api.post(
 export const getInventaireEcarts = (campagneId: number) => api.get(`/inventaires/ecarts?campagneId=${campagneId}`).then(r => r.data);
 export const updateInventaireEcart = (id: number, data: any) => api.put(`/inventaires/ecarts/${id}`, data).then(r => r.data);
 export const validerEcart = (id: number, statut: string) => api.post(`/inventaires/ecarts/${id}/validation?statut=${statut}`).then(r => r.data);
+export const validerZoneInventaire = (campagneId: number) => api.post(`/inventaires/campagnes/${campagneId}/valider-zone`).then(r => r.data);
+export const certifierInventaire = (campagneId: number) => api.post(`/inventaires/campagnes/${campagneId}/certifier`).then(r => r.data);
 
 // ====== AFFECTATIONS — /api/affectations ======
 export const getAffectations = () => api.get('/affectations').then(r => r.data);
