@@ -3,6 +3,8 @@ package com.patris.controller;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +50,34 @@ public class BienController {
     @GetMapping
     public List<Bien> findAll(){
         return bienService.findAll();
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<Bien>> searchBiens(
+        @RequestParam(required = false) String q,
+        @RequestParam(required = false) String categorie,
+        @RequestParam(required = false) String statut
+    ) {
+        final String query = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
+        final String category = categorie == null ? "" : categorie.trim().toLowerCase(Locale.ROOT);
+        final String state = statut == null ? "" : statut.trim().toLowerCase(Locale.ROOT);
+
+        List<Bien> result = bienService.findAll().stream()
+            .filter(bien -> query.isBlank()
+                || containsIgnoreCase(bien.getDesignation(), query)
+                || containsIgnoreCase(bien.getIup(), query)
+                || containsIgnoreCase(bien.getCodeBien(), query)
+                || containsIgnoreCase(bien.getCodeSousCategorie(), query)
+                || containsIgnoreCase(bien.getLocalisation(), query))
+            .filter(bien -> category.isBlank()
+                || containsIgnoreCase(bien.getCategoriePrincipale(), category)
+                || (bien.getCategorie() != null && containsIgnoreCase(bien.getCategorie().name(), category)))
+            .filter(bien -> state.isBlank()
+                || containsIgnoreCase(bien.getEtat(), state)
+                || (bien.getStatutValidation() != null && containsIgnoreCase(bien.getStatutValidation().name(), state)))
+            .collect(Collectors.toList());
+
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/{id}")
@@ -204,5 +234,9 @@ public class BienController {
     ) {
         Bien updated = bienService.validate(id, com.patris.enums.statutValidation.from(statut), authentication.getName());
         return ResponseEntity.ok(updated);
+    }
+
+    private boolean containsIgnoreCase(String source, String expected) {
+        return source != null && source.toLowerCase(Locale.ROOT).contains(expected);
     }
 } 

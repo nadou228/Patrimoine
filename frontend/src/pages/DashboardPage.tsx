@@ -2,32 +2,80 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { deleteAuditLog, getAuditLogs, getBiens, getStocks, getUsers } from "../api/api";
 import { getCurrentUser } from "../api/auth";
+import { usePermissions } from "../contexts/PermissionsContext";
 import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
+
+type LooseRecord = Record<string, unknown>;
+type Primitive = string | number | boolean | null | undefined;
 
 type DashboardMetric = {
   label: string;
-  value: string;
+  value: number;
+  suffix?: string;
   tone: "neutral" | "success" | "warning" | "danger";
   status: string;
   detail: string;
+  emptyLabel?: string;
 };
 
-const currency = (value: number) =>
-  `${Math.round(value).toLocaleString("fr-FR")} FCFA`;
+type AlertTone = "success" | "warning" | "danger";
 
-const dayLabel = (value?: string) => {
-  if (!value) return "Non planifie";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Date invalide" : date.toLocaleDateString("fr-FR");
+const formatCurrency = (value: number) => `${Math.round(value).toLocaleString("fr-FR")} FCFA`;
+
+const formatDateTime = (value?: unknown) => {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("fr-FR");
+};
+
+const useAnimatedValue = (target: number, duration = 1200) => {
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setValue(target);
+      return;
+    }
+
+    let frame = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(target * eased);
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [duration, target]);
+
+  return value;
+};
+
+const MetricValue = ({ metric }: { metric: DashboardMetric }) => {
+  if (metric.value <= 0 && metric.emptyLabel) {
+    return <strong className="executive-kpi-value empty">{metric.emptyLabel}</strong>;
+  }
+
+  const animated = useAnimatedValue(metric.value);
+  const formatted =
+    metric.suffix === "FCFA"
+      ? formatCurrency(animated)
+      : `${Math.round(animated).toLocaleString("fr-FR")}${metric.suffix ? ` ${metric.suffix}` : ""}`;
+
+  return <strong className="executive-kpi-value">{formatted}</strong>;
 };
 
 const DashboardPage: React.FC = () => {
-  const [biens, setBiens] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [stocks, setStocks] = useState<any[]>([]);
-  const [activities, setActivities] = useState<any[]>([]);
+  const [biens, setBiens] = useState<LooseRecord[]>([]);
+  const [users, setUsers] = useState<LooseRecord[]>([]);
+  const [stocks, setStocks] = useState<LooseRecord[]>([]);
+  const [activities, setActivities] = useState<LooseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const currentUser = getCurrentUser();
+  const { permissions } = usePermissions();
+  const isAdmin = permissions?.role === "ADMIN";
 
   useEffect(() => {
     const load = async () => {
@@ -37,31 +85,28 @@ const DashboardPage: React.FC = () => {
           getBiens().catch(() => []),
           getUsers().catch(() => []),
           getStocks().catch(() => []),
-          getAuditLogs().catch(() => []),
+          isAdmin ? getAuditLogs().catch(() => []) : Promise.resolve([]),
         ]);
 
-        setBiens(biensData || []);
-        setUsers(usersData || []);
-        setStocks(stocksData || []);
-        setActivities((auditData || []).reverse());
+        setBiens((biensData as LooseRecord[]) ?? []);
+        setUsers((usersData as LooseRecord[]) ?? []);
+        setStocks((stocksData as LooseRecord[]) ?? []);
+        setActivities(((auditData as LooseRecord[]) ?? []).slice().reverse());
       } finally {
         setLoading(false);
       }
     };
 
-    load();
-  }, []);
+    void load();
+  }, [isAdmin]);
 
-  const addDays = (days: number) => {
-    const date = new Date();
-    date.setDate(date.getDate() + days);
-    return date;
-  };
-
-  const isSoon = (value?: string, days = 30) => {
+  const isSoon = (value?: unknown, days = 30) => {
     if (!value) return false;
-    const date = new Date(value);
-    return !Number.isNaN(date.getTime()) && date <= addDays(days);
+    const date = new Date(String(value));
+    if (Number.isNaN(date.getTime())) return false;
+    const limit = new Date();
+    limit.setDate(limit.getDate() + days);
+    return date <= limit;
   };
 
   const metrics = useMemo(() => {
@@ -69,22 +114,20 @@ const DashboardPage: React.FC = () => {
     const totalStockValue = stocks.reduce(
       (sum, stock) =>
         sum +
-        Number(stock.quantite || 0) *
-          Number(stock.prixUnitaireMoyen || stock.consommable?.prixMoyenPondere || 0),
+        Number(stock.quantite || 0) * Number(stock.prixUnitaireMoyen || (stock.consommable as LooseRecord | undefined)?.prixMoyenPondere || 0),
       0
     );
     const maintenanceAlerts = biens.filter((bien) => isSoon(bien.dateProchaineMaintenance, 30)).length;
     const visiteAlerts = biens.filter((bien) => isSoon(bien.dateProchaineVisiteTechnique, 30)).length;
     const lowStock = stocks.filter(
       (stock) =>
-        Number(stock.quantite || 0) <= Number(stock.seuilAlerte || stock.consommable?.seuilAlerte || 0)
+        Number(stock.quantite || 0) <= Number(stock.seuilAlerte || (stock.consommable as LooseRecord | undefined)?.seuilAlerte || 0)
     ).length;
     const criticalCount = maintenanceAlerts + visiteAlerts + lowStock;
     const recentlyAdded = [...biens]
       .filter((bien) => bien.dateAcquisition)
-      .sort((a, b) => String(b.dateAcquisition).localeCompare(String(a.dateAcquisition)))
+      .sort((a, b) => String(b.dateAcquisition || "").localeCompare(String(a.dateAcquisition || "")))
       .slice(0, 5);
-    const emptyPortfolio = biens.length === 0 && stocks.length === 0;
 
     return {
       totalValue,
@@ -94,7 +137,7 @@ const DashboardPage: React.FC = () => {
       lowStock,
       criticalCount,
       recentlyAdded,
-      emptyPortfolio,
+      emptyPortfolio: biens.length === 0 && stocks.length === 0,
     };
   }, [biens, stocks]);
 
@@ -107,111 +150,103 @@ const DashboardPage: React.FC = () => {
         key: `${date.getFullYear()}-${date.getMonth()}`,
         label: formatter.format(date),
         value: 0,
-        count: 0,
       };
     });
 
     biens.forEach((bien) => {
-      if (!bien.dateAcquisition) return;
-      const date = new Date(bien.dateAcquisition);
-      if (Number.isNaN(date.getTime())) return;
-
-      const key = `${date.getFullYear()}-${date.getMonth()}`;
-      const target = months.find((month) => month.key === key);
-      if (!target) return;
-
-      target.value += Number(bien.valeur || 0);
-      target.count += 1;
+      const acquisitionDate = bien.dateAcquisition ? new Date(String(bien.dateAcquisition)) : null;
+      if (!acquisitionDate || Number.isNaN(acquisitionDate.getTime())) return;
+      const key = `${acquisitionDate.getFullYear()}-${acquisitionDate.getMonth()}`;
+      const month = months.find((entry) => entry.key === key);
+      if (month) month.value += Number(bien.valeur || 0);
     });
 
     let cumulative = 0;
     return months.map((month) => {
       cumulative += month.value;
-      return {
-        label: month.label,
-        cumulativeValue: Math.round(cumulative),
-        acquisitions: month.count,
-      };
+      return { label: month.label, cumulativeValue: Math.round(cumulative) };
     });
   }, [biens]);
 
-  const metricsCards: DashboardMetric[] = useMemo(
+  const metricCards: DashboardMetric[] = useMemo(
     () => [
       {
         label: "Valeur patrimoine",
-        value: metrics.totalValue > 0 ? currency(metrics.totalValue) : "Portefeuille vide",
+        value: metrics.totalValue,
+        suffix: "FCFA",
         tone: metrics.totalValue > 0 ? "success" : "neutral",
-        status: metrics.totalValue > 0 ? `${biens.length} biens capitalises` : "Aucun bien enregistre",
+        status: metrics.totalValue > 0 ? `${biens.length} biens actifs` : "Aucun actif comptabilise",
         detail:
           metrics.totalValue > 0
-            ? "Lecture executive de la valeur brute consolidee."
-            : "Enregistrez votre premier bien pour initialiser la trajectoire patrimoniale.",
+            ? "Lecture consolidee de la valeur brute du portefeuille national."
+            : "Le cockpit est pret a suivre vos premiers enregistrements patrimoniaux.",
+        emptyLabel: "Portefeuille vide",
       },
       {
-        label: "Stocks sous controle",
-        value: stocks.length > 0 ? `${stocks.length} lignes actives` : "Aucun stock suivi",
+        label: "Valeur stock",
+        value: metrics.totalStockValue,
+        suffix: "FCFA",
         tone: metrics.lowStock > 0 ? "warning" : "neutral",
-        status:
-          metrics.lowStock > 0 ? `${metrics.lowStock} alerte${metrics.lowStock > 1 ? "s" : ""}` : "Aucune tension critique",
+        status: metrics.lowStock > 0 ? `${metrics.lowStock} seuil(s) critiques` : "Aucune tension stock",
         detail:
-          metrics.lowStock > 0
-            ? "Certains seuils de reapprovisionnement sont deja atteints."
-            : "Le magasin reste stable sur les seuils parametres.",
+          metrics.totalStockValue > 0
+            ? "Estimation valorisee des consommables disponibles."
+            : "Initialisez les lignes magasin pour activer le suivi logistique.",
+        emptyLabel: "Stock non initialise",
       },
       {
-        label: "Maintenance & visites",
-        value:
-          metrics.maintenanceAlerts + metrics.visiteAlerts > 0
-            ? `${metrics.maintenanceAlerts + metrics.visiteAlerts} echeances`
-            : "Aucune echeance proche",
+        label: "Echeances proches",
+        value: metrics.maintenanceAlerts + metrics.visiteAlerts,
+        suffix: "echeance(s)",
         tone: metrics.maintenanceAlerts + metrics.visiteAlerts > 0 ? "warning" : "success",
         status:
           metrics.maintenanceAlerts > 0
-            ? `${metrics.maintenanceAlerts} maintenances a planifier`
-            : "Calendrier stable sur 30 jours",
+            ? `${metrics.maintenanceAlerts} maintenances a traiter`
+            : "Calendrier technique sous controle",
         detail:
           metrics.visiteAlerts > 0
-            ? `${metrics.visiteAlerts} visites techniques approchent.`
-            : "Aucun incident de conformite detecte a court terme.",
+            ? `${metrics.visiteAlerts} visite(s) technique(s) approchent.`
+            : "Aucun controle technique urgent detecte.",
+        emptyLabel: "Aucune alerte",
       },
       {
-        label: "Traction applicative",
-        value: users.length > 0 ? `${users.length} utilisateurs` : "Aucun utilisateur charge",
-        tone: activities.length > 0 ? "success" : "neutral",
-        status:
-          activities.length > 0
-            ? `${Math.min(activities.length, 20)} evenements recents exploites`
-            : "Pas encore d'historique d'activite",
+        label: "Adoption applicative",
+        value: users.length,
+        suffix: "utilisateur(s)",
+        tone: users.length > 0 ? "success" : "neutral",
+        status: users.length > 0 ? `${users.length} comptes actifs` : "Aucun utilisateur visible",
         detail:
-          activities.length > 0
-            ? "Le journal remonte les actions recentes du dispositif."
-            : "Le journal s'alimentera des prochaines operations metier.",
+          users.length > 0
+            ? "Le reseau d'utilisateurs alimente la trace de gestion."
+            : "Les comptes apparaitront ici des leur activation.",
+        emptyLabel: "Aucun compte",
       },
     ],
-    [activities.length, biens.length, metrics.lowStock, metrics.maintenanceAlerts, metrics.totalValue, metrics.visiteAlerts, stocks.length, users.length]
+    [biens.length, metrics.lowStock, metrics.maintenanceAlerts, metrics.totalStockValue, metrics.totalValue, metrics.visiteAlerts, users.length]
   );
 
-  const executiveAlerts = useMemo(() => {
-    const alerts = [];
+  const executiveAlerts = useMemo<Array<{ tone: AlertTone; title: string; detail: string }>>(() => {
+    const alerts: Array<{ tone: AlertTone; title: string; detail: string }> = [];
+
     if (metrics.maintenanceAlerts > 0) {
       alerts.push({
         tone: "warning",
         title: "Maintenance a engager",
-        detail: `${metrics.maintenanceAlerts} bien${metrics.maintenanceAlerts > 1 ? "s" : ""} demandent une action sous 30 jours.`,
+        detail: `${metrics.maintenanceAlerts} bien(s) demandent une intervention sous 30 jours.`,
       });
     }
     if (metrics.visiteAlerts > 0) {
       alerts.push({
         tone: "danger",
         title: "Visites techniques proches",
-        detail: `${metrics.visiteAlerts} controle${metrics.visiteAlerts > 1 ? "s" : ""} technique${metrics.visiteAlerts > 1 ? "s" : ""} approchent.`,
+        detail: `${metrics.visiteAlerts} controle(s) techniques arrivent a echeance.`,
       });
     }
     if (metrics.lowStock > 0) {
       alerts.push({
         tone: "warning",
-        title: "Stocks a reapprovisionner",
-        detail: `${metrics.lowStock} ligne${metrics.lowStock > 1 ? "s" : ""} sont au seuil d'alerte.`,
+        title: "Reapprovisionnement recommande",
+        detail: `${metrics.lowStock} ligne(s) de stock ont atteint leur seuil d'alerte.`,
       });
     }
     if (alerts.length === 0) {
@@ -219,10 +254,11 @@ const DashboardPage: React.FC = () => {
         tone: "success",
         title: metrics.emptyPortfolio ? "Cockpit pret a etre initialise" : "Aucune alerte critique aujourd'hui",
         detail: metrics.emptyPortfolio
-          ? "Commencez par enregistrer votre premier bien ou initialiser votre stock pour alimenter les indicateurs."
-          : "Les principaux signaux de risque sont sous controle sur la periode.",
+          ? "Commencez par enregistrer vos premiers biens ou vos premiers stocks."
+          : "Les principaux signaux de risque restent stables sur la periode.",
       });
     }
+
     return alerts;
   }, [metrics.emptyPortfolio, metrics.lowStock, metrics.maintenanceAlerts, metrics.visiteAlerts]);
 
@@ -231,33 +267,42 @@ const DashboardPage: React.FC = () => {
       {
         title: "Livre journal",
         subtitle: "Chronologie des ecritures et mouvements patrimoniaux.",
-        action: () => exportLivreJournalPremiumExcel(biens, "livre_journal_premium.xlsx", currentUser),
+        action: () =>
+          exportLivreJournalPremiumExcel(
+            biens as unknown as Record<string, Primitive>[],
+            "livre_journal_premium.xlsx",
+            currentUser || undefined
+          ),
       },
       {
         title: "Grand livre",
-        subtitle: "Lecture par compte pour audit et verification comptable.",
-        action: () => exportGrandLivrePremiumExcel(biens, "grand_livre_premium.xlsx", currentUser),
+        subtitle: "Lecture comptable par compte pour l'audit et le controle.",
+        action: () =>
+          exportGrandLivrePremiumExcel(
+            biens as unknown as Record<string, Primitive>[],
+            "grand_livre_premium.xlsx",
+            currentUser || undefined
+          ),
       },
       {
         title: "Rapport PDF",
-        subtitle: "Synthese executive pour diffusion et arbitrage.",
+        subtitle: "Synthese executive pour arbitrage et diffusion institutionnelle.",
         action: () =>
           exportPdf(
             biens.map((bien) => ({
-              IUP: bien.iup,
-              Code: bien.codeSousCategorie || bien.codeBien,
-              Designation: bien.designation,
-              Categorie: bien.categoriePrincipale || bien.categorie,
-              Valeur: Number(bien.valeur || 0).toLocaleString("fr-FR"),
-              Service: bien.service || "",
-              Maintenance: bien.dateProchaineMaintenance || "",
+              IUP: String(bien.iup || ""),
+              Code: String(bien.codeSousCategorie || bien.codeBien || ""),
+              Designation: String(bien.designation || ""),
+              Categorie: String(bien.categoriePrincipale || bien.categorie || ""),
+              Valeur: formatCurrency(Number(bien.valeur || 0)),
+              Service: String(bien.service || bien.localisation || ""),
             })),
             "Rapport executif patrimoine",
             "rapport_executif.pdf",
-            currentUser,
+            currentUser || undefined,
             [
-              { label: "Valeur patrimoine", value: currency(metrics.totalValue) },
-              { label: "Valeur stock", value: currency(metrics.totalStockValue) },
+              { label: "Valeur patrimoine", value: formatCurrency(metrics.totalValue) },
+              { label: "Valeur stock", value: formatCurrency(metrics.totalStockValue) },
               { label: "Alertes", value: String(metrics.criticalCount) },
             ]
           ),
@@ -266,18 +311,12 @@ const DashboardPage: React.FC = () => {
     [biens, currentUser, metrics.criticalCount, metrics.totalStockValue, metrics.totalValue]
   );
 
-  const visibleActivities = useMemo(
-    () =>
-      activities
-        .filter((activity) => !currentUser?.username || activity.username === currentUser.username || currentUser.role === "ADMIN")
-        .slice(0, 8),
-    [activities, currentUser]
-  );
+  const visibleActivities = useMemo(() => activities.slice(0, 8), [activities]);
 
   const handleDeleteActivity = async (id: number) => {
     if (!window.confirm("Supprimer cette activite du journal ?")) return;
     await deleteAuditLog(id);
-    setActivities((previous) => previous.filter((activity) => activity.id !== id));
+    setActivities((previous) => previous.filter((activity) => Number(activity.id) !== id));
   };
 
   return (
@@ -287,7 +326,7 @@ const DashboardPage: React.FC = () => {
           <span className="badge-pill-glow">Pilotage patrimoine & comptabilite matiere</span>
           <h1>Tableau de bord executif</h1>
           <p className="header-subtitle">
-            Priorisation des risques, trajectoire de valeur et trace des operations recentes.
+            Priorisation des risques, trajectoire de valeur et lecture immediate des decisions a prendre.
           </p>
         </div>
         <div className="dashboard-header-aside">
@@ -299,18 +338,20 @@ const DashboardPage: React.FC = () => {
               year: "numeric",
             })}
           </span>
-          <strong>{currentUser?.nom || "Session active"}</strong>
+          <strong>{currentUser?.nom || currentUser?.username || "Session active"}</strong>
         </div>
       </header>
 
       {loading ? (
-        <div className="empty-state-modern">Chargement du cockpit patrimoine...</div>
+        <div className="empty-state-modern skeleton-block" aria-live="polite">
+          Chargement du cockpit patrimoine...
+        </div>
       ) : (
         <>
-          <section className="executive-alert-banner">
+          <section className="executive-alert-banner card">
             <div>
-              <span className="executive-kicker">Point de vigilance</span>
-              <h2>Vue immediate sur ce qui merite une decision.</h2>
+              <span className="executive-kicker">Vue immediate</span>
+              <h2>Ce qui merite une decision maintenant.</h2>
             </div>
             <div className="executive-alert-list">
               {executiveAlerts.map((alert) => (
@@ -323,30 +364,32 @@ const DashboardPage: React.FC = () => {
           </section>
 
           <section className="executive-kpi-grid">
-            {metricsCards.map((metric) => (
-              <article key={metric.label} className={`executive-kpi-card ${metric.tone}`}>
+            {metricCards.map((metric, index) => (
+              <article
+                key={metric.label}
+                className={`executive-kpi-card ${metric.tone}`}
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
                 <div className="executive-kpi-head">
                   <span className="executive-kpi-label">{metric.label}</span>
                   <span className={`executive-kpi-badge ${metric.tone}`}>{metric.status}</span>
                 </div>
-                <strong className="executive-kpi-value">{metric.value}</strong>
+                <MetricValue metric={metric} />
                 <p>{metric.detail}</p>
               </article>
             ))}
           </section>
 
           <section className="executive-main-grid">
-            <article className="asset-card executive-chart-card">
+            <article className="asset-card executive-chart-card card">
               <div className="section-header-inline">
                 <div>
                   <span className="executive-kicker">Tendance</span>
                   <h3>Evolution de la valeur du patrimoine</h3>
-                  <p className="muted-paragraph">
-                    Cumul des acquisitions visibles sur les six derniers mois.
-                  </p>
+                  <p className="muted-paragraph">Cumul des acquisitions visibles sur les six derniers mois.</p>
                 </div>
                 <div className="executive-chart-summary">
-                  <strong>{currency(metrics.totalValue)}</strong>
+                  <strong>{formatCurrency(metrics.totalValue)}</strong>
                   <span>{biens.length} biens traces</span>
                 </div>
               </div>
@@ -355,67 +398,65 @@ const DashboardPage: React.FC = () => {
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="executiveArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3dd9b8" stopOpacity={0.65} />
-                        <stop offset="100%" stopColor="#3dd9b8" stopOpacity={0.04} />
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.55} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="rgba(148, 163, 184, 0.18)" vertical={false} />
-                    <XAxis dataKey="label" stroke="#94a3b8" tickLine={false} axisLine={false} />
+                    <XAxis dataKey="label" stroke="var(--text-secondary)" tickLine={false} axisLine={false} />
                     <YAxis
-                      stroke="#94a3b8"
+                      stroke="var(--text-secondary)"
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => `${Math.round(Number(value) / 1000000)}M`}
                     />
                     <Tooltip
-                      formatter={(value: number, name: string) =>
-                        name === "cumulativeValue"
-                          ? [currency(value), "Valeur cumulee"]
-                          : [String(value), "Acquisitions"]
-                      }
+                      formatter={(value) => [formatCurrency(Number(value || 0)), "Valeur cumulee"]}
                       contentStyle={{
-                        background: "rgba(9, 14, 28, 0.95)",
-                        border: "1px solid rgba(148, 163, 184, 0.2)",
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border-color)",
                         borderRadius: "16px",
-                        color: "#f8fafc",
+                        color: "var(--text-primary)",
                       }}
                     />
                     <Area
                       type="monotone"
                       dataKey="cumulativeValue"
-                      stroke="#3dd9b8"
+                      stroke="#6366f1"
                       strokeWidth={3}
                       fill="url(#executiveArea)"
+                      isAnimationActive
+                      animationDuration={1500}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
                 {metrics.emptyPortfolio && (
                   <div className="executive-inline-empty">
-                    <strong>Le graphe s'activera des la premiere acquisition.</strong>
+                    <strong>Le graphique s'activera des la premiere acquisition.</strong>
                     <p>Enregistrez votre premier bien pour visualiser la trajectoire patrimoniale.</p>
                   </div>
                 )}
               </div>
             </article>
 
-            <article className="asset-card executive-actions-card">
+            <article className="asset-card executive-actions-card card">
               <div className="section-header-inline">
                 <div>
                   <span className="executive-kicker">Registres</span>
                   <h3>Exports comptables et reporting</h3>
                   <p className="muted-paragraph">
-                    Les editions de controle sont disponibles ici, au bon endroit du parcours.
+                    Les editions de controle sont disponibles ici avec un rendu natif Excel et un PDF institutionnel.
                   </p>
                 </div>
               </div>
               <div className="executive-action-list">
                 {exportActions.map((action) => (
-                  <button key={action.title} className="executive-action-card" onClick={action.action}>
+                  <button key={action.title} type="button" className="executive-action-card" onClick={action.action}>
                     <div>
                       <strong>{action.title}</strong>
                       <span>{action.subtitle}</span>
                     </div>
-                    <span className="executive-action-arrow">Ouvrir</span>
+                    <span className="executive-action-arrow">Exporter</span>
                   </button>
                 ))}
               </div>
@@ -423,59 +464,59 @@ const DashboardPage: React.FC = () => {
           </section>
 
           <section className="executive-secondary-grid">
-            <article className="asset-card executive-activity-card">
-              <div className="section-header-inline">
-                <div>
-                  <span className="executive-kicker">Traçabilite</span>
-                  <h3>Journal d'activite recent</h3>
-                  <p className="muted-paragraph">
-                    Qui a fait quoi, et quand. Ce bloc remonte volontairement dans la zone de lecture principale.
-                  </p>
-                </div>
-              </div>
-
-              <div className="executive-activity-list">
-                {visibleActivities.length === 0 ? (
-                  <div className="executive-inline-empty">
-                    <strong>Aucune activite recente exploitable.</strong>
-                    <p>Le journal apparaitra ici au fil des operations metier.</p>
+            {isAdmin && (
+              <section className="asset-card executive-activity-card card activity-journal">
+                <div className="section-header-inline">
+                  <div>
+                    <span className="executive-kicker">Tracabilite</span>
+                    <h3>Journal d'activite recent</h3>
+                    <p className="muted-paragraph">
+                      Bloc reserve a l'administration pour l'audit, la supervision et le nettoyage des entrees.
+                    </p>
                   </div>
-                ) : (
-                  visibleActivities.map((activity) => (
-                    <div key={activity.id} className="executive-activity-row">
-                      <span className={`executive-activity-dot ${(activity.action || "").toLowerCase()}`}>
-                        {(activity.action || "A").slice(0, 1)}
-                      </span>
-                      <div className="executive-activity-copy">
-                        <strong>
-                          {activity.action || "ACTION"} sur {activity.entite || "element"}
-                        </strong>
-                        <span>
-                          {activity.username || "Systeme"} ·{" "}
-                          {activity.dateAction
-                            ? new Date(activity.dateAction).toLocaleString("fr-FR")
-                            : "Date inconnue"}
+                </div>
+
+                <div className="executive-activity-list">
+                  {visibleActivities.length === 0 ? (
+                    <div className="executive-inline-empty">
+                      <strong>Aucune activite recente exploitable.</strong>
+                      <p>Le journal se remplira au fil des operations metier.</p>
+                    </div>
+                  ) : (
+                    visibleActivities.map((activity) => (
+                      <div key={String(activity.id)} className="executive-activity-row">
+                        <span className={`executive-activity-dot ${String(activity.action || "").toLowerCase()}`}>
+                          {String(activity.action || "A").slice(0, 1)}
                         </span>
-                      </div>
-                      {currentUser?.role === "ADMIN" && (
-                        <button className="btn-export" onClick={() => handleDeleteActivity(activity.id)}>
+                        <div className="executive-activity-copy">
+                          <strong>
+                            {String(activity.action || "ACTION")} sur {String(activity.entite || "element")}
+                          </strong>
+                          <span>
+                            {String(activity.username || "Systeme")} - {formatDateTime(activity.dateAction)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-export"
+                          onClick={() => handleDeleteActivity(Number(activity.id))}
+                          aria-label="Supprimer cette entree du journal"
+                        >
                           Nettoyer
                         </button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </article>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            )}
 
-            <article className="asset-card executive-side-stack">
+            <article className="asset-card executive-side-stack card">
               <div className="section-header-inline">
                 <div>
                   <span className="executive-kicker">Derniers mouvements</span>
-                  <h3>Ajouts patrimoniaux les plus recents</h3>
-                  <p className="muted-paragraph">
-                    Repere immediat sur les entrees les plus recentes du registre.
-                  </p>
+                  <h3>Ajouts patrimoniaux recents</h3>
+                  <p className="muted-paragraph">Repere immediat sur les enregistrements les plus recents du registre.</p>
                 </div>
               </div>
 
@@ -487,14 +528,18 @@ const DashboardPage: React.FC = () => {
                   </div>
                 ) : (
                   metrics.recentlyAdded.map((item) => (
-                    <div key={item.id} className="dashboard-mini-row">
+                    <div key={String(item.id)} className="dashboard-mini-row">
                       <div>
-                        <strong>{item.designation}</strong>
-                        <span>{item.codeSousCategorie || item.iup || "Reference a completer"}</span>
+                        <strong>{String(item.designation || "Sans designation")}</strong>
+                        <span>{String(item.codeSousCategorie || item.iup || "Reference a completer")}</span>
                       </div>
                       <div>
-                        <strong>{currency(Number(item.valeur || 0))}</strong>
-                        <span>{dayLabel(item.dateAcquisition)}</span>
+                        <strong>{formatCurrency(Number(item.valeur || 0))}</strong>
+                        <span>
+                          {item.dateAcquisition
+                            ? new Date(String(item.dateAcquisition)).toLocaleDateString("fr-FR")
+                            : "Date inconnue"}
+                        </span>
                       </div>
                     </div>
                   ))
@@ -504,7 +549,7 @@ const DashboardPage: React.FC = () => {
               <div className="executive-status-grid">
                 <div className="executive-status-card success">
                   <span>Valeur du stock</span>
-                  <strong>{currency(metrics.totalStockValue)}</strong>
+                  <strong>{formatCurrency(metrics.totalStockValue)}</strong>
                 </div>
                 <div className="executive-status-card warning">
                   <span>Risque operationnel</span>

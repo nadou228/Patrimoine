@@ -1,12 +1,58 @@
-import { useEffect, useMemo, useState } from "react";
-import { BienCatalogueItem, createBien, deleteBien, getBienCatalogue, getBiens, updateBien } from "../api/biens";
-import ImageUpload from "../components/ImageUpload";
+import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  Bien,
+  BienCatalogueItem,
+  createBien,
+  deleteBien,
+  getBienCatalogue,
+  getBiens,
+  updateBien,
+} from "../api/biens";
+import { getMouvementsByBien, getServices } from "../api/api";
 import FileUpload from "../components/FileUpload";
-import { exportPdf, exportLivreJournalPremiumExcel, exportGrandLivrePremiumExcel } from "../utils/exporters";
+import FileViewerModal from "../components/FileViewerModal";
+import ImageUpload from "../components/ImageUpload";
 import MouvementTimeline from "../components/MouvementTimeline";
 import { usePermissions } from "../contexts/PermissionsContext";
+import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
 
-const EMPTY_BIEN: any = {
+type Primitive = string | number | boolean | null | undefined;
+type ServiceOption = Record<string, unknown>;
+type TimelineEntry = Record<string, unknown>;
+type ViewerFileType = "image" | "pdf" | "excel" | "unknown";
+
+type BienForm = Bien & {
+  documentsUrls: string[];
+  statutOperationnel?: string;
+  statutJuridique?: string;
+  chargeUtile?: string;
+  typeBoite?: string;
+  finGarantie?: string;
+  dateMaintenance?: string;
+  dateDernierEntretien?: string;
+  permisOccuper?: boolean;
+  dureeLicence?: string;
+  seuilAlerte?: number;
+  numeroLot?: string;
+};
+
+type ViewerState = {
+  url: string;
+  filename: string;
+  type: ViewerFileType;
+} | null;
+
+type CategoryPanel = {
+  badge: string;
+  icon: React.ReactNode;
+  className: string;
+  title: string;
+  description: string;
+};
+
+const API_BASE_URL = "http://localhost:8082";
+
+const EMPTY_BIEN: BienForm = {
   id: null,
   codeBien: "",
   iup: "",
@@ -23,10 +69,10 @@ const EMPTY_BIEN: any = {
   valeur: 0,
   etat: "NEUF",
   localisation: "",
+  observation: "",
+  photoUrl: "",
   coordonneeGps: "",
   coordonneesGps: "",
-  photoUrl: "",
-  observation: "",
   numInventaire: "",
   titreFoncier: "",
   superficie: "",
@@ -37,258 +83,292 @@ const EMPTY_BIEN: any = {
   modele: "",
   numSerie: "",
   fabricant: "",
-  puissanceFiscale: "",
-  typeCarburant: "ESSENCE",
-  specificationsTechniques: "",
-  dureeAmortissement: 0,
-  tauxAmortissement: 0,
-  valeurNetteComptable: 0,
-  amortissementCumule: 0,
-  service: "",
-  statutValidation: "EN_ATTENTE",
-  statutOperationnel: "ACTIF",
-  statutJuridique: "PROPRIETE_PRIVEE",
-  chargeUtile: "",
-  typeBoite: "MANUELLE",
-  finGarantie: "",
   dateMaintenance: "",
   dateDernierEntretien: "",
   dateProchaineMaintenance: "",
   dateProchaineVisiteTechnique: "",
   quantite: 1,
-  permisOccuper: false,
-  documentsUrls: [] as string[],
+  service: "",
+  specificationsTechniques: "",
+  puissanceFiscale: "",
+  typeCarburant: "ESSENCE",
+  typeBoite: "MANUELLE",
+  chargeUtile: "",
+  statutOperationnel: "ACTIF",
+  statutJuridique: "PROPRIETE_PRIVEE",
+  finGarantie: "",
+  dureeLicence: "",
+  seuilAlerte: 0,
+  numeroLot: "",
+  dureeAmortissement: 0,
+  tauxAmortissement: 0,
+  valeurNetteComptable: 0,
+  amortissementCumule: 0,
+  documentsUrls: [],
   archived: false,
+  permisOccuper: false,
 };
 
-const API_BASE_URL = "http://localhost:8082";
+const HouseIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 10.5 12 4l9 6.5" />
+    <path d="M5 10v10h14V10" />
+    <path d="M10 20v-5h4v5" />
+  </svg>
+);
 
-const CATEGORY_DECOR: Record<string, { icon: string; accent: string; description: string }> = {
-  "IMMOBILISATIONS INCORPORELLES": {
-    icon: "IA",
-    accent: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
-    description: "Logiciels, droits, licences et actifs immatériels issus de l'annexe.",
-  },
+const CarIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 16 7 9h10l2 7" />
+    <path d="M4 16h16v3H4Z" />
+    <circle cx="7.5" cy="18.5" r="1.5" />
+    <circle cx="16.5" cy="18.5" r="1.5" />
+  </svg>
+);
+
+const ComputerIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="4" y="5" width="16" height="11" rx="2" />
+    <path d="M9 19h6" />
+    <path d="M12 16v3" />
+  </svg>
+);
+
+const CloudIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 18a4 4 0 1 1 .7-7.94A5.5 5.5 0 0 1 18 11a3.5 3.5 0 1 1 0 7H7Z" />
+  </svg>
+);
+
+const BoxIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 3 4 7l8 4 8-4-8-4Z" />
+    <path d="M4 7v10l8 4 8-4V7" />
+    <path d="M12 11v10" />
+  </svg>
+);
+
+const SparkIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4Z" />
+  </svg>
+);
+
+const CATEGORY_DECOR: Record<string, CategoryPanel> = {
   IMMOBILIER: {
-    icon: "IM",
-    accent: "linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)",
-    description: "Terrains, bâtiments, ouvrages, réseaux et infrastructures codifiés NOMACT.",
+    badge: "Immobilier",
+    icon: <HouseIcon />,
+    className: "category-panel immobilier",
+    title: "Bloc immobilier",
+    description: "Titre foncier, superficie, mode d'acquisition et situation juridique du bien.",
   },
-  "MOBILIER ET BUREAU": {
-    icon: "MB",
-    accent: "linear-gradient(135deg, #b45309 0%, #f59e0b 100%)",
-    description: "Mobilier de bureau et de logement tel que défini dans le document.",
+  roulant: {
+    badge: "Vehicule",
+    icon: <CarIcon />,
+    className: "category-panel roulant",
+    title: "Bloc materiel roulant",
+    description: "Identification administrative et caracteristiques techniques du vehicule.",
   },
-  "MATERIEL INFORMATIQUE": {
-    icon: "IT",
-    accent: "linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)",
-    description: "Ordinateurs, serveurs, périphériques, appareils photo et équipements réseau.",
+  informatique: {
+    badge: "Informatique",
+    icon: <ComputerIcon />,
+    className: "category-panel informatique",
+    title: "Bloc materiel informatique",
+    description: "Serie, garantie et descriptif technique de l'equipement.",
   },
-  "MATERIEL ROULANT ET TRANSPORT": {
-    icon: "TR",
-    accent: "linear-gradient(135deg, #be123c 0%, #f43f5e 100%)",
-    description: "Véhicules, motos, transports de service, en commun et de marchandises.",
+  immateriel: {
+    badge: "Immateriel",
+    icon: <CloudIcon />,
+    className: "category-panel immateriel",
+    title: "Bloc immobilisations incorporelles",
+    description: "Licence, duree et specifications de l'actif immateriel.",
   },
-  "COLLECTIONS ET EQUIPEMENTS SPECIAUX": {
-    icon: "SP",
-    accent: "linear-gradient(135deg, #4338ca 0%, #6366f1 100%)",
-    description: "Outillage technique, œuvres d'art, cheptels et équipements spécialisés.",
+  stock: {
+    badge: "Consommable",
+    icon: <BoxIcon />,
+    className: "category-panel stock",
+    title: "Bloc stocks & consommables",
+    description: "Quantite, lot et seuil d'alerte pour le pilotage magasin.",
   },
-  "STOCKS ET CONSOMMABLES": {
-    icon: "ST",
-    accent: "linear-gradient(135deg, #166534 0%, #22c55e 100%)",
-    description: "Fournitures et consommables gérés avec quantité et référentiel codifié.",
+  generic: {
+    badge: "Technique",
+    icon: <SparkIcon />,
+    className: "category-panel generic",
+    title: "Bloc descriptif",
+    description: "Metadonnees techniques adaptees a la categorie selectionnee.",
   },
 };
+
+const normalizeUrl = (url?: string) => {
+  if (!url) return "";
+  return url.startsWith("http") ? url : `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+};
+
+const inferFileType = (url: string): ViewerFileType => {
+  const lower = url.toLowerCase();
+  if (/\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(lower)) return "image";
+  if (/\.pdf$/i.test(lower)) return "pdf";
+  if (/\.(xlsx|xls|csv)$/i.test(lower)) return "excel";
+  return "unknown";
+};
+
+const getFilename = (url: string) => {
+  const segments = url.split("/");
+  return segments[segments.length - 1] || "document";
+};
+
+const computeAccounting = (valeur: number, dateAcquisition: string, dureeAmortissement?: number | null) => {
+  if (!valeur || !dateAcquisition || !dureeAmortissement || dureeAmortissement <= 0) {
+    return { valeurNetteComptable: valeur || 0, amortissementCumule: 0, tauxAmortissement: 0 };
+  }
+
+  const acquisition = new Date(dateAcquisition);
+  if (Number.isNaN(acquisition.getTime())) {
+    return { valeurNetteComptable: valeur || 0, amortissementCumule: 0, tauxAmortissement: 0 };
+  }
+
+  const elapsedYears = Math.max(0, (Date.now() - acquisition.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+  const boundedYears = Math.min(elapsedYears, dureeAmortissement);
+  const amortissementCumule = (valeur / dureeAmortissement) * boundedYears;
+
+  return {
+    valeurNetteComptable: Math.max(0, valeur - amortissementCumule),
+    amortissementCumule,
+    tauxAmortissement: 100 / dureeAmortissement,
+  };
+};
+
+const inferPanel = (form: BienForm): CategoryPanel => {
+  const categorie = (form.categoriePrincipale || "").toUpperCase();
+  const profil = (form.profilFormulaire || "").toLowerCase();
+
+  if (categorie.includes("IMMOBILIER")) return CATEGORY_DECOR.IMMOBILIER;
+  if (profil === "roulant" || categorie.includes("ROULANT")) return CATEGORY_DECOR.roulant;
+  if (profil === "informatique" || categorie.includes("INFORMATIQUE")) return CATEGORY_DECOR.informatique;
+  if (profil === "immateriel" || categorie.includes("INCORPOREL")) return CATEGORY_DECOR.immateriel;
+  if (profil === "stock" || categorie.includes("STOCK")) return CATEGORY_DECOR.stock;
+  return CATEGORY_DECOR.generic;
+};
+
+const SearchIcon = ({ active }: { active: boolean }) => (
+  <svg className={active ? "search-spinner active" : "search-spinner"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </svg>
+);
 
 export default function BiensPage() {
-  const [biens, setBiens] = useState<any[]>([]);
+  const [biens, setBiens] = useState<Bien[]>([]);
   const [catalogue, setCatalogue] = useState<BienCatalogueItem[]>([]);
+  const [servicesList, setServicesList] = useState<ServiceOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const [alertFilter, setAlertFilter] = useState<"ALL" | "MAINTENANCE" | "VISITE" | "STOCK">("ALL");
+  const deferredSearch = useDeferredValue(search);
   const [selectedPrincipalCategory, setSelectedPrincipalCategory] = useState<string | null>(null);
   const [view, setView] = useState<"GALLERY" | "FORM">("GALLERY");
   const [editingBienId, setEditingBienId] = useState<number | null>(null);
-  const [servicesList, setServicesList] = useState<any[]>([]);
-  const [timelineData, setTimelineData] = useState<any[]>([]);
+  const [timelineData, setTimelineData] = useState<TimelineEntry[]>([]);
   const [showTimeline, setShowTimeline] = useState(false);
-  const [detailBien, setDetailBien] = useState<any | null>(null);
-  const [form, setForm] = useState<any>({ ...EMPTY_BIEN });
+  const [detailBien, setDetailBien] = useState<Bien | null>(null);
+  const [viewer, setViewer] = useState<ViewerState>(null);
+  const [form, setForm] = useState<BienForm>({ ...EMPTY_BIEN });
   const { permissions } = usePermissions();
   const isAdmin = permissions?.role === "ADMIN";
 
+  const reload = async () => {
+    const [biensData, catalogueData, servicesData] = await Promise.all([
+      getBiens().catch(() => []),
+      getBienCatalogue().catch(() => []),
+      getServices().catch(() => []),
+    ]);
+
+    setBiens((biensData as Bien[]) ?? []);
+    setCatalogue((catalogueData as BienCatalogueItem[]) ?? []);
+    setServicesList((servicesData as ServiceOption[]) ?? []);
+  };
+
   useEffect(() => {
-    loadBiens();
-    getBienCatalogue().then(setCatalogue).catch(() => setCatalogue([]));
-    import("../api/api").then(api => {
-      api.getServices().then(setServicesList).catch(() => setServicesList([]));
-    });
+    const load = async () => {
+      try {
+        setLoading(true);
+        await reload();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void load();
   }, []);
 
-  const loadBiens = async () => {
-    try {
-      setLoading(true);
-      const data = await getBiens();
-      setBiens(data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateVNC = (valeur: number, dateAcq: string, duree: number) => {
-    if (!valeur || !dateAcq || !duree || duree <= 0) return { vnc: valeur, amort: 0 };
-    const acqDate = new Date(dateAcq);
-    const now = new Date();
-    const diffTime = now.getTime() - acqDate.getTime();
-    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
-    const anneesEcoulees = Math.max(0, Math.min(diffYears, duree));
-    const amortAnnuel = valeur / duree;
-    const amortCumule = amortAnnuel * anneesEcoulees;
-    return { vnc: Math.max(0, valeur - amortCumule), amort: amortCumule };
-  };
-
-  useEffect(() => {
-    const { vnc, amort } = calculateVNC(Number(form.valeur), form.dateAcquisition, Number(form.dureeAmortissement));
-    setForm((prev: any) => ({
-      ...prev,
-      valeurNetteComptable: vnc,
-      amortissementCumule: amort,
-      tauxAmortissement: form.dureeAmortissement ? 100 / Number(form.dureeAmortissement) : 0,
-    }));
-  }, [form.valeur, form.dateAcquisition, form.dureeAmortissement]);
-
-  const captureGPS = () => {
-    if (!navigator.geolocation) {
-      alert("La géolocalisation n'est pas supportée par votre navigateur.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const coords = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
-        setForm((prev: any) => ({ ...prev, coordonneesGps: coords, coordonneeGps: coords }));
-        alert(`Position capturée : ${coords}`);
-      },
-      err => alert(`Erreur GPS : ${err.message}`),
-    );
-  };
-
-  const filtered = biens.filter(b =>
-    [
-      b.designation,
-      b.iup,
-      b.service,
-      b.sousCategorie,
-      b.codeSousCategorie,
-      b.familleCatalogue,
-      b.categoriePrincipale,
-      b.localisation,
-      b.immatriculation,
-      b.titreFoncier,
-    ].some(value => value?.toLowerCase().includes(search.toLowerCase())),
+  const accounting = useMemo(
+    () => computeAccounting(Number(form.valeur || 0), form.dateAcquisition, form.dureeAmortissement),
+    [form.dateAcquisition, form.dureeAmortissement, form.valeur]
   );
 
-  const today = new Date();
-  const addDays = (date: Date, days: number) => {
-    const copy = new Date(date);
-    copy.setDate(copy.getDate() + days);
-    return copy;
-  };
-
-  const isDueSoon = (dateValue?: string, days = 30) => {
-    if (!dateValue) return false;
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return false;
-    return date >= today && date <= addDays(today, days);
-  };
-
-  const isOverdue = (dateValue?: string) => {
-    if (!dateValue) return false;
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return false;
-    return date < today;
-  };
-
-  const enrichedBiens = filtered.map(bien => {
-    const maintenanceCritical = isOverdue(bien.dateProchaineMaintenance) || isDueSoon(bien.dateProchaineMaintenance, 30);
-    const visiteCritical = isOverdue(bien.dateProchaineVisiteTechnique) || isDueSoon(bien.dateProchaineVisiteTechnique, 30);
-    const stockCritical = (bien.categorie === "STOCKS" || bien.profilFormulaire === "stock") && Number(bien.quantite || 0) <= 5;
-    return {
-      ...bien,
-      maintenanceCritical,
-      visiteCritical,
-      stockCritical,
-      hasAlert: maintenanceCritical || visiteCritical || stockCritical,
-    };
-  });
-
-  const displayedBiens = enrichedBiens.filter(bien => {
-    if (alertFilter === "MAINTENANCE") return bien.maintenanceCritical;
-    if (alertFilter === "VISITE") return bien.visiteCritical;
-    if (alertFilter === "STOCK") return bien.stockCritical;
-    return true;
-  });
-
-  const alertStats = {
-    maintenance: enrichedBiens.filter(b => b.maintenanceCritical).length,
-    visite: enrichedBiens.filter(b => b.visiteCritical).length,
-    stock: enrichedBiens.filter(b => b.stockCritical).length,
-    total: enrichedBiens.filter(b => b.hasAlert).length,
-  };
+  const panel = inferPanel(form);
 
   const principalCategories = useMemo(() => {
-    const grouped = new Map<string, { count: number; sampleFamilies: string[] }>();
-    catalogue.filter(item => item.niveau === "ARTICLE").forEach(item => {
-      const current = grouped.get(item.categoriePrincipale) ?? { count: 0, sampleFamilies: [] };
-      current.count += 1;
-      if (!current.sampleFamilies.includes(item.libelleFamille) && current.sampleFamilies.length < 3) {
-        current.sampleFamilies.push(item.libelleFamille);
-      }
-      grouped.set(item.categoriePrincipale, current);
-    });
-
-    return Array.from(grouped.entries()).map(([name, data]) => ({
-      name,
-      ...data,
-      decor: CATEGORY_DECOR[name] ?? {
-        icon: "BI",
-        accent: "linear-gradient(135deg, #475569 0%, #64748b 100%)",
-        description: "Référentiel de biens issu du document NOMACT.",
-      },
-    }));
+    const grouped = new Map<string, number>();
+    catalogue
+      .filter((item) => item.niveau === "ARTICLE")
+      .forEach((item) => grouped.set(item.categoriePrincipale, (grouped.get(item.categoriePrincipale) || 0) + 1));
+    return Array.from(grouped.entries()).map(([name, count]) => ({ name, count }));
   }, [catalogue]);
 
   const availableFamilies = useMemo(() => {
     if (!selectedPrincipalCategory) return [];
     const seen = new Map<string, BienCatalogueItem>();
+
     catalogue
-      .filter(item => item.categoriePrincipale === selectedPrincipalCategory && item.niveau === "ARTICLE")
-      .forEach(item => {
-        if (!seen.has(item.codeFamille)) {
-          seen.set(item.codeFamille, item);
-        }
+      .filter((item) => item.categoriePrincipale === selectedPrincipalCategory && item.niveau === "ARTICLE")
+      .forEach((item) => {
+        if (!seen.has(item.codeFamille)) seen.set(item.codeFamille, item);
       });
+
     return Array.from(seen.values()).sort((a, b) => a.codeFamille.localeCompare(b.codeFamille));
   }, [catalogue, selectedPrincipalCategory]);
 
   const availableArticles = useMemo(() => {
     if (!form.codeFamille) return [];
     return catalogue
-      .filter(item => item.niveau === "ARTICLE" && item.codeFamille === form.codeFamille)
+      .filter((item) => item.niveau === "ARTICLE" && item.codeFamille === form.codeFamille)
       .sort((a, b) => a.code.localeCompare(b.code));
   }, [catalogue, form.codeFamille]);
 
+  const filteredBiens = useMemo(() => {
+    const term = deferredSearch.trim().toLowerCase();
+    if (!term) return biens;
+
+    return biens.filter((bien) =>
+      [
+        bien.designation,
+        bien.iup,
+        bien.service,
+        bien.sousCategorie,
+        bien.codeSousCategorie,
+        bien.localisation,
+        bien.immatriculation,
+        bien.titreFoncier,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    );
+  }, [biens, deferredSearch]);
+
   const currentArticle = useMemo(
-    () => availableArticles.find(item => item.code === form.codeSousCategorie) ?? null,
-    [availableArticles, form.codeSousCategorie],
+    () => availableArticles.find((item) => item.code === form.codeSousCategorie) ?? null,
+    [availableArticles, form.codeSousCategorie]
   );
+
+  const handleFieldChange = <K extends keyof BienForm>(key: K, value: BienForm[K]) => {
+    setForm((previous) => ({ ...previous, [key]: value }));
+  };
 
   const selectPrincipalCategory = (categoryName: string) => {
     setSelectedPrincipalCategory(categoryName);
-    setForm((prev: any) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       categoriePrincipale: categoryName,
       codeFamille: "",
       familleCatalogue: "",
@@ -296,187 +376,238 @@ export default function BiensPage() {
       sousCategorie: "",
       sectionCatalogue: "",
       profilFormulaire: "",
+      designation: "",
     }));
   };
 
   const selectFamily = (familyCode: string) => {
-    const familyRef = availableFamilies.find(item => item.codeFamille === familyCode);
-    setForm((prev: any) => ({
-      ...prev,
-      categoriePrincipale: selectedPrincipalCategory,
+    const familyRef = availableFamilies.find((item) => item.codeFamille === familyCode);
+    setForm((previous) => ({
+      ...previous,
       codeFamille: familyCode,
-      familleCatalogue: familyRef?.libelleFamille ?? "",
-      codeSousCategorie: "",
-      sousCategorie: "",
-      sectionCatalogue: familyRef?.section ?? "",
-      profilFormulaire: familyRef?.profilFormulaire ?? "",
-      categorie: familyRef?.categorieMetier ?? "MOBILIER",
+      familleCatalogue: familyRef?.libelleFamille || "",
+      sectionCatalogue: familyRef?.section || "",
+      profilFormulaire: familyRef?.profilFormulaire || "",
+      categorie: familyRef?.categorieMetier || "MOBILIER",
     }));
   };
 
-  const selectArticle = (code: string) => {
-    const article = availableArticles.find(item => item.code === code);
-    if (!article) return;
-    setForm((prev: any) => ({
-      ...prev,
-      categorie: article.categorieMetier,
-      categoriePrincipale: article.categoriePrincipale,
-      codeFamille: article.codeFamille,
-      familleCatalogue: article.libelleFamille,
-      codeSousCategorie: article.code,
-      sousCategorie: article.libelle,
-      sectionCatalogue: article.section,
-      profilFormulaire: article.profilFormulaire,
-      designation: editingBienId ? prev.designation : article.libelle,
-    }));
+  const selectArticle = (codeSousCategorie: string) => {
+    const article = catalogue.find(
+      (item) => (item as BienCatalogueItem & { codeSousCategorie?: string }).codeSousCategorie === codeSousCategorie || item.code === codeSousCategorie
+    );
+
+    if (article) {
+      setForm((previous) => ({
+        ...previous,
+        codeSousCategorie,
+        designation: article.libelle || "",
+        sousCategorie: article.libelle || "",
+        categorie: article.categorieMetier,
+        categoriePrincipale: article.categoriePrincipale,
+        codeFamille: article.codeFamille,
+        familleCatalogue: article.libelleFamille,
+        sectionCatalogue: article.section,
+        profilFormulaire: article.profilFormulaire,
+      }));
+      setSelectedPrincipalCategory(article.categoriePrincipale);
+    }
   };
 
-  const openNewForm = () => {
+  const resetForm = () => {
     setForm({ ...EMPTY_BIEN });
     setSelectedPrincipalCategory(null);
     setEditingBienId(null);
+  };
+
+  const openNewForm = () => {
+    resetForm();
     setView("FORM");
   };
 
-  const openEditForm = (bien: any) => {
-    setForm({ ...EMPTY_BIEN, ...bien });
+  const openEditForm = (bien: Bien) => {
+    setForm({
+      ...EMPTY_BIEN,
+      ...bien,
+      documentsUrls: Array.isArray((bien as BienForm).documentsUrls) ? (bien as BienForm).documentsUrls : [],
+      dateAcquisition: bien.dateAcquisition || EMPTY_BIEN.dateAcquisition,
+    });
     setSelectedPrincipalCategory(bien.categoriePrincipale || null);
-    setEditingBienId(bien.id);
+    setEditingBienId(typeof bien.id === "number" ? bien.id : null);
     setView("FORM");
+  };
+
+  const openViewer = (url: string) => {
+    const normalized = normalizeUrl(url);
+    setViewer({ url: normalized, filename: getFilename(normalized), type: inferFileType(normalized) });
+  };
+
+  const captureGPS = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((position) => {
+      const coords = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+      setForm((previous) => ({ ...previous, coordonneesGps: coords, coordonneeGps: coords }));
+    });
   };
 
   const showHistory = async (bienId: number) => {
     try {
-      const history = await import("../api/api").then(api => api.getMouvementsByBien(bienId));
-      setTimelineData(history);
+      const history = await getMouvementsByBien(bienId);
+      setTimelineData((history as TimelineEntry[]) ?? []);
       setShowTimeline(true);
     } catch {
-      alert("Historique indisponible");
+      setTimelineData([]);
+      setShowTimeline(true);
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const buildPayload = (): BienForm => ({
+    ...form,
+    valeurNetteComptable: accounting.valeurNetteComptable,
+    amortissementCumule: accounting.amortissementCumule,
+    tauxAmortissement: accounting.tauxAmortissement,
+  });
+
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!selectedPrincipalCategory || !form.codeSousCategorie) {
-      alert("Veuillez sélectionner une catégorie principale, une famille et une sous-catégorie.");
+      alert("Veuillez choisir une categorie principale, une famille et une sous-categorie.");
       return;
     }
+
     try {
-      const payload = { ...form };
+      setSaving(true);
+      const payload = buildPayload();
       if (editingBienId) {
         await updateBien(editingBienId, payload);
-        alert("Bien mis à jour avec succès.");
       } else {
         await createBien(payload);
-        alert("Bien enregistré avec succès.");
       }
+
+      await reload();
       setView("GALLERY");
-      setSelectedPrincipalCategory(null);
-      setEditingBienId(null);
-      setForm({ ...EMPTY_BIEN });
-      loadBiens();
-    } catch (err) {
-      alert(`Erreur : ${err}`);
+      resetForm();
+    } finally {
+      setSaving(false);
     }
   };
 
-  const renderProfileFields = () => {
-    const profile = form.profilFormulaire || currentArticle?.profilFormulaire || "generic";
+  const handleDelete = async (bienId: number | null) => {
+    if (!bienId || !window.confirm("Supprimer ce bien ?")) return;
+    await deleteBien(bienId);
+    await reload();
+  };
 
-    if (profile === "immobilier") {
+  const renderInput = (
+    label: string,
+    key: keyof BienForm,
+    options?: { type?: string; span?: boolean; placeholder?: string }
+  ) => (
+    <div className="form-group-modern" style={options?.span ? { gridColumn: "span 2" } : undefined}>
+      <label>{label}</label>
+      <input
+        type={options?.type ?? "text"}
+        value={String(form[key] ?? "")}
+        placeholder={options?.placeholder}
+        onChange={(event) =>
+          handleFieldChange(
+            key,
+            (options?.type === "number" ? Number(event.target.value) : event.target.value) as BienForm[keyof BienForm]
+          )
+        }
+      />
+    </div>
+  );
+
+  const renderProfileFields = () => {
+    if (panel.className.includes("immobilier")) {
       return (
         <>
-          <div className="form-group-modern">
-            <label>Référence foncière / titre</label>
-            <input value={form.titreFoncier} onChange={e => setForm({ ...form, titreFoncier: e.target.value })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Superficie</label>
-            <input value={form.superficie} onChange={e => setForm({ ...form, superficie: e.target.value })} placeholder="Ex: 1 500 m²" />
-          </div>
-          <div className="form-group-modern">
-            <label>Mode d'acquisition</label>
-            <input value={form.modeAcquisition} onChange={e => setForm({ ...form, modeAcquisition: e.target.value })} placeholder="Achat, construction, concession..." />
-          </div>
-          <div className="form-group-modern">
-            <label>Statut juridique</label>
-            <select value={form.statutJuridique} onChange={e => setForm({ ...form, statutJuridique: e.target.value })}>
-              <option value="PROPRIETE_PRIVEE">Domaine privé</option>
-              <option value="DOMAINE_PUBLIC">Domaine public</option>
-              <option value="LOCATION">Location / bail</option>
-            </select>
-          </div>
+          {renderInput("Titre foncier", "titreFoncier")}
+          {renderInput("Superficie (m2)", "superficie")}
+          {renderInput("Mode d'acquisition", "modeAcquisition")}
+          {renderInput("Statut juridique", "statutJuridique")}
           <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
-            <label>Conformité</label>
+            <label>Permis d'occuper</label>
             <div className="checkbox-modern">
-              <input type="checkbox" checked={form.permisOccuper} onChange={e => setForm({ ...form, permisOccuper: e.target.checked })} />
-              <span>Permis d'occuper ou justificatif de conformité disponible</span>
+              <input
+                type="checkbox"
+                checked={Boolean(form.permisOccuper)}
+                onChange={(event) => handleFieldChange("permisOccuper", event.target.checked)}
+              />
+              <span>Le dossier contient un permis d'occuper ou un justificatif equivalent</span>
             </div>
           </div>
         </>
       );
     }
 
-    if (profile === "roulant") {
+    if (panel.className.includes("roulant")) {
       return (
         <>
-          <div className="form-group-modern">
-            <label>Immatriculation</label>
-            <input value={form.immatriculation} onChange={e => setForm({ ...form, immatriculation: e.target.value })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Numéro de châssis</label>
-            <input value={form.numChassis} onChange={e => setForm({ ...form, numChassis: e.target.value })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Marque</label>
-            <input value={form.marque} onChange={e => setForm({ ...form, marque: e.target.value })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Modèle</label>
-            <input value={form.modele} onChange={e => setForm({ ...form, modele: e.target.value })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Puissance fiscale</label>
-            <input value={form.puissanceFiscale} onChange={e => setForm({ ...form, puissanceFiscale: e.target.value })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Type de boîte</label>
-            <select value={form.typeBoite} onChange={e => setForm({ ...form, typeBoite: e.target.value })}>
-              <option value="MANUELLE">Manuelle</option>
-              <option value="AUTO">Automatique</option>
-            </select>
-          </div>
-          <div className="form-group-modern">
-            <label>Charge utile</label>
-            <input value={form.chargeUtile} onChange={e => setForm({ ...form, chargeUtile: e.target.value })} placeholder="Ex: 2,5 tonnes" />
-          </div>
-          <div className="form-group-modern">
-            <label>Carburant / énergie</label>
-            <select value={form.typeCarburant} onChange={e => setForm({ ...form, typeCarburant: e.target.value })}>
-              <option value="ESSENCE">Essence</option>
-              <option value="DIESEL">Diesel</option>
-              <option value="HYBRIDE">Hybride / électrique</option>
-            </select>
+          {renderInput("Immatriculation", "immatriculation")}
+          {renderInput("N° Chassis", "numChassis")}
+          {renderInput("Marque", "marque")}
+          {renderInput("Modele", "modele")}
+          {renderInput("Puissance fiscale", "puissanceFiscale")}
+          {renderInput("Type boite", "typeBoite")}
+          {renderInput("Type carburant", "typeCarburant")}
+          {renderInput("Charge utile", "chargeUtile")}
+        </>
+      );
+    }
+
+    if (panel.className.includes("informatique")) {
+      return (
+        <>
+          {renderInput("N° Serie", "numSerie")}
+          {renderInput("Fabricant", "fabricant")}
+          {renderInput("Marque", "marque")}
+          {renderInput("Modele", "modele")}
+          {renderInput("Date fin garantie", "finGarantie", { type: "date" })}
+          <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
+            <label>Specifications techniques</label>
+            <textarea
+              rows={3}
+              value={form.specificationsTechniques || ""}
+              onChange={(event) => handleFieldChange("specificationsTechniques", event.target.value)}
+            />
           </div>
         </>
       );
     }
 
-    if (profile === "stock") {
+    if (panel.className.includes("immateriel")) {
       return (
         <>
-          <div className="form-group-modern">
-            <label>Quantité</label>
-            <input type="number" min={1} value={form.quantite} onChange={e => setForm({ ...form, quantite: Number(e.target.value) })} />
-          </div>
-          <div className="form-group-modern">
-            <label>Référence interne / lot</label>
-            <input value={form.numSerie} onChange={e => setForm({ ...form, numSerie: e.target.value })} placeholder="Lot, batch ou référence" />
-          </div>
+          {renderInput("N° Serie / Licence", "numSerie")}
+          {renderInput("Fabricant", "fabricant")}
+          {renderInput("Duree licence", "dureeLicence")}
           <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
-            <label>Précisions techniques</label>
-            <textarea value={form.specificationsTechniques} onChange={e => setForm({ ...form, specificationsTechniques: e.target.value })} rows={3} placeholder="Conditionnement, unité, seuil d'alerte ou remarque utile..." />
+            <label>Specifications</label>
+            <textarea
+              rows={3}
+              value={form.specificationsTechniques || ""}
+              onChange={(event) => handleFieldChange("specificationsTechniques", event.target.value)}
+            />
+          </div>
+        </>
+      );
+    }
+
+    if (panel.className.includes("stock")) {
+      return (
+        <>
+          {renderInput("Quantite", "quantite", { type: "number" })}
+          {renderInput("N° Lot / Batch", "numeroLot")}
+          {renderInput("Seuil d'alerte", "seuilAlerte", { type: "number" })}
+          <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
+            <label>Specifications</label>
+            <textarea
+              rows={3}
+              value={form.specificationsTechniques || ""}
+              onChange={(event) => handleFieldChange("specificationsTechniques", event.target.value)}
+            />
           </div>
         </>
       );
@@ -484,143 +615,168 @@ export default function BiensPage() {
 
     return (
       <>
-        <div className="form-group-modern">
-          <label>Numéro de série</label>
-          <input value={form.numSerie} onChange={e => setForm({ ...form, numSerie: e.target.value })} />
-        </div>
-        <div className="form-group-modern">
-          <label>Fabricant / éditeur</label>
-          <input value={form.fabricant} onChange={e => setForm({ ...form, fabricant: e.target.value })} />
-        </div>
-        <div className="form-group-modern">
-          <label>Marque</label>
-          <input value={form.marque} onChange={e => setForm({ ...form, marque: e.target.value })} />
-        </div>
-        <div className="form-group-modern">
-          <label>Modèle</label>
-          <input value={form.modele} onChange={e => setForm({ ...form, modele: e.target.value })} />
-        </div>
-        <div className="form-group-modern">
-          <label>Fin de garantie</label>
-          <input type="date" value={form.finGarantie} onChange={e => setForm({ ...form, finGarantie: e.target.value })} />
-        </div>
-        <div className="form-group-modern">
-          <label>Quantité</label>
-          <input type="number" min={1} value={form.quantite} onChange={e => setForm({ ...form, quantite: Number(e.target.value) })} />
-        </div>
+        {renderInput("N° Serie", "numSerie")}
+        {renderInput("Fabricant", "fabricant")}
+        {renderInput("Marque", "marque")}
+        {renderInput("Modele", "modele")}
         <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
-          <label>Spécifications techniques</label>
-          <textarea value={form.specificationsTechniques} onChange={e => setForm({ ...form, specificationsTechniques: e.target.value })} rows={3} placeholder="Configuration, capacité, version, accessoires ou détails métier..." />
+          <label>Specifications techniques</label>
+          <textarea
+            rows={3}
+            value={form.specificationsTechniques || ""}
+            onChange={(event) => handleFieldChange("specificationsTechniques", event.target.value)}
+          />
         </div>
       </>
     );
   };
 
+  const renderDocuments = (documents: string[]) => {
+    if (documents.length === 0) {
+      return <span className="field-hint">Aucun document attache pour ce bien.</span>;
+    }
+
+    return (
+      <div className="document-grid">
+        {documents.map((documentUrl) => {
+          const normalized = normalizeUrl(documentUrl);
+          const type = inferFileType(normalized);
+          return (
+            <button
+              key={documentUrl}
+              type="button"
+              className={`document-chip ${type}`}
+              onClick={() => openViewer(normalized)}
+              aria-label={`Ouvrir ${getFilename(normalized)}`}
+            >
+              <span>{type === "image" ? "Image" : type === "pdf" ? "PDF" : type === "excel" ? "Excel" : "Fichier"}</span>
+              <strong>{getFilename(normalized)}</strong>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const resultLabel = deferredSearch.trim()
+    ? `${filteredBiens.length} bien${filteredBiens.length > 1 ? "s" : ""} correspondent a votre recherche`
+    : `${filteredBiens.length} bien${filteredBiens.length > 1 ? "s" : ""} disponibles dans le registre`;
+
   return (
-    <div className="biens-module fade-in">
+    <div className="dashboard-container biens-page-shell fade-in">
       <header className="page-header-premium">
         <div className="header-meta">
-          <span className="badge-pill-glow">Référentiel NOMACT intégré</span>
+          <span className="badge-pill-glow">Registre patrimonial</span>
           <h1>Gestion des biens</h1>
-          <p className="header-subtitle">Sélection fidèle à l'annexe, formulaires dynamiques, maintenance et traçabilité consolidées.</p>
+          <p className="header-subtitle">
+            Catalogue officiel, fiches enrichies, previsualisation des pieces jointes et recherche en temps reel.
+          </p>
         </div>
-        <div style={{ display: "flex", gap: "15px" }}>
-          <div className="search-box-modern">
-            <input
-              placeholder="Rechercher un bien, un code ou une sous-catégorie..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ width: "340px", padding: "10px 20px", borderRadius: "30px", background: "var(--card-bg)", border: "1px solid var(--glass-border)", color: "var(--text-main)" }}
-            />
-          </div>
-          <button className="primary" onClick={openNewForm}>+ Nouveau recensement</button>
+        <div className="export-bar">
+          <button
+            type="button"
+            className="btn-export"
+            onClick={() => exportLivreJournalPremiumExcel(filteredBiens as unknown as Record<string, Primitive>[], "Livre_Journal_Premium.xlsx")}
+          >
+            Livre journal
+          </button>
+          <button
+            type="button"
+            className="btn-export"
+            onClick={() => exportGrandLivrePremiumExcel(filteredBiens as unknown as Record<string, Primitive>[], "Grand_Livre_Premium.xlsx")}
+          >
+            Grand livre
+          </button>
+          <button
+            type="button"
+            className="btn-export"
+            onClick={() => exportPdf(filteredBiens as unknown as Record<string, Primitive>[], "Registre patrimonial", "registre_patrimonial.pdf")}
+          >
+            Rapport PDF
+          </button>
+          <button className="primary" type="button" onClick={openNewForm}>
+            Nouveau bien
+          </button>
         </div>
       </header>
 
       {view === "GALLERY" ? (
-        <section className="registry-gallery">
-          <div className="biens-insight-grid">
-            <div className="insight-card primary-tone">
-              <span className="insight-label">Alertes globales</span>
-              <strong>{alertStats.total}</strong>
-              <p>Biens nécessitant une attention immédiate ou prochaine.</p>
+        <section className="asset-card card">
+          <div className="biens-search-panel">
+            <div className="biens-search-input">
+              <SearchIcon active={search !== deferredSearch} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Rechercher par designation, IUP, service, code ou localisation"
+                aria-label="Rechercher un bien"
+              />
             </div>
-            <div className="insight-card">
-              <span className="insight-label">Maintenance</span>
-              <strong>{alertStats.maintenance}</strong>
-              <p>Biens avec prochaine maintenance échue ou prévue sous 30 jours.</p>
-            </div>
-            <div className="insight-card">
-              <span className="insight-label">Visite technique</span>
-              <strong>{alertStats.visite}</strong>
-              <p>Suivi des véhicules et équipements soumis à visite planifiée.</p>
-            </div>
-            <div className="insight-card">
-              <span className="insight-label">Quantités faibles</span>
-              <strong>{alertStats.stock}</strong>
-              <p>Consommables ou stocks avec niveau faible à surveiller.</p>
-            </div>
-          </div>
-
-          <div className="smart-filter-bar">
-            <button className={alertFilter === "ALL" ? "smart-filter active" : "smart-filter"} onClick={() => setAlertFilter("ALL")}>Tous</button>
-            <button className={alertFilter === "MAINTENANCE" ? "smart-filter active" : "smart-filter"} onClick={() => setAlertFilter("MAINTENANCE")}>Maintenance</button>
-            <button className={alertFilter === "VISITE" ? "smart-filter active" : "smart-filter"} onClick={() => setAlertFilter("VISITE")}>Visite technique</button>
-            <button className={alertFilter === "STOCK" ? "smart-filter active" : "smart-filter"} onClick={() => setAlertFilter("STOCK")}>Quantité faible</button>
-          </div>
-
-          <div className="export-bar" style={{ justifyContent: "flex-end", marginBottom: "30px" }}>
-            <button className="btn-export" onClick={() => exportLivreJournalPremiumExcel(displayedBiens, "Livre_Journal_Premium.xlsx")}>Livre journal</button>
-            <button className="btn-export" onClick={() => exportGrandLivrePremiumExcel(displayedBiens, "Grand_Livre_Premium.xlsx")}>Grand livre</button>
-            <button className="btn-export" onClick={() => exportPdf(displayedBiens, "REGISTRE", "registre.pdf")}>PDF</button>
+            <span className="results-caption">{resultLabel}</span>
           </div>
 
           {loading ? (
-            <div className="empty-state-modern">Chargement des biens...</div>
+            <div className="empty-state-modern skeleton-block">Chargement des biens...</div>
+          ) : filteredBiens.length === 0 ? (
+            <div className="empty-search-state">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle cx="52" cy="52" r="28" />
+                <path d="m73 73 22 22" />
+                <path d="M40 52h24" />
+              </svg>
+              <strong>Aucun bien trouve pour "{deferredSearch}".</strong>
+              <p>Essayez une autre reference, un autre service ou revenez au catalogue complet.</p>
+            </div>
           ) : (
             <div className="asset-grid">
-              {displayedBiens.map(bien => (
-                <div key={bien.id} className="asset-card">
-                  <div className="card-badge-row" style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
-                    <span className="badge-premium">{bien.iup || "SANS IUP"}</span>
-                    <span className={`status-pill status-${(bien.etat || "neuf").toLowerCase()}`}>{bien.etat}</span>
+              {filteredBiens.map((bien) => (
+                <article key={bien.id || bien.iup} className="asset-card card">
+                  <div className="card-badge-row">
+                    <span className="badge-premium">{bien.iup || "Sans IUP"}</span>
+                    <span className={`status-pill status-${String((bien.etat || "neuf")).toLowerCase()}`}>{bien.etat}</span>
                   </div>
-                  {bien.hasAlert && (
-                    <div className="asset-alert-row">
-                      {bien.maintenanceCritical && <span className="asset-alert-chip warning">Maintenance</span>}
-                      {bien.visiteCritical && <span className="asset-alert-chip danger">Visite technique</span>}
-                      {bien.stockCritical && <span className="asset-alert-chip success">Quantité faible</span>}
-                    </div>
+                  <h3>{bien.designation}</h3>
+
+                  {bien.photoUrl ? (
+                    <button type="button" className="bien-photo-button" onClick={() => openViewer(String(bien.photoUrl))}>
+                      <img
+                        src={normalizeUrl(bien.photoUrl)}
+                        alt={`Photo du bien ${bien.designation}`}
+                        className="bien-photo-preview"
+                      />
+                    </button>
+                  ) : (
+                    <div className="bien-photo-placeholder">Aucune photo</div>
                   )}
-                  <h3 style={{ fontSize: "20px", marginBottom: "10px" }}>{bien.designation}</h3>
-                  {bien.photoUrl && (
-                    <img src={`${API_BASE_URL}${bien.photoUrl}`} alt="" style={{ width: "100%", height: "180px", objectFit: "cover", borderRadius: "15px", marginBottom: "15px" }} />
-                  )}
-                  <div className="card-stats-mini" style={{ fontSize: "12px", color: "var(--text-dim)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                    <div>Service: {bien.service || "Non affecté"}</div>
-                    <div>Lieu: {bien.localisation || "Inconnu"}</div>
-                    {bien.codeSousCategorie && <div>Code: {bien.codeSousCategorie}</div>}
-                    {bien.sousCategorie && <div>Annexe: {bien.sousCategorie}</div>}
-                    {bien.immatriculation && <div>Immatriculation: {bien.immatriculation}</div>}
-                    {bien.titreFoncier && <div>Titre: {bien.titreFoncier}</div>}
-                    {bien.dateProchaineMaintenance && <div>Maint.: {bien.dateProchaineMaintenance}</div>}
-                    {bien.dateProchaineVisiteTechnique && <div>Visite: {bien.dateProchaineVisiteTechnique}</div>}
+
+                  <div className="card-stats-mini">
+                    <div>Service: {bien.service || "Non affecte"}</div>
+                    <div>Localisation: {bien.localisation || "A completer"}</div>
+                    <div>Code: {bien.codeSousCategorie || "N/A"}</div>
+                    <div>Valeur: {Math.round(bien.valeur || 0).toLocaleString("fr-FR")} FCFA</div>
                   </div>
 
-                  <div className="card-financial" style={{ marginTop: "20px", padding: "15px", background: "rgba(29, 78, 216, 0.06)", borderRadius: "12px", border: "1px dashed rgba(29, 78, 216, 0.3)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
-                      <span>VNC actuelle</span>
-                      <strong style={{ color: "var(--primary)" }}>{Math.round(bien.valeurNetteComptable || 0).toLocaleString()} FCFA</strong>
-                    </div>
-                  </div>
+                  {Array.isArray((bien as BienForm).documentsUrls) && (bien as BienForm).documentsUrls.length > 0 ? (
+                    <div className="card-documents-preview">{renderDocuments((bien as BienForm).documentsUrls)}</div>
+                  ) : null}
 
-                  <div className="card-actions" style={{ marginTop: "20px", display: "flex", gap: "8px", paddingTop: "15px", borderTop: "1px solid var(--glass-border)" }}>
-                    <button className="btn-export" style={{ flex: 1, fontSize: "11px" }} onClick={() => openEditForm(bien)}>Modifier</button>
-                    <button className="btn-export" style={{ flex: 1, fontSize: "11px" }} onClick={() => showHistory(bien.id)}>Historique</button>
-                    {isAdmin && <button className="btn-export" style={{ flex: 1, fontSize: "11px" }} onClick={() => setDetailBien(bien)}>Détails</button>}
-                    <button className="btn-export" style={{ color: "var(--danger)", fontSize: "11px" }} onClick={() => deleteBien(bien.id).then(loadBiens)}>Suppr.</button>
+                  <div className="card-actions">
+                    <button className="btn-export" type="button" onClick={() => openEditForm(bien)}>
+                      Modifier
+                    </button>
+                    <button className="btn-export" type="button" onClick={() => showHistory(Number(bien.id))}>
+                      Historique
+                    </button>
+                    {isAdmin && (
+                      <button className="btn-export" type="button" onClick={() => setDetailBien(bien)}>
+                        Details
+                      </button>
+                    )}
+                    <button className="btn-export danger-text" type="button" onClick={() => handleDelete(bien.id)}>
+                      Suppr.
+                    </button>
                   </div>
-                </div>
+                </article>
               ))}
             </div>
           )}
@@ -629,17 +785,17 @@ export default function BiensPage() {
         <section className="registration-flow">
           {!selectedPrincipalCategory ? (
             <div className="category-selection-premium">
-              {principalCategories.map(category => (
-                <div key={category.name} className="cat-card-modern" onClick={() => selectPrincipalCategory(category.name)}>
-                  <div className="cat-icon-blob" style={{ background: category.decor.accent }}>{category.decor.icon}</div>
+              {principalCategories.map((category) => (
+                <button
+                  key={category.name}
+                  type="button"
+                  className="cat-card-modern"
+                  onClick={() => selectPrincipalCategory(category.name)}
+                >
+                  <div className="cat-icon-blob">{category.name.slice(0, 2)}</div>
                   <h3>{category.name}</h3>
-                  <p>{category.decor.description}</p>
-                  <div className="category-mini-meta">
-                    <span>{category.count} sous-codes</span>
-                    <span>{category.sampleFamilies.join(" · ")}</span>
-                  </div>
-                  <span className="cat-arrow">→</span>
-                </div>
+                  <p>{category.count} sous-codes disponibles dans le referentiel officiel.</p>
+                </button>
               ))}
             </div>
           ) : (
@@ -647,22 +803,33 @@ export default function BiensPage() {
               <div className="form-header-premium">
                 <div>
                   <h2>Recensement : {selectedPrincipalCategory}</h2>
-                  <p className="form-subtitle">Choisissez la famille NOMACT, puis la sous-catégorie codifiée. Les champs se configurent ensuite automatiquement.</p>
+                  <p className="form-subtitle">
+                    Choisissez la famille NOMACT, puis la sous-categorie officielle. Le formulaire s'adapte automatiquement.
+                  </p>
                 </div>
-                <button className="btn-back-cat" onClick={() => { setView("GALLERY"); setSelectedPrincipalCategory(null); setEditingBienId(null); }}>Annuler</button>
+                <button
+                  className="btn-back-cat"
+                  type="button"
+                  onClick={() => {
+                    setView("GALLERY");
+                    resetForm();
+                  }}
+                >
+                  Annuler
+                </button>
               </div>
 
               <form onSubmit={handleSave} className="premium-dynamic-form">
                 <div className="selection-shell">
                   <div className="form-group-modern">
-                    <label>Catégorie principale du document</label>
+                    <label>Categorie principale</label>
                     <div className="selection-pill">{selectedPrincipalCategory}</div>
                   </div>
                   <div className="form-group-modern">
-                    <label>Famille de biens</label>
-                    <select value={form.codeFamille} onChange={e => selectFamily(e.target.value)}>
+                    <label>Famille</label>
+                    <select value={form.codeFamille || ""} onChange={(event) => selectFamily(event.target.value)}>
                       <option value="">-- Choisir une famille --</option>
-                      {availableFamilies.map(item => (
+                      {availableFamilies.map((item) => (
                         <option key={item.codeFamille} value={item.codeFamille}>
                           {item.codeFamille} - {item.libelleFamille}
                         </option>
@@ -670,10 +837,10 @@ export default function BiensPage() {
                     </select>
                   </div>
                   <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
-                    <label>Sous-catégorie codifiée</label>
-                    <select value={form.codeSousCategorie} onChange={e => selectArticle(e.target.value)}>
-                      <option value="">-- Choisir le bien exactement comme dans l'annexe --</option>
-                      {availableArticles.map(item => (
+                    <label>Sous-categorie codifiee</label>
+                    <select value={form.codeSousCategorie || ""} onChange={(event) => selectArticle(event.target.value)}>
+                      <option value="">-- Choisir un article du catalogue --</option>
+                      {availableArticles.map((item) => (
                         <option key={item.code} value={item.code}>
                           {item.code} - {item.libelle}
                         </option>
@@ -690,121 +857,150 @@ export default function BiensPage() {
                 </div>
 
                 <div className="form-section">
-                  <h4 className="section-title"><span>01</span> Identification métier</h4>
+                  <h4 className="section-title">
+                    <span>01</span> Identification metier
+                  </h4>
                   <div className="grid-2">
                     <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
-                      <label>Désignation opérationnelle</label>
-                      <input required value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="Nom d'usage, contexte local ou description précise du bien..." />
+                      <label>Nom / Designation</label>
+                      <input
+                        value={form.designation}
+                        readOnly={Boolean(form.codeSousCategorie)}
+                        onChange={(event) => {
+                          if (!form.codeSousCategorie) handleFieldChange("designation", event.target.value);
+                        }}
+                        className={form.codeSousCategorie ? "readonly-input" : ""}
+                        style={
+                          form.codeSousCategorie
+                            ? {
+                                background: "var(--bg-disabled)",
+                                color: "var(--text-secondary)",
+                                cursor: "not-allowed",
+                                fontStyle: "italic",
+                              }
+                            : undefined
+                        }
+                        placeholder="Selectionnez une sous-categorie pour pre-remplir ce champ"
+                      />
+                      {form.codeSousCategorie && <span className="field-hint">Pre-rempli depuis le catalogue officiel</span>}
                     </div>
                     <div className="form-group-modern">
-                      <label>Service détenteur</label>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <select style={{ flex: 1 }} value={form.service} onChange={e => setForm({ ...form, service: e.target.value })}>
-                          <option value="">-- Choisir --</option>
-                          {servicesList.length > 0 ? servicesList.map(s => <option key={s.id} value={s.nomService}>{s.nomService}</option>) : <option value="SERVICE_GENERAL">Service Général</option>}
-                        </select>
-                        <input placeholder="Saisie libre..." value={form.service} onChange={e => setForm({ ...form, service: e.target.value })} style={{ width: "150px" }} />
-                      </div>
-                    </div>
-                    <div className="form-group-modern">
-                      <label>Localisation précise</label>
-                      <input value={form.localisation} onChange={e => setForm({ ...form, localisation: e.target.value })} placeholder="Site, bâtiment, étage, bureau, magasin..." />
-                    </div>
-                    <div className="form-group-modern">
-                      <label>Statut opérationnel</label>
-                      <select value={form.statutOperationnel} onChange={e => setForm({ ...form, statutOperationnel: e.target.value })}>
-                        <option value="ACTIF">Actif / en service</option>
-                        <option value="EN_MAINTENANCE">En maintenance</option>
-                        <option value="EN_TRANSFERT">En transfert</option>
-                        <option value="REFORME">À réformer</option>
+                      <label>Service detenteur</label>
+                      <select value={form.service || ""} onChange={(event) => handleFieldChange("service", event.target.value)}>
+                        <option value="">-- Choisir --</option>
+                        {servicesList.map((service) => (
+                          <option key={String(service.id)} value={String(service.nomService || service.nom || "")}>
+                            {String(service.nomService || service.nom || "")}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="form-group-modern">
-                      <label>Coordonnées GPS</label>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input style={{ flex: 1 }} value={form.coordonneesGps} onChange={e => setForm({ ...form, coordonneesGps: e.target.value, coordonneeGps: e.target.value })} placeholder="Lat, Long" />
-                        <button type="button" className="btn-export" onClick={captureGPS}>GPS</button>
+                      <label>Localisation precise</label>
+                      <input value={form.localisation || ""} onChange={(event) => handleFieldChange("localisation", event.target.value)} />
+                    </div>
+                    <div className="form-group-modern">
+                      <label>Coordonnees GPS</label>
+                      <div className="field-inline">
+                        <input value={form.coordonneesGps || ""} onChange={(event) => handleFieldChange("coordonneesGps", event.target.value)} />
+                        <button type="button" className="btn-export" onClick={captureGPS}>
+                          GPS
+                        </button>
                       </div>
+                    </div>
+                    <div className="form-group-modern">
+                      <label>Date acquisition</label>
+                      <input type="date" value={form.dateAcquisition} onChange={(event) => handleFieldChange("dateAcquisition", event.target.value)} />
                     </div>
                   </div>
                 </div>
 
-                <div className="form-section">
-                  <h4 className="section-title"><span>02</span> Détails spécifiques au bien</h4>
+                <div className={panel.className}>
+                  <div className="category-panel-head">
+                    <span className="category-panel-badge">{panel.badge}</span>
+                    <div className="category-panel-icon" aria-hidden="true">
+                      {panel.icon}
+                    </div>
+                    <div>
+                      <h4>{panel.title}</h4>
+                      <p>{panel.description}</p>
+                    </div>
+                  </div>
                   <div className="grid-2">{renderProfileFields()}</div>
                 </div>
 
                 <div className="form-section">
-                  <h4 className="section-title"><span>03</span> Maintenance, visites et pièces</h4>
+                  <h4 className="section-title">
+                    <span>03</span> Suivi technique et pieces jointes
+                  </h4>
                   <div className="grid-2">
                     <div className="form-group-modern">
-                      <label>Date de maintenance</label>
-                      <input type="date" value={form.dateMaintenance} onChange={e => setForm({ ...form, dateMaintenance: e.target.value })} />
+                      <label>Date prochaine maintenance</label>
+                      <input
+                        type="date"
+                        value={form.dateProchaineMaintenance || ""}
+                        onChange={(event) => handleFieldChange("dateProchaineMaintenance", event.target.value)}
+                      />
                     </div>
                     <div className="form-group-modern">
-                      <label>Date de prochaine maintenance</label>
-                      <input type="date" value={form.dateProchaineMaintenance} onChange={e => setForm({ ...form, dateProchaineMaintenance: e.target.value })} />
+                      <label>Date prochaine visite technique</label>
+                      <input
+                        type="date"
+                        value={form.dateProchaineVisiteTechnique || ""}
+                        onChange={(event) => handleFieldChange("dateProchaineVisiteTechnique", event.target.value)}
+                      />
                     </div>
                     <div className="form-group-modern">
-                      <label>Date de prochaine visite technique</label>
-                      <input type="date" value={form.dateProchaineVisiteTechnique} onChange={e => setForm({ ...form, dateProchaineVisiteTechnique: e.target.value })} />
+                      <label>Photographie</label>
+                      <ImageUpload value={form.photoUrl || ""} onChange={(url) => handleFieldChange("photoUrl", url)} />
                     </div>
                     <div className="form-group-modern">
-                      <label>Date du dernier entretien</label>
-                      <input type="date" value={form.dateDernierEntretien} onChange={e => setForm({ ...form, dateDernierEntretien: e.target.value })} />
-                    </div>
-                    <div className="form-group-modern">
-                      <label>Photographie du bien</label>
-                      <ImageUpload value={form.photoUrl} onChange={url => setForm({ ...form, photoUrl: url })} />
-                    </div>
-                    <div className="form-group-modern">
-                      <label>Documents et justificatifs</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        <FileUpload onUploadSuccess={url => setForm((prev: any) => ({ ...prev, documentsUrls: [...(prev.documentsUrls || []), url] }))} />
-                        <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>{form.documentsUrls?.length || 0} document(s) attaché(s)</div>
+                      <label>Documents attaches</label>
+                      <div className="upload-stack">
+                        <FileUpload
+                          accept=".pdf,.doc,.docx,.xls,.xlsx"
+                          label="Attacher un document (PDF, DOC, XLSX)"
+                          onUploadSuccess={(url) =>
+                            setForm((previous) => ({ ...previous, documentsUrls: [...(previous.documentsUrls || []), url] }))
+                          }
+                        />
+                        {renderDocuments(form.documentsUrls || [])}
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="form-section">
-                  <h4 className="section-title"><span>04</span> Valorisation et cycle de vie</h4>
+                  <h4 className="section-title">
+                    <span>04</span> Valorisation
+                  </h4>
                   <div className="grid-2">
                     <div className="form-group-modern">
                       <label>Valeur d'origine (FCFA)</label>
-                      <input type="number" required value={form.valeur} onChange={e => setForm({ ...form, valeur: Number(e.target.value) })} />
+                      <input type="number" value={form.valeur || 0} onChange={(event) => handleFieldChange("valeur", Number(event.target.value))} />
                     </div>
                     <div className="form-group-modern">
-                      <label>Mise en service</label>
-                      <input type="date" required value={form.dateAcquisition} onChange={e => setForm({ ...form, dateAcquisition: e.target.value })} />
+                      <label>Duree d'amortissement (ans)</label>
+                      <input
+                        type="number"
+                        value={form.dureeAmortissement || 0}
+                        onChange={(event) => handleFieldChange("dureeAmortissement", Number(event.target.value))}
+                      />
                     </div>
                     <div className="form-group-modern">
-                      <label>Durée d'amortissement (ans)</label>
-                      <input type="number" required value={form.dureeAmortissement} onChange={e => setForm({ ...form, dureeAmortissement: Number(e.target.value) })} />
+                      <label>VNC calculee</label>
+                      <input disabled value={Math.round(accounting.valeurNetteComptable).toLocaleString("fr-FR")} />
                     </div>
                     <div className="form-group-modern">
-                      <label>État physique</label>
-                      <select value={form.etat} onChange={e => setForm({ ...form, etat: e.target.value })}>
-                        <option value="NEUF">Neuf</option>
-                        <option value="BON">Bon état</option>
-                        <option value="MOYEN">Moyen</option>
-                        <option value="MAUVAIS">À réformer</option>
-                      </select>
-                    </div>
-                    <div className="form-group-modern">
-                      <label>VNC calculée</label>
-                      <input disabled value={Math.round(form.valeurNetteComptable || 0).toLocaleString()} />
-                    </div>
-                    <div className="form-group-modern">
-                      <label>Amortissement cumulé</label>
-                      <input disabled value={Math.round(form.amortissementCumule || 0).toLocaleString()} />
+                      <label>Amortissement cumule</label>
+                      <input disabled value={Math.round(accounting.amortissementCumule).toLocaleString("fr-FR")} />
                     </div>
                   </div>
                 </div>
 
-                <div className="form-footer" style={{ marginTop: "30px", display: "flex", justifyContent: "flex-end" }}>
-                  <button type="submit" className="primary" style={{ width: "100%", padding: "18px" }}>
-                    Confirmer l'enregistrement du bien
+                <div className="form-footer">
+                  <button type="submit" className="primary" disabled={saving}>
+                    {saving ? "Enregistrement..." : editingBienId ? "Mettre a jour le bien" : "Enregistrer le bien"}
                   </button>
                 </div>
               </form>
@@ -819,31 +1015,42 @@ export default function BiensPage() {
             <div className="section-header-inline">
               <div>
                 <h3>Historique du bien</h3>
-                <p className="muted-paragraph">Affichage détaillé des mouvements liés au bien sélectionné.</p>
+                <p className="muted-paragraph">Affichage des mouvements et traces lies au bien selectionne.</p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-export" onClick={() => setShowTimeline(false)}>Masquer</button>
-                <button className="btn-export" onClick={() => setTimelineData([])}>Effacer l'affichage</button>
-              </div>
+              <button className="btn-export" type="button" onClick={() => setShowTimeline(false)}>
+                Fermer
+              </button>
             </div>
-            <MouvementTimeline mouvements={timelineData} onClose={() => setShowTimeline(false)} />
+            <MouvementTimeline mouvements={timelineData as never} onClose={() => setShowTimeline(false)} />
           </div>
         </div>
       )}
 
       {detailBien && isAdmin && (
         <div className="admin-detail-overlay" onClick={() => setDetailBien(null)}>
-          <div className="admin-detail-panel" onClick={e => e.stopPropagation()}>
+          <div className="admin-detail-panel" onClick={(event) => event.stopPropagation()}>
             <div className="section-header-inline">
               <div>
-                <h3>Données enregistrées en base</h3>
-                <p className="muted-paragraph">Vue complète réservée à l'administration pour audit et ajustement.</p>
+                <h3>Fiche detaillee</h3>
+                <p className="muted-paragraph">Vue d'audit reservee a l'administration.</p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn-export" onClick={() => { setDetailBien(null); openEditForm(detailBien); }}>Éditer</button>
-                <button className="btn-export" onClick={() => setDetailBien(null)}>Fermer</button>
-              </div>
+              <button className="btn-export" type="button" onClick={() => setDetailBien(null)}>
+                Fermer
+              </button>
             </div>
+
+            {detailBien.photoUrl && (
+              <button type="button" className="bien-photo-button large" onClick={() => openViewer(String(detailBien.photoUrl))}>
+                <img
+                  src={normalizeUrl(detailBien.photoUrl)}
+                  alt={`Photo du bien ${detailBien.designation}`}
+                  className="bien-photo-preview"
+                />
+              </button>
+            )}
+
+            {renderDocuments((((detailBien as BienForm).documentsUrls as string[]) || []).map((item) => String(item)))}
+
             <div className="admin-detail-grid">
               {Object.entries(detailBien).map(([key, value]) => (
                 <div key={key} className="admin-detail-item">
@@ -855,6 +1062,8 @@ export default function BiensPage() {
           </div>
         </div>
       )}
+
+      {viewer && <FileViewerModal url={viewer.url} filename={viewer.filename} type={viewer.type} onClose={() => setViewer(null)} />}
     </div>
   );
 }

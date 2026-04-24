@@ -1,53 +1,88 @@
 package com.patris.controller;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import com.patris.service.FileStorageService;
-import lombok.RequiredArgsConstructor;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.patris.service.FileStorageService;
+
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/upload")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
+@CrossOrigin(origins = { "http://localhost:5173", "http://127.0.0.1:5173" }, maxAge = 3600)
 public class FileUploadController {
+
+    private static final List<String> IMAGE_TYPES = List.of("image/jpeg", "image/png", "image/webp");
+    private static final List<String> DOCUMENT_TYPES = List.of(
+        "application/pdf",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
 
     private final FileStorageService fileStorageService;
 
     @PostMapping("/image")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam(value = "file", required = false) MultipartFile file) {
+        return upload(file, "photos", IMAGE_TYPES);
+    }
+
+    @PostMapping("/document")
+    public ResponseEntity<Map<String, String>> uploadDocument(@RequestParam(value = "file", required = false) MultipartFile file) {
+        return upload(file, "documents", DOCUMENT_TYPES);
+    }
+
+    private ResponseEntity<Map<String, String>> upload(MultipartFile file, String folder, List<String> allowedTypes) {
         Map<String, String> response = new HashMap<>();
 
         if (file == null) {
-            System.err.println("ERREUR: Le paramètre 'file' est manquant dans la requête.");
-            response.put("error", "Le paramètre 'file' est manquant.");
+            response.put("error", "Le parametre 'file' est manquant.");
             return ResponseEntity.badRequest().body(response);
         }
 
         if (file.isEmpty()) {
-            System.err.println("ERREUR: Le fichier reçu est vide.");
             response.put("error", "Le fichier est vide.");
             return ResponseEntity.badRequest().body(response);
         }
 
-        System.out.println("DEBUT UPLOAD: Nom=" + file.getOriginalFilename() + ", Taille=" + file.getSize() + ", Type=" + file.getContentType());
+        String contentType = file.getContentType() == null ? "" : file.getContentType();
+        if (!allowedTypes.contains(contentType)) {
+            response.put("error", "Type de fichier non autorise.");
+            response.put("contentType", contentType);
+            return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(response);
+        }
 
         try {
-            // Utilisation du service centralisé
-            String url = fileStorageService.store("photos", file);
-            System.out.println("SUCCÈS UPLOAD: URL=" + url);
-            response.put("url", url);
+            String url = fileStorageService.store(folder, file);
+            response.put("url", buildPublicUrl(url));
+            response.put("filename", file.getOriginalFilename() == null ? "fichier" : file.getOriginalFilename());
             return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            System.err.println("ERREUR CRITIQUE lors de l'appel à FileStorageService: " + e.getMessage());
-            e.printStackTrace();
-            // Retourne EXPLICITEMENT le message d'erreur natif au lieu d'un 500 obscur
-            response.put("error", "Erreur backend: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+        } catch (Exception exception) {
+            response.put("error", "Erreur backend: " + exception.getClass().getSimpleName());
+            response.put("message", exception.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
-    }}
+    }
+
+    private String buildPublicUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return url;
+        }
+        return "http://localhost:8082" + (url.startsWith("/") ? url : "/" + url);
+    }
+}
