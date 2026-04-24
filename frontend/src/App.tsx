@@ -11,27 +11,15 @@ import EntretiensPage from './pages/EntretiensPage';
 import StocksPage from './pages/StocksPage';
 import UsersPage from './pages/UsersPage';
 import LoginPage from './pages/LoginPage';
+import { getCurrentUser } from './api/auth';
 import './styles.css';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const userStr = localStorage.getItem('user');
-  if (!userStr) {
+  const user = getCurrentUser();
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
-  
-  try {
-    const user = JSON.parse(userStr);
-    if (!user.token) {
-      // Clear invalid session and redirect to login
-      localStorage.removeItem('user');
-      return <Navigate to="/login" replace />;
-    }
-  } catch (error) {
-    // Invalid JSON, clear and redirect
-    localStorage.removeItem('user');
-    return <Navigate to="/login" replace />;
-  }
-  
+
   return children;
 };
 

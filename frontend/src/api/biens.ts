@@ -6,6 +6,13 @@ export interface Bien {
   iup: string;
   designation: string;
   categorie: string;
+  categoriePrincipale?: string;
+  codeFamille?: string;
+  familleCatalogue?: string;
+  codeSousCategorie?: string;
+  sousCategorie?: string;
+  sectionCatalogue?: string;
+  profilFormulaire?: string;
   dateAcquisition: string;
   valeur: number;
   etat: string;
@@ -42,6 +49,36 @@ export interface Bien {
   // Mobilier / Equipement
   numSerie?: string;
   fabricant?: string;
+
+  dateMaintenance?: string;
+  dateProchaineMaintenance?: string;
+  dateProchaineVisiteTechnique?: string;
+  quantite?: number;
+  service?: string;
+  specificationsTechniques?: string;
+  puissanceFiscale?: string;
+  typeCarburant?: string;
+  typeBoite?: string;
+  chargeUtile?: string;
+  statutOperationnel?: string;
+  statutJuridique?: string;
+  finGarantie?: string;
+  permisOccuper?: boolean;
+}
+
+export interface BienCatalogueItem {
+  id: number;
+  code: string;
+  libelle: string;
+  niveau: "FAMILLE" | "ARTICLE";
+  codeParent?: string;
+  codeFamille: string;
+  libelleFamille: string;
+  section: string;
+  categoriePrincipale: string;
+  categorieMetier: string;
+  profilFormulaire: string;
+  ordreAffichage: number;
 }
 
 
@@ -101,5 +138,10 @@ export const uploadBienPhoto = async (id: number, file: File) => {
 
 export const validateBien = async (id: number, statut: string) => {
   const response = await api.put(`/biens/${id}/validate?statut=${statut}`);
+  return response.data;
+};
+
+export const getBienCatalogue = async (): Promise<BienCatalogueItem[]> => {
+  const response = await api.get('/biens/catalogue');
   return response.data;
 };

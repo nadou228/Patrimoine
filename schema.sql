@@ -34,6 +34,13 @@ CREATE TABLE IF NOT EXISTS bien (
     code_bien VARCHAR(255),
     iup VARCHAR(255) UNIQUE,
     designation VARCHAR(255),
+    categorie_principale VARCHAR(255),
+    code_famille VARCHAR(255),
+    famille_catalogue VARCHAR(500),
+    code_sous_categorie VARCHAR(255),
+    sous_categorie VARCHAR(500),
+    section_catalogue VARCHAR(255),
+    profil_formulaire VARCHAR(255),
     categorie VARCHAR(50), -- Enum categorie
     date_acquisition DATE,
     valeur DOUBLE PRECISION,
@@ -70,9 +77,29 @@ CREATE TABLE IF NOT EXISTS bien (
     charge_utile VARCHAR(255),
     type_boite VARCHAR(255),
     fin_garantie DATE,
+    date_maintenance DATE,
     date_dernier_entretien DATE,
+    date_prochaine_maintenance DATE,
+    date_prochaine_visite_technique DATE,
+    quantite INTEGER DEFAULT 1,
     permis_occuper BOOLEAN DEFAULT FALSE,
     archived BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS bien_catalogue_item (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(255) UNIQUE NOT NULL,
+    libelle VARCHAR(1200) NOT NULL,
+    niveau VARCHAR(255),
+    code_parent VARCHAR(255),
+    code_famille VARCHAR(255),
+    libelle_famille VARCHAR(600),
+    section VARCHAR(255),
+    categorie_principale VARCHAR(255),
+    categorie_metier VARCHAR(255),
+    profil_formulaire VARCHAR(255),
+    ordre_affichage INTEGER,
+    actif BOOLEAN DEFAULT TRUE
 );
 
 -- 2. Tables avec clés étrangères (Hiérarchie géographique)

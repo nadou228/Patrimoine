@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import axios from 'axios';
+import { clearCurrentUser, getCurrentUser } from '../api/auth';
 
 export interface PermissionDetail {
   code: string;
@@ -27,36 +28,38 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     const fetchPermissions = async () => {
       try {
-        const userStr = localStorage.getItem('user');
-        if (!userStr) {
-          console.warn('Pas d\'utilisateur trouvé dans localStorage');
-          setLoading(false);
-          return;
-        }
-        
-        const user = JSON.parse(userStr);
-        const token = user?.token;
-        if (!token) {
-          console.warn('Pas de token trouvé pour l\'utilisateur:', user);
+        const user = getCurrentUser();
+        if (!user) {
+          console.warn('Pas d utilisateur valide trouve en session');
           setLoading(false);
           return;
         }
 
-        console.log('Chargement des permissions pour l\'utilisateur:', user.nom, 'avec le rôle:', user.role);
-        
+        if (!user.token) {
+          console.warn('Pas de token trouve pour utilisateur:', user);
+          setLoading(false);
+          return;
+        }
+
+        console.log('Chargement des permissions pour utilisateur:', user.nom, 'avec le role:', user.role);
+
         const response = await axios.get('http://localhost:8082/api/permissions/my-permissions', {
           headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${user.token}`,
+            'Content-Type': 'application/json',
+          },
         });
-        
-        console.log('Permissions chargées avec succès:', response.data);
+
+        console.log('Permissions chargees avec succes:', response.data);
         setPermissions(response.data);
-        
       } catch (error: any) {
         console.error('Erreur chargement permissions:', error);
-        console.error('Détails:', error.response?.data || error.message);
+        console.error('Details:', error.response?.data || error.message);
+
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          clearCurrentUser();
+          window.location.replace('/login');
+        }
       } finally {
         setLoading(false);
       }
@@ -67,7 +70,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const hasPermission = (permissionCode: string): boolean => {
     if (!permissions) return false;
-    const perm = permissions.permissions.find(p => p.code === permissionCode);
+    const perm = permissions.permissions.find((p) => p.code === permissionCode);
     return perm?.granted || false;
   };
 
@@ -81,7 +84,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 export const usePermissions = () => {
   const context = useContext(PermissionsContext);
   if (!context) {
-    throw new Error('usePermissions doit être utilisé avec PermissionsProvider');
+    throw new Error('usePermissions doit etre utilise avec PermissionsProvider');
   }
   return context;
 };

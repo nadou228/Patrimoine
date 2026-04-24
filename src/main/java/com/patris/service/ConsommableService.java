@@ -3,8 +3,10 @@ package com.patris.service;
 
 import com.patris.model.Commune;
 import com.patris.model.Consommable;
+import com.patris.model.Stock;
 import com.patris.repository.CommuneRepository;
 import com.patris.repository.ConsommableRepository;
+import com.patris.repository.StockRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -18,6 +20,7 @@ public class ConsommableService {
 
     private final ConsommableRepository consommableRepository;
     private final CommuneRepository communeRepository;
+    private final StockRepository stockRepository;
 
     public List<Consommable> findAll() {
         return consommableRepository.findAll();
@@ -28,11 +31,31 @@ public class ConsommableService {
     }
 
     public Consommable createConsommable(Consommable consommable) {
-        Long communeId = consommable.getCommune().getId();
-        Commune commune = communeRepository.findById(communeId).orElseThrow(()-> new RuntimeException("Commune introuvable"));
-        consommable.setCommune(commune);
-        
-        return consommableRepository.save(consommable);
+        if (consommable.getCommune() != null && consommable.getCommune().getId() != null) {
+            Long communeId = consommable.getCommune().getId();
+            Commune commune = communeRepository.findById(communeId).orElseThrow(() -> new RuntimeException("Commune introuvable"));
+            consommable.setCommune(commune);
+        } else {
+            consommable.setCommune(null);
+        }
+
+        if (consommable.getPrixMoyenPondere() == null) {
+            consommable.setPrixMoyenPondere(0.0);
+        }
+
+        Consommable saved = consommableRepository.save(consommable);
+
+        if (stockRepository.findAll().stream().noneMatch(s -> s.getConsommable() != null && s.getConsommable().getId().equals(saved.getId()))) {
+            Stock stock = new Stock();
+            stock.setConsommable(saved);
+            stock.setQuantite(0);
+            stock.setSeuilAlerte(saved.getSeuilAlerte());
+            stock.setUnite(saved.getUnite());
+            stock.setPrixUnitaireMoyen(saved.getPrixMoyenPondere());
+            stockRepository.save(stock);
+        }
+
+        return saved;
 
     }
 

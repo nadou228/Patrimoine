@@ -2,16 +2,8 @@ package com.patris.model;
 
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Table(name = "commune")
 public class Commune {
     @Id
@@ -23,5 +15,19 @@ public class Commune {
     @ManyToOne
     @JoinColumn(name = "prefecture_id")
     private Prefecture prefecture;
-    
-} 
+
+    public Commune() {}
+
+    public Commune(Long id, String nomCommune, Prefecture prefecture) {
+        this.id = id;
+        this.nomCommune = nomCommune;
+        this.prefecture = prefecture;
+    }
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getNomCommune() { return nomCommune; }
+    public void setNomCommune(String nomCommune) { this.nomCommune = nomCommune; }
+    public Prefecture getPrefecture() { return prefecture; }
+    public void setPrefecture(Prefecture prefecture) { this.prefecture = prefecture; }
+}

@@ -7,7 +7,8 @@ public enum statutValidation {
 
     EN_ATTENTE,
     VALIDE,
-    REFUSE;
+    REFUSE,
+    REJETE;
 
     @JsonCreator
     public static statutValidation from(String value) {
@@ -25,6 +26,8 @@ public enum statutValidation {
             case "REFUSE":
             case "REJECTED":
                 return REFUSE;
+            case "REJETE":
+                return REJETE;
             default:
                 return EN_ATTENTE;
         }
@@ -37,6 +40,8 @@ public enum statutValidation {
                 return "VALIDE";
             case REFUSE:
                 return "REFUSE";
+            case REJETE:
+                return "REJETE";
             case EN_ATTENTE:
             default:
                 return "EN_ATTENTE";

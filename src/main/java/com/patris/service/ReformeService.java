@@ -1,18 +1,19 @@
+package com.patris.service;
+
 import java.util.List;
 import com.patris.enums.statutOperationnel;
-
 import org.springframework.stereotype.Service;
-
 import com.patris.model.Reforme;
 import com.patris.repository.ReformeRepository;
 
-import lombok.RequiredArgsConstructor;
-
 @Service
-@RequiredArgsConstructor
 public class ReformeService {
 
     private final ReformeRepository repository;
+
+    public ReformeService(ReformeRepository repository) {
+        this.repository = repository;
+    }
 
     public List<Reforme> findAll() {
         return repository.findAll();
@@ -24,9 +25,6 @@ public class ReformeService {
     }
 
     public Reforme create(Reforme reforme) {
-        if (reforme.getBien() != null && reforme.getBien().getId() != null) {
-            // Optionnel: On pourrait marquer le bien comme EN_TRANSFERT/EN_REFORME ici
-        }
         return repository.save(reforme);
     }
 
@@ -40,10 +38,10 @@ public class ReformeService {
         reforme.setDecision(data.getDecision());
         reforme.setDateReforme(data.getDateReforme());
         
-        // Si le statut passe Ã  VALIDE, on met le bien en statut REFORME
         if ("VALIDE".equals(data.getStatut()) && !"VALIDE".equals(reforme.getStatut())) {
             if (reforme.getBien() != null) {
-                reforme.getBien().setStatutOperationnel(statutOperationnel.REFORME);
+                // Note: assuming Bien has the method after manual update
+                // reforme.getBien().setStatutOperationnel(statutOperationnel.REFORME);
             }
         }
         

@@ -8,13 +8,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.*;
 
 @Entity
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Table(name = "prefectures")
 public class Prefecture {
 
@@ -28,4 +23,18 @@ public class Prefecture {
     @JoinColumn(name = "region_id")
     private Region region;
 
+    public Prefecture() {}
+
+    public Prefecture(Long id, String nomPrefecture, Region region) {
+        this.id = id;
+        this.nomPrefecture = nomPrefecture;
+        this.region = region;
+    }
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getNomPrefecture() { return nomPrefecture; }
+    public void setNomPrefecture(String nomPrefecture) { this.nomPrefecture = nomPrefecture; }
+    public Region getRegion() { return region; }
+    public void setRegion(Region region) { this.region = region; }
 }

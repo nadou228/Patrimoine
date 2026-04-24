@@ -16,6 +16,7 @@ import com.patris.dto.MouvementStockCreateDTO;
 import com.patris.enums.type_mouvement;
 import com.patris.model.MouvementStock;
 import com.patris.model.Stock;
+import com.patris.repository.MagasinRepository;
 import com.patris.service.MouvementStockService;
 import com.patris.service.StockService;
 
@@ -28,6 +29,7 @@ public class MouvementStockController {
 
     private final MouvementStockService service;
     private final StockService stockService;
+    private final MagasinRepository magasinRepository;
 
     @GetMapping
     public List<MouvementStock> findAll(){
@@ -58,7 +60,17 @@ public class MouvementStockController {
         mouvementStock.setTypeMouvement(type_mouvement.valueOf(dto.getTypeOperation().toUpperCase()));
         mouvementStock.setQuantite(dto.getQuantite());
         mouvementStock.setDateMouvement(dto.getDateOperation());
-        mouvementStock.setDestination(dto.getPieceJustificative());
+        mouvementStock.setReferencePiece(dto.getPieceJustificative());
+        mouvementStock.setPrixUnitaire(dto.getPrixUnitaire());
+        mouvementStock.setDestination(dto.getObservations());
+        mouvementStock.setServiceDemandeur(dto.getObservations());
+
+        if (dto.getMagasinId() != null) {
+            mouvementStock.setMagasin(
+                magasinRepository.findById(dto.getMagasinId())
+                    .orElseThrow(() -> new RuntimeException("Magasin introuvable"))
+            );
+        }
 
         return ResponseEntity.ok(service.save(mouvementStock));
     }

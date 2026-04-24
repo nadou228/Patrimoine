@@ -7,16 +7,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import lombok.*;
-
-
 import jakarta.persistence.Id;
 
 @Entity
-@Setter
-@Getter
-@NoArgsConstructor
-@AllArgsConstructor
 public class Services {
 
     @Id
@@ -30,4 +23,18 @@ public class Services {
     @JoinColumn(name = "region_id")
     private Region region;
 
+    public Services() {}
+
+    public Services(Long id, String nomService, Region region) {
+        this.id = id;
+        this.nomService = nomService;
+        this.region = region;
+    }
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getNomService() { return nomService; }
+    public void setNomService(String nomService) { this.nomService = nomService; }
+    public Region getRegion() { return region; }
+    public void setRegion(Region region) { this.region = region; }
 }

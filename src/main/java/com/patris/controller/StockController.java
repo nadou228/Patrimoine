@@ -46,6 +46,12 @@ public class StockController {
         return service.updateStock(id, stock);
     }
 
+    @PostMapping("/valider/{mouvementId}")
+    public ResponseEntity<Void> validerMouvement(@PathVariable Long mouvementId) {
+        service.validerMouvement(mouvementId);
+        return ResponseEntity.ok().build();
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Stock> deleteStock(@PathVariable Long id) {
         service.delete(id);

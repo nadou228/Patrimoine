@@ -1433,3 +1433,92 @@ export function exportPdf(
 
   doc.save(filename);
 }
+
+export function exportLivreJournalPremiumExcel(biens: any[], filename: string, user?: ExportUser) {
+  const rows = [...biens]
+    .sort((a, b) => String(a.dateAcquisition || "").localeCompare(String(b.dateAcquisition || "")))
+    .map((bien, index) => ({
+      ordre: index + 1,
+      date: fmt(bien.dateAcquisition),
+      reference: fmt(bien.codeSousCategorie || bien.codeBien || bien.iup),
+      famille: fmt(bien.categoriePrincipale || bien.categorie),
+      designation: fmt(bien.designation),
+      quantiteEntree: fmtNum(bien.quantite || 1),
+      quantiteSortie: "0",
+      valeurEntree: fmtNum(bien.valeur),
+      valeurSortie: "0",
+      service: fmt(bien.service || bien.localisation),
+      piece: fmt(bien.titreFoncier || bien.immatriculation || bien.numSerie || bien.iup),
+    }));
+
+  const totalValeur = biens.reduce((sum, bien) => sum + Number(bien.valeur || 0), 0);
+  const totalQuantite = biens.reduce((sum, bien) => sum + Number(bien.quantite || 1), 0);
+  const extra = [
+    { label: "Total biens", value: fmtNum(biens.length) },
+    { label: "Quantité comptable", value: fmtNum(totalQuantite) },
+    { label: "Montant total", value: `${fmtNum(totalValeur)} FCFA` },
+  ];
+
+  exportPdf(rows, 'Livre Journal Premium des Immobilisations', filename.replace(/\.xls$/i, ".pdf"), user, extra);
+  exportXlsx(rows, filename.replace(/\.pdf$/i, ".xlsx"), "Livre journal premium");
+}
+
+export function exportGrandLivrePremiumExcel(biens: any[], filename: string, user?: ExportUser) {
+  const grouped = biens.reduce((acc: Record<string, any[]>, bien) => {
+    const key = bien.codeFamille || bien.categorie || "NON CLASSE";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(bien);
+    return acc;
+  }, {});
+
+  const rows: Record<string, any>[] = [];
+  Object.entries(grouped).forEach(([compte, items]) => {
+    let soldeQuantite = 0;
+    let soldeValeur = 0;
+    (items as any[])
+      .sort((a, b) => String(a.dateAcquisition || "").localeCompare(String(b.dateAcquisition || "")))
+      .forEach((bien: any) => {
+        const quantite = Number(bien.quantite || 1);
+        const valeur = Number(bien.valeur || 0);
+        soldeQuantite += quantite;
+        soldeValeur += valeur;
+        rows.push({
+          compte,
+          famille: fmt(bien.familleCatalogue || bien.categoriePrincipale || bien.categorie),
+          date: fmt(bien.dateAcquisition),
+          reference: fmt(bien.codeSousCategorie || bien.iup),
+          designation: fmt(bien.designation),
+          entreeQte: fmtNum(quantite),
+          sortieQte: "0",
+          soldeQte: fmtNum(soldeQuantite),
+          entreeValeur: fmtNum(valeur),
+          sortieValeur: "0",
+          soldeValeur: fmtNum(soldeValeur),
+          localisation: fmt(bien.localisation || bien.service),
+        });
+      });
+    rows.push({
+      compte,
+      famille: "SOUS-TOTAL",
+      date: "",
+      reference: "",
+      designation: `Sous-total ${compte}`,
+      entreeQte: "",
+      sortieQte: "",
+      soldeQte: fmtNum(soldeQuantite),
+      entreeValeur: "",
+      sortieValeur: "",
+      soldeValeur: fmtNum(soldeValeur),
+      localisation: "",
+    });
+  });
+
+  const extra = [
+    { label: "Comptes suivis", value: fmtNum(Object.keys(grouped).length) },
+    { label: "Lignes produites", value: fmtNum(rows.length) },
+    { label: "Date d'édition", value: today() },
+  ];
+
+  exportPdf(rows, 'Grand Livre Premium des Immobilisations', filename.replace(/\.xls$/i, ".pdf"), user, extra);
+  exportXlsx(rows, filename.replace(/\.pdf$/i, ".xlsx"), "Grand livre premium");
+}

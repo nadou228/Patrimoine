@@ -12,16 +12,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Table(name = "inventaire_campagne")
 public class InventaireCampagne {
 
@@ -41,4 +33,41 @@ public class InventaireCampagne {
 
     private String creePar;
     private LocalDateTime dateCreation;
+    private String validePar;
+
+    public InventaireCampagne() {}
+
+    public InventaireCampagne(Long id, String nom, String sites, String equipes, LocalDate dateDebut, LocalDate dateFin, inventaireStatut statut, String creePar, LocalDateTime dateCreation, String validePar) {
+        this.id = id;
+        this.nom = nom;
+        this.sites = sites;
+        this.equipes = equipes;
+        this.dateDebut = dateDebut;
+        this.dateFin = dateFin;
+        this.statut = statut;
+        this.creePar = creePar;
+        this.dateCreation = dateCreation;
+        this.validePar = validePar;
+    }
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getNom() { return nom; }
+    public void setNom(String nom) { this.nom = nom; }
+    public String getSites() { return sites; }
+    public void setSites(String sites) { this.sites = sites; }
+    public String getEquipes() { return equipes; }
+    public void setEquipes(String equipes) { this.equipes = equipes; }
+    public LocalDate getDateDebut() { return dateDebut; }
+    public void setDateDebut(LocalDate dateDebut) { this.dateDebut = dateDebut; }
+    public LocalDate getDateFin() { return dateFin; }
+    public void setDateFin(LocalDate dateFin) { this.dateFin = dateFin; }
+    public inventaireStatut getStatut() { return statut; }
+    public void setStatut(inventaireStatut statut) { this.statut = statut; }
+    public String getCreePar() { return creePar; }
+    public void setCreePar(String creePar) { this.creePar = creePar; }
+    public LocalDateTime getDateCreation() { return dateCreation; }
+    public void setDateCreation(LocalDateTime dateCreation) { this.dateCreation = dateCreation; }
+    public String getValidePar() { return validePar; }
+    public void setValidePar(String validePar) { this.validePar = validePar; }
 }

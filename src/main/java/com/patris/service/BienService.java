@@ -101,6 +101,10 @@ public class BienService {
             bien.setValeur(0);
         }
 
+        if (bien.getQuantite() == null || bien.getQuantite() <= 0) {
+            bien.setQuantite(1);
+        }
+
         // Automatisation des calculs comptables
         bien.setValeurNetteComptable(calculValeurNette(bien));
 
@@ -119,6 +123,13 @@ public class BienService {
             bien.setIup(dto.getIup() != null ? dto.getIup() : "");
             bien.setDesignation(dto.getDesignation() != null ? dto.getDesignation() : "");
             bien.setCategorie(parseCategorie(dto.getCategorie()));
+            bien.setCategoriePrincipale(dto.getCategoriePrincipale());
+            bien.setCodeFamille(dto.getCodeFamille());
+            bien.setFamilleCatalogue(dto.getFamilleCatalogue());
+            bien.setCodeSousCategorie(dto.getCodeSousCategorie());
+            bien.setSousCategorie(dto.getSousCategorie());
+            bien.setSectionCatalogue(dto.getSectionCatalogue());
+            bien.setProfilFormulaire(dto.getProfilFormulaire());
             bien.setDateAcquisition(parseDate(dto.getDateAcquisition()));
 
             // Numeric fields
@@ -168,8 +179,12 @@ public class BienService {
             bien.setStatutJuridique(dto.getStatutJuridique());
             bien.setChargeUtile(dto.getChargeUtile());
             bien.setTypeBoite(dto.getTypeBoite());
-            bien.setFinGarantie(parseDate(dto.getFinGarantie()));
-            bien.setDateDernierEntretien(parseDate(dto.getDateDernierEntretien()));
+            bien.setFinGarantie(parseOptionalDate(dto.getFinGarantie()));
+            bien.setDateMaintenance(parseOptionalDate(dto.getDateMaintenance()));
+            bien.setDateDernierEntretien(parseOptionalDate(dto.getDateDernierEntretien()));
+            bien.setDateProchaineMaintenance(parseOptionalDate(dto.getDateProchaineMaintenance()));
+            bien.setDateProchaineVisiteTechnique(parseOptionalDate(dto.getDateProchaineVisiteTechnique()));
+            bien.setQuantite(dto.getQuantite() != null && dto.getQuantite() > 0 ? dto.getQuantite() : 1);
             bien.setPermisOccuper(dto.isPermisOccuper());
 
             bien.setArchived(dto.getArchived() != null ? dto.getArchived() : false);
@@ -207,6 +222,13 @@ public class BienService {
         } catch (Exception e) {
             return LocalDate.now();
         }
+    }
+
+    private LocalDate parseOptionalDate(String date) {
+        if (date == null || date.isBlank()) {
+            return null;
+        }
+        return parseDate(date);
     }
 
     private statutValidation parseStatut(String statut) {
@@ -248,6 +270,13 @@ public class BienService {
             bien.setIup(b.getIup());
         }
         bien.setDesignation(b.getDesignation());
+        bien.setCategoriePrincipale(b.getCategoriePrincipale());
+        bien.setCodeFamille(b.getCodeFamille());
+        bien.setFamilleCatalogue(b.getFamilleCatalogue());
+        bien.setCodeSousCategorie(b.getCodeSousCategorie());
+        bien.setSousCategorie(b.getSousCategorie());
+        bien.setSectionCatalogue(b.getSectionCatalogue());
+        bien.setProfilFormulaire(b.getProfilFormulaire());
         bien.setCategorie(b.getCategorie());
         bien.setDateAcquisition(b.getDateAcquisition());
         bien.setValeur(b.getValeur());
@@ -281,7 +310,11 @@ public class BienService {
         bien.setChargeUtile(b.getChargeUtile());
         bien.setTypeBoite(b.getTypeBoite());
         bien.setFinGarantie(b.getFinGarantie());
+        bien.setDateMaintenance(b.getDateMaintenance());
         bien.setDateDernierEntretien(b.getDateDernierEntretien());
+        bien.setDateProchaineMaintenance(b.getDateProchaineMaintenance());
+        bien.setDateProchaineVisiteTechnique(b.getDateProchaineVisiteTechnique());
+        bien.setQuantite(b.getQuantite());
         bien.setPermisOccuper(b.isPermisOccuper());
 
         // Automatisation des calculs comptables

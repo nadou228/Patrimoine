@@ -2,31 +2,49 @@ package com.patris.dto;
 
 import java.util.List;
 import java.util.Set;
+import java.util.ArrayList;
 
 import com.patris.enums.Permission;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-
-@Getter
-@Setter
-@AllArgsConstructor
 public class PermissionsResponse {
     private String role;
     private List<PermissionDetail> permissions;
 
-    @Getter
-    @Setter
-    @AllArgsConstructor
+    public PermissionsResponse() {}
+
+    public PermissionsResponse(String role, List<PermissionDetail> permissions) {
+        this.role = role;
+        this.permissions = permissions;
+    }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public List<PermissionDetail> getPermissions() { return permissions; }
+    public void setPermissions(List<PermissionDetail> permissions) { this.permissions = permissions; }
+
     public static class PermissionDetail {
         private String code;
         private String description;
         private boolean granted;
+
+        public PermissionDetail() {}
+
+        public PermissionDetail(String code, String description, boolean granted) {
+            this.code = code;
+            this.description = description;
+            this.granted = granted;
+        }
+
+        public String getCode() { return code; }
+        public void setCode(String code) { this.code = code; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public boolean isGranted() { return granted; }
+        public void setGranted(boolean granted) { this.granted = granted; }
     }
 
     public static PermissionsResponse fromPermissions(String role, Set<Permission> grantedPermissions) {
-        List<PermissionDetail> details = new java.util.ArrayList<>();
+        List<PermissionDetail> details = new ArrayList<>();
         
         for (Permission perm : Permission.values()) {
             details.add(new PermissionDetail(

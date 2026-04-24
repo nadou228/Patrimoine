@@ -14,6 +14,7 @@ import com.patris.model.InventaireCampagne;
 import com.patris.model.InventaireFiche;
 import com.patris.repository.BienRepository;
 import com.patris.repository.InventaireCampagneRepository;
+import com.patris.repository.InventaireEcartRepository;
 import com.patris.repository.InventaireFicheRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -22,19 +23,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class InventaireCampagneService {
 
+    private final InventaireCampagneRepository repository;
     private final InventaireFicheRepository ficheRepository;
     private final InventaireEcartRepository ecartRepository;
     private final MouvementService mouvementService;
     private final BienRepository bienRepository;
 
-    public InventaireCampagneService(InventaireCampagneRepository repository, BienRepository bienRepository, 
-                                     InventaireFicheRepository ficheRepository, InventaireEcartRepository ecartRepository,
-                                     MouvementService mouvementService){
-        this.repository = repository;
-        this.bienRepository = bienRepository;
-        this.ficheRepository = ficheRepository;
-        this.ecartRepository = ecartRepository;
-        this.mouvementService = mouvementService;
+    public List<InventaireCampagne> findAll() {
+        return repository.findAll();
     }
 
     public InventaireCampagne findById(Long id) {
@@ -55,9 +51,7 @@ public class InventaireCampagneService {
         
         InventaireCampagne saved = repository.save(campagne);
 
-        // EXTRACTION THÉORIQUE DES BIENS
         List<Bien> biens;
-        
         if (campagne.getSites() != null && !campagne.getSites().isBlank()) {
             biens = bienRepository.findByLocalisationContainingAndArchivedFalse(campagne.getSites());
         } else if (campagne.getEquipes() != null && campagne.getEquipes().startsWith("CAT:")) {
@@ -67,7 +61,6 @@ public class InventaireCampagneService {
             biens = bienRepository.findAllByArchivedFalse();
         }
 
-        // Création des fiches d'inventaire
         for (Bien bien : biens) {
             InventaireFiche fiche = new InventaireFiche();
             fiche.setCampagne(saved);
@@ -104,7 +97,6 @@ public class InventaireCampagneService {
         InventaireCampagne campagne = findById(id);
         String supervisor = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        // 1. VÃ©rifier que TOUTES les fiches de la campagne ont Ã©tÃ© traitÃ©es et validÃ©es par le superviseur
         List<InventaireFiche> fiches = ficheRepository.findByCampagneId(id);
         long nonTraitees = fiches.stream()
                 .filter(f -> f.getValidationSuperviseur() == com.patris.enums.statutValidation.EN_ATTENTE)
@@ -114,19 +106,16 @@ public class InventaireCampagneService {
             throw new RuntimeException("Certification impossible : " + nonTraitees + " fiches n'ont pas encore été validées par le superviseur.");
         }
 
-        // 2. VÃ©rifier que tous les Ã©carts sont traitÃ©s
         long ecartsNonValides = ecartRepository.countByCampagneIdAndStatutValidation(id, statutValidation.EN_ATTENTE);
         if (ecartsNonValides > 0) {
-            throw new RuntimeException("Certification impossible : " + ecartsNonValides + " Ã©carts de rapprochement non rÃ©solus.");
+            throw new RuntimeException("Certification impossible : " + ecartsNonValides + " écarts de rapprochement non résolus.");
         }
 
-        // 3. Traitement des fiches pour mise Ã  jour localisation
         for (InventaireFiche f : fiches) {
             Bien bien = f.getBien();
             String locReelle = f.getLocalisationReelle();
             
             if (locReelle != null && !locReelle.isBlank() && !locReelle.trim().equalsIgnoreCase(bien.getLocalisation())) {
-                // GÃ©nÃ©ration automatique du mouvement de transfert
                 com.patris.model.Mouvement m = new com.patris.model.Mouvement();
                 m.setType(com.patris.enums.type_mouvement.TRANSFERT);
                 m.setBien(bien);
@@ -136,7 +125,6 @@ public class InventaireCampagneService {
                 m.setValidePar(supervisor);
                 m.setDateValidation(LocalDateTime.now());
                 
-                // On pourrait chercher l'objet Services de destination ici, mais pour faire simple on met Ã  jour la string localisation du bien
                 bien.setLocalisation(locReelle);
                 bienRepository.save(bien);
                 mouvementService.save(m);
@@ -144,7 +132,7 @@ public class InventaireCampagneService {
         }
 
         campagne.setStatut(inventaireStatut.CERTIFIE);
-        campagne.setValidePar(supervisor); // Assurez-vous que ce champ existe ou changez pour un autre
+        campagne.setValidePar(supervisor); 
         return repository.save(campagne);
     }
 

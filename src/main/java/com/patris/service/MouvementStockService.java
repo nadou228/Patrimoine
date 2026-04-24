@@ -1,12 +1,12 @@
 package com.patris.service;
 
-import java.util.List;
-import org.springframework.stereotype.Service;
 import com.patris.enums.type_mouvement;
 import com.patris.model.MouvementStock;
 import com.patris.model.Stock;
 import com.patris.repository.MouvementStockRepository;
 import com.patris.repository.StockRepository;
+import java.util.List;
+import org.springframework.stereotype.Service;
 
 @Service
 public class MouvementStockService {
@@ -14,8 +14,7 @@ public class MouvementStockService {
     private final MouvementStockRepository repository;
     private final StockRepository stockRepository;
 
-    public MouvementStockService(MouvementStockRepository repository,
-                                  StockRepository stockRepository) {
+    public MouvementStockService(MouvementStockRepository repository, StockRepository stockRepository) {
         this.repository = repository;
         this.stockRepository = stockRepository;
     }
@@ -30,26 +29,16 @@ public class MouvementStockService {
     }
 
     public MouvementStock save(MouvementStock mouvementStock) {
-        // Résolution du stock
         Long stockId = mouvementStock.getStock().getId();
         Stock stock = stockRepository.findById(stockId)
                 .orElseThrow(() -> new RuntimeException("Stock introuvable"));
 
-        // Mise à jour de la quantité et CMUP
-        if (mouvementStock.getTypeMouvement() == type_mouvement.ENTREE) {
-            double nouvelleValeur = (stock.getQuantite() * stock.getPrixUnitaireMoyen()) + 
-                                     (mouvementStock.getQuantite() * mouvementStock.getPrixUnitaire());
-            stock.setQuantite(stock.getQuantite() + mouvementStock.getQuantite());
-            stock.setPrixUnitaireMoyen(nouvelleValeur / stock.getQuantite());
-        } else if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE) {
-            if (stock.getQuantite() < mouvementStock.getQuantite()) {
-                throw new RuntimeException("Stock insuffisant");
-            }
-            stock.setQuantite(stock.getQuantite() - mouvementStock.getQuantite());
+        if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE && stock.getQuantite() < mouvementStock.getQuantite()) {
+            throw new RuntimeException("Stock insuffisant");
         }
 
-        stockRepository.save(stock);
         mouvementStock.setStock(stock);
+        mouvementStock.setEstValide(false);
         return repository.save(mouvementStock);
     }
 
@@ -59,6 +48,11 @@ public class MouvementStockService {
         mouvementStock.setQuantite(mvt.getQuantite());
         mouvementStock.setDateMouvement(mvt.getDateMouvement());
         mouvementStock.setDestination(mvt.getDestination());
+        mouvementStock.setReferencePiece(mvt.getReferencePiece());
+        mouvementStock.setPrixUnitaire(mvt.getPrixUnitaire());
+        mouvementStock.setFournisseur(mvt.getFournisseur());
+        mouvementStock.setServiceDemandeur(mvt.getServiceDemandeur());
+        mouvementStock.setMagasin(mvt.getMagasin());
         return repository.save(mouvementStock);
     }
 
