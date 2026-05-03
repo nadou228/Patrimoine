@@ -1,6 +1,7 @@
 package com.patris.model;
 
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -31,8 +32,13 @@ public class Sinistre {
     private String description;
     
     private String referenceAssurance;
+    private String numeroDossierAssureur;
+    private Double montantIndemnise;
+    private String datePaiement;
+    private String piecesJointes;
     private String lieuSinistre;
     private java.time.LocalDate dateCloture;
+    private String gravite;
     
     @Enumerated(EnumType.STRING)
     private com.patris.enums.statutSinistre statut;
@@ -40,4 +46,25 @@ public class Sinistre {
     @ManyToOne
     @JoinColumn(name = "bien_id")
     private Bien bien;
+
+    @JsonProperty("referencePolice")
+    public String getReferencePolice() {
+        return referenceAssurance;
+    }
+
+    @JsonProperty("referencePolice")
+    public void setReferencePolice(String referencePolice) {
+        this.referenceAssurance = referencePolice;
+    }
+
+    @JsonProperty("montantRembourse")
+    public Double getMontantRembourseAlias() {
+        return montantIndemnise != null ? montantIndemnise : montantRembourse;
+    }
+
+    @JsonProperty("montantRembourse")
+    public void setMontantRembourseAlias(Double montant) {
+        this.montantRembourse = montant;
+        this.montantIndemnise = montant;
+    }
 }

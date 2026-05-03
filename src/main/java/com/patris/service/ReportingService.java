@@ -46,7 +46,7 @@ public class ReportingService {
             for (Bien bien : biens) {
                 document.add(new Paragraph("IUP: " + bien.getIup()));
                 document.add(new Paragraph("Désignation: " + bien.getDesignation()));
-                document.add(new Paragraph("Catégorie: " + bien.getCategorie()));
+                document.add(new Paragraph("Catégorie: " + (bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : "N/A")));
                 document.add(new Paragraph("Valeur: " + bien.getValeur()));
                 document.add(new Paragraph("VNC: " + bien.getValeurNetteComptable()));
                 document.add(new Paragraph("---"));
@@ -85,7 +85,7 @@ public class ReportingService {
                 Row row = sheet.createRow(rowNum++);
                 row.createCell(0).setCellValue(bien.getIup());
                 row.createCell(1).setCellValue(bien.getDesignation());
-                row.createCell(2).setCellValue(bien.getCategorie().name());
+                row.createCell(2).setCellValue(bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : "N/A");
                 row.createCell(3).setCellValue(bien.getValeur());
                 row.createCell(4).setCellValue(bien.getValeurNetteComptable());
                 row.createCell(5).setCellValue(bien.getDateAcquisition().toString());

@@ -47,9 +47,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/upload/**").permitAll()
                 .requestMatchers("/utilisateurs/register").permitAll()
+                .requestMatchers("/api/utilisateurs/register").permitAll()
                 .requestMatchers("/h2/**").permitAll()
                 .requestMatchers("/error").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
+                .requestMatchers("/api/biens/scan/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // PERMISSIONS ENDPOINT (Authentifié seulement)

@@ -1,20 +1,28 @@
 package com.patris.service;
 
-import com.patris.dto.BienDto;
-import com.patris.model.Bien;
-import com.patris.enums.categorie;
+import com.patris.dto.*;
+import com.patris.model.*;
 import com.patris.enums.statutValidation;
-import com.patris.repository.BienRepository;
+import com.patris.enums.statutOperationnel;
+import com.patris.enums.type_mouvement;
+import com.patris.event.BienCreatedFromStockEvent;
+import com.patris.repository.*;
+import com.patris.audit.AuditLog;
+import com.patris.audit.AuditLogRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.Period;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +31,16 @@ public class BienService {
 
     private final BienRepository bienRepository;
     private final IupService iupService;
+    private final CategoriePatrimoineRepository categoriePatrimoineRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    private final MouvementStockRepository mouvementStockRepository;
+    private final AffectationRepository affectationRepository;
+    private final EntretienRepository entretienRepository;
+    private final SinistreRepository sinistreRepository;
+    private final AuditLogRepository auditLogRepository;
+    private final StockRepository stockRepository;
+    private final BeneficiaireRepository beneficiaireRepository;
 
     public List<Bien> findAll() {
         return bienRepository.findAllByArchivedFalse();
@@ -36,6 +54,23 @@ public class BienService {
     public Bien findByIup(String iup) {
         return bienRepository.findByIupAndArchivedFalse(iup)
                 .orElseThrow(() -> new RuntimeException("Bien introuvable"));
+    }
+
+    public void validateIupUnicity(String iup) {
+        if (bienRepository.existsByIup(iup)) {
+            throw new RuntimeException("L'IUP " + iup + " existe déjà dans le système.");
+        }
+    }
+
+    public boolean isIupUnique(String iup) {
+        return iup != null && !iup.isBlank() && !bienRepository.existsByIup(iup);
+    }
+
+    public boolean isImmatriculationUnique(String immatriculation, Long excludeId) {
+        if (immatriculation == null || immatriculation.isBlank()) {
+            return false;
+        }
+        return !bienRepository.existsActiveImmatriculation(immatriculation.trim(), excludeId);
     }
 
     public double calculValeurNette(Bien bien){
@@ -56,11 +91,9 @@ public class BienService {
         LocalDate dateDepart = bien.getDateAcquisition() != null ? bien.getDateAcquisition() : LocalDate.now();
         LocalDate now = LocalDate.now();
         
-        // Calculer la différence en jours pour plus de précision
         long joursEcoules = java.time.temporal.ChronoUnit.DAYS.between(dateDepart, now);
         double anneesEcoulees = joursEcoules / 365.25;
         
-        // Plafonner les années écoulées à la durée d'amortissement
         anneesEcoulees = Math.max(0, Math.min(anneesEcoulees, (double) bien.getDureeAmortissement()));
         
         double amortissementAnnuel = bien.getValeur() / bien.getDureeAmortissement();
@@ -76,17 +109,28 @@ public class BienService {
         return bien.getValeurNetteComptable();
     }
 
-    public Double valeurTotalePatrimoine(){
-        return bienRepository.findAll().stream().mapToDouble(Bien::getValeur).sum();
+    @Transactional
+    public Bien saveBien(Bien bien) {
+        return saveBien(bien, null, null, null);
     }
 
-    public Bien saveBien(Bien bien) {
+    @Transactional
+    public Bien saveBien(Bien bien, Long sourceStockId, Integer quantite) {
+        return saveBien(bien, sourceStockId, quantite, null);
+    }
+
+    @Transactional
+    public Bien saveBien(Bien bien, Long sourceStockId, Integer quantite, Long sourceBeneficiaireId) {
         if (bien.getIup() == null || bien.getIup().isBlank()) {
-            String iup = iupService.generateIup(bien.getCategorie());
+            String codeCat = bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie();
+            String iup = iupService.generateIup(codeCat);
             bien.setIup(iup);
             if (bien.getCodeBien() == null || bien.getCodeBien().isBlank()) {
                 bien.setCodeBien(iup);
             }
+        } else {
+            // Si l'IUP est fourni manuellement, on vérifie qu'il n'existe pas déjà
+            validateIupUnicity(bien.getIup());
         }
 
         if (bien.getStatutValidation() == null) {
@@ -101,14 +145,20 @@ public class BienService {
             bien.setValeur(0);
         }
 
-        if (bien.getQuantite() == null || bien.getQuantite() <= 0) {
-            bien.setQuantite(1);
-        }
-
-        // Automatisation des calculs comptables
         bien.setValeurNetteComptable(calculValeurNette(bien));
 
-        return bienRepository.save(bien);
+        Bien saved = bienRepository.save(bien);
+
+        if (sourceStockId != null && quantite != null && quantite > 0) {
+            if (sourceBeneficiaireId == null) {
+                throw new IllegalArgumentException(
+                    "sourceBeneficiaireId est obligatoire lorsque sourceStockId et sourceStockQuantite sont renseignés.");
+            }
+            eventPublisher.publishEvent(new BienCreatedFromStockEvent(
+                    this, saved.getId(), sourceStockId, quantite, sourceBeneficiaireId));
+        }
+
+        return saved;
     }
 
     public Bien fromDto(BienDto dto) {
@@ -116,215 +166,185 @@ public class BienService {
             throw new IllegalArgumentException("Donnée Bien invalide");
         }
 
-        try {
-            Bien bien = new Bien();
-            bien.setId(dto.getId());
-            bien.setCodeBien(dto.getCodeBien() != null ? dto.getCodeBien() : "");
-            bien.setIup(dto.getIup() != null ? dto.getIup() : "");
-            bien.setDesignation(dto.getDesignation() != null ? dto.getDesignation() : "");
-            bien.setCategorie(parseCategorie(dto.getCategorie()));
-            bien.setCategoriePrincipale(dto.getCategoriePrincipale());
-            bien.setCodeFamille(dto.getCodeFamille());
-            bien.setFamilleCatalogue(dto.getFamilleCatalogue());
-            bien.setCodeSousCategorie(dto.getCodeSousCategorie());
-            bien.setSousCategorie(dto.getSousCategorie());
-            bien.setSectionCatalogue(dto.getSectionCatalogue());
-            bien.setProfilFormulaire(dto.getProfilFormulaire());
-            bien.setDateAcquisition(parseDate(dto.getDateAcquisition()));
-
-            // Numeric fields
-            bien.setValeur(dto.getValeur() != null ? dto.getValeur() : 0);
-            bien.setEtat(dto.getEtat() != null ? dto.getEtat() : "NEUF");
-            bien.setLocalisation(dto.getLocalisation() != null ? dto.getLocalisation() : "");
-
-            String gps = (dto.getCoordonneesGps() != null && !dto.getCoordonneesGps().isBlank()) 
-                         ? dto.getCoordonneesGps() 
-                         : dto.getCoordonneeGps();
-            bien.setCoordonneeGps(gps != null ? gps : "");
-            bien.setCoordonneesGps(gps != null ? gps : "");
-
-            bien.setPhotoUrl(dto.getPhotoUrl());
-            bien.setObservation(dto.getObservation());
-
-            bien.setNumInventaire(dto.getNumInventaire() != null ? dto.getNumInventaire() : "");
-            bien.setTitreFoncier(dto.getTitreFoncier() != null ? dto.getTitreFoncier() : "");
-            bien.setSuperficie(dto.getSuperficie() != null ? dto.getSuperficie() : "");
-            bien.setModeAcquisition(dto.getModeAcquisition() != null ? dto.getModeAcquisition() : "");
-            bien.setImmatriculation(dto.getImmatriculation() != null ? dto.getImmatriculation() : "");
-            bien.setNumChassis(dto.getNumChassis() != null ? dto.getNumChassis() : "");
-            bien.setMarque(dto.getMarque() != null ? dto.getMarque() : "");
-            bien.setModele(dto.getModele() != null ? dto.getModele() : "");
-            bien.setNumSerie(dto.getNumSerie() != null ? dto.getNumSerie() : "");
-            bien.setFabricant(dto.getFabricant() != null ? dto.getFabricant() : "");
-            bien.setDureeAmortissement(dto.getDureeAmortissement() != null ? dto.getDureeAmortissement() : 0);
-            bien.setDureeVie(dto.getDureeVie() != null ? dto.getDureeVie() : 0);
-            bien.setTauxAmortissement(dto.getTauxAmortissement() != null ? dto.getTauxAmortissement() : 0.0);
-            bien.setValeurNetteComptable(dto.getValeurNetteComptable() != null ? dto.getValeurNetteComptable() : 0.0);
-            bien.setValeurComptable(dto.getValeurComptable() != null ? dto.getValeurComptable() : 0.0);
-            bien.setAmortissementCumule(dto.getAmortissementCumule() != null ? dto.getAmortissementCumule() : 0.0);
-            bien.setValiderPar(dto.getValiderPar() != null ? dto.getValiderPar() : "");
-            bien.setDateValidation(parseDateTime(dto.getDateValidation()));
-            bien.setStatutValidation(parseStatut(dto.getStatutValidation()));
-            
-            // Nouveau statut opÃ©rationnel
-            if (dto.getStatutOperationnel() != null) {
-                try {
-                    bien.setStatutOperationnel(com.patris.enums.statutOperationnel.valueOf(dto.getStatutOperationnel()));
-                } catch (Exception e) {
-                    bien.setStatutOperationnel(com.patris.enums.statutOperationnel.ACTIF);
-                }
-            }
-            
-            // Nouveaux champs innovants
-            bien.setStatutJuridique(dto.getStatutJuridique());
-            bien.setChargeUtile(dto.getChargeUtile());
-            bien.setTypeBoite(dto.getTypeBoite());
-            bien.setFinGarantie(parseOptionalDate(dto.getFinGarantie()));
-            bien.setDateMaintenance(parseOptionalDate(dto.getDateMaintenance()));
-            bien.setDateDernierEntretien(parseOptionalDate(dto.getDateDernierEntretien()));
-            bien.setDateProchaineMaintenance(parseOptionalDate(dto.getDateProchaineMaintenance()));
-            bien.setDateProchaineVisiteTechnique(parseOptionalDate(dto.getDateProchaineVisiteTechnique()));
-            bien.setQuantite(dto.getQuantite() != null && dto.getQuantite() > 0 ? dto.getQuantite() : 1);
-            bien.setPermisOccuper(dto.isPermisOccuper());
-
-            bien.setArchived(dto.getArchived() != null ? dto.getArchived() : false);
-
-            return bien;
-        } catch (Exception e) {
-            log.error("Erreur lors de la conversion DTO -> Bien : {}", e.getMessage());
-            throw e;
+        Bien bien;
+        if (dto instanceof BienImmobilierDto) {
+            bien = new BienImmobilier();
+            mapImmobilier((BienImmobilierDto) dto, (BienImmobilier) bien);
+        } else if (dto instanceof BienMobilierDto) {
+            bien = new BienMobilier();
+            mapMobilier((BienMobilierDto) dto, (BienMobilier) bien);
+        } else if (dto instanceof BienMaterielRoulantDto) {
+            bien = new BienMaterielRoulant();
+            mapRoulant((BienMaterielRoulantDto) dto, (BienMaterielRoulant) bien);
+        } else {
+            // Par défaut, fallback sur Mobilier si non spécifié
+            bien = new BienMobilier();
         }
-    }
 
-    private categorie parseCategorie(String categorieStr) {
-        if (categorieStr == null || categorieStr.isBlank()) {
-            return categorie.MOBILIER;
-        }
-        try {
-            return categorie.valueOf(categorieStr.trim().toUpperCase());
-        } catch (Exception e) {
-            return categorie.MOBILIER;
-        }
-    }
-
-    private LocalDate parseDate(String date) {
-        if (date == null || date.isBlank()) {
-            return LocalDate.now();
-        }
-        try {
-            // Gère les formats AAAA-MM-JJ, JJ-MM-AAAA et JJ/MM/AAAA
-            String cleanDate = date.replace("/", "-");
-            if (cleanDate.matches("\\d{4}-\\d{2}-\\d{2}")) {
-                return LocalDate.parse(cleanDate);
-            }
-            // Essaye le format d-M-yyyy (1-1-2024)
-            return LocalDate.parse(cleanDate, java.time.format.DateTimeFormatter.ofPattern("d-M-yyyy"));
-        } catch (Exception e) {
-            return LocalDate.now();
-        }
-    }
-
-    private LocalDate parseOptionalDate(String date) {
-        if (date == null || date.isBlank()) {
-            return null;
-        }
-        return parseDate(date);
-    }
-
-    private statutValidation parseStatut(String statut) {
-        if (statut == null || statut.isBlank()) {
-            return statutValidation.EN_ATTENTE;
-        }
-        return statutValidation.from(statut);
-    }
-
-    private LocalDateTime parseDateTime(String dateTime) {
-        if (dateTime == null || dateTime.isBlank()) {
-            return null;
-        }
-        try {
-            if (dateTime.length() == 10) {
-                return LocalDate.parse(dateTime).atStartOfDay();
-            }
-            if (dateTime.contains("/")) {
-                LocalDate d = LocalDate.parse(dateTime.replace("/", "-"), java.time.format.DateTimeFormatter.ofPattern("d-M-yyyy"));
-                return d.atStartOfDay();
-            }
-            return LocalDateTime.parse(dateTime);
-        } catch (Exception e) {
-            try {
-                return LocalDate.parse(dateTime).atStartOfDay();
-            } catch (Exception ex) {
-                return null;
-            }
-        }
-    }
-
-
-
-
-    public Bien update(Long id, Bien b){
-        Bien bien = findById(id);
-        bien.setCodeBien(b.getCodeBien());
-        if (b.getIup() != null && !b.getIup().isBlank()) {
-            bien.setIup(b.getIup());
-        }
-        bien.setDesignation(b.getDesignation());
-        bien.setCategoriePrincipale(b.getCategoriePrincipale());
-        bien.setCodeFamille(b.getCodeFamille());
-        bien.setFamilleCatalogue(b.getFamilleCatalogue());
-        bien.setCodeSousCategorie(b.getCodeSousCategorie());
-        bien.setSousCategorie(b.getSousCategorie());
-        bien.setSectionCatalogue(b.getSectionCatalogue());
-        bien.setProfilFormulaire(b.getProfilFormulaire());
-        bien.setCategorie(b.getCategorie());
-        bien.setDateAcquisition(b.getDateAcquisition());
-        bien.setValeur(b.getValeur());
-        bien.setEtat(b.getEtat());
-        bien.setLocalisation(b.getLocalisation());
-        bien.setCoordonneesGps(b.getCoordonneesGps());
-        bien.setPhotoUrl(b.getPhotoUrl());
-        bien.setObservation(b.getObservation());
-        bien.setDureeAmortissement(b.getDureeAmortissement());
-        bien.setDureeVie(b.getDureeVie());
-        bien.setTauxAmortissement(b.getTauxAmortissement());
-        bien.setValeurNetteComptable(b.getValeurNetteComptable());
-        bien.setValeurComptable(b.getValeurComptable());
-        bien.setAmortissementCumule(b.getAmortissementCumule());
-        bien.setStatutValidation(b.getStatutValidation());
-        bien.setDateValidation(b.getDateValidation());
-        bien.setNumInventaire(b.getNumInventaire());
-        bien.setTitreFoncier(b.getTitreFoncier());
-        bien.setSuperficie(b.getSuperficie());
-        bien.setModeAcquisition(b.getModeAcquisition());
-        bien.setImmatriculation(b.getImmatriculation());
-        bien.setNumChassis(b.getNumChassis());
-        bien.setMarque(b.getMarque());
-        bien.setModele(b.getModele());
-        bien.setNumSerie(b.getNumSerie());
-        bien.setFabricant(b.getFabricant());
+        // Champs communs
+        bien.setId(dto.getId());
+        bien.setCodeBien(dto.getCodeBien() != null ? dto.getCodeBien() : "");
+        bien.setIup(dto.getIup() != null ? dto.getIup() : "");
+        bien.setDesignation(dto.getDesignation() != null ? dto.getDesignation() : "");
         
-        // Nouveaux champs
-        bien.setStatutOperationnel(b.getStatutOperationnel());
-        bien.setStatutJuridique(b.getStatutJuridique());
-        bien.setChargeUtile(b.getChargeUtile());
-        bien.setTypeBoite(b.getTypeBoite());
-        bien.setFinGarantie(b.getFinGarantie());
-        bien.setDateMaintenance(b.getDateMaintenance());
-        bien.setDateDernierEntretien(b.getDateDernierEntretien());
-        bien.setDateProchaineMaintenance(b.getDateProchaineMaintenance());
-        bien.setDateProchaineVisiteTechnique(b.getDateProchaineVisiteTechnique());
-        bien.setQuantite(b.getQuantite());
-        bien.setPermisOccuper(b.isPermisOccuper());
+        bien.setCodeCategorie(dto.getCodeCategorie());
+        bien.setCodeFamille(dto.getCodeFamille());
+        bien.setCodeSousCategorie(dto.getCodeSousCategorie());
+        bien.setCodeArticle(dto.getCodeArticle());
+        
+        bien.setDateAcquisition(parseDate(dto.getDateAcquisition()));
+        bien.setValeur(dto.getValeur() != null ? dto.getValeur() : 0);
+        bien.setEtat(dto.getEtat() != null ? dto.getEtat() : "NEUF");
+        bien.setLocalisation(dto.getLocalisation() != null ? dto.getLocalisation() : "");
+        bien.setService(dto.getService() != null ? dto.getService() : "");
+        bien.setPhotoUrl(dto.getPhotoUrl());
+        bien.setObservation(dto.getObservation());
+        bien.setModeAcquisition(dto.getModeAcquisition() != null ? dto.getModeAcquisition() : "");
 
-        // Automatisation des calculs comptables
-        bien.setValeurNetteComptable(calculValeurNette(bien));
+        bien.setDureeAmortissement(dto.getDureeAmortissement() != null ? dto.getDureeAmortissement() : 0);
+        bien.setTauxAmortissement(dto.getTauxAmortissement() != null ? dto.getTauxAmortissement() : 0.0);
+        bien.setValeurNetteComptable(dto.getValeurNetteComptable() != null ? dto.getValeurNetteComptable() : 0.0);
+        bien.setValeurComptable(dto.getValeurComptable() != null ? dto.getValeurComptable() : 0.0);
+        bien.setAmortissementCumule(dto.getAmortissementCumule() != null ? dto.getAmortissementCumule() : 0.0);
 
-        // Enregistrement sans bloquer les catégories non-MOBILIER
-        return bienRepository.save(bien);
+        bien.setValiderPar(dto.getValiderPar() != null ? dto.getValiderPar() : "");
+        bien.setDateValidation(parseDateTime(dto.getDateValidation()));
+        bien.setStatutValidation(parseStatut(dto.getStatutValidation()));
+
+        if (dto.getStatutOperationnel() != null) {
+            try {
+                bien.setStatutOperationnel(statutOperationnel.valueOf(dto.getStatutOperationnel()));
+            } catch (Exception e) {
+                bien.setStatutOperationnel(statutOperationnel.ACTIF);
+            }
+        }
+        
+        bien.setArchived(dto.getArchived() != null ? dto.getArchived() : false);
+
+        return bien;
+    }
+
+    private void mapImmobilier(BienImmobilierDto dto, BienImmobilier bien) {
+        bien.setTitreFoncier(dto.getTitreFoncier());
+        bien.setSuperficie(dto.getSuperficie());
+        bien.setCoordonneesGps(dto.getCoordonneesGps());
+        bien.setUsageImmobilier(dto.getUsageImmobilier());
+        bien.setPermisOccuper(dto.getPermisOccuper() != null ? dto.getPermisOccuper() : false);
+        bien.setStatutJuridique(dto.getStatutJuridique());
+    }
+
+    private void mapMobilier(BienMobilierDto dto, BienMobilier bien) {
+        bien.setNumSerie(dto.getNumSerie());
+        bien.setFabricant(dto.getFabricant());
+        bien.setSpecificationsTechniques(dto.getSpecificationsTechniques());
+        bien.setFinGarantie(parseOptionalDate(dto.getFinGarantie()));
+        bien.setDateDernierEntretien(parseOptionalDate(dto.getDateDernierEntretien()));
+        bien.setDateProchaineMaintenance(parseOptionalDate(dto.getDateProchaineMaintenance()));
+    }
+
+    private void mapRoulant(BienMaterielRoulantDto dto, BienMaterielRoulant bien) {
+        bien.setImmatriculation(dto.getImmatriculation());
+        bien.setNumChassis(dto.getNumChassis());
+        bien.setMarque(dto.getMarque());
+        bien.setModele(dto.getModele());
+        bien.setPuissanceFiscale(dto.getPuissanceFiscale());
+        bien.setTypeCarburant(dto.getTypeCarburant());
+        bien.setTypeBoite(dto.getTypeBoite());
+        bien.setChargeUtile(dto.getChargeUtile());
+        bien.setDateProchaineVisiteTechnique(parseOptionalDate(dto.getDateProchaineVisiteTechnique()));
+    }
+
+    @Transactional
+    public Bien update(Long id, Bien b){
+        // Simplification pour l'instant : on supprime et on recrée si le type change (rare).
+        // En général on met à jour les champs sans changer le type.
+        Bien existing = findById(id);
+        
+        String ancienneVal = "{\"valeur\":" + existing.getValeur() + ", \"localisation\":\"" + existing.getLocalisation() + "\", \"service\":\"" + existing.getService() + "\"}";
+
+        // Copie des champs communs
+        existing.setCodeBien(b.getCodeBien());
+        if (b.getIup() != null && !b.getIup().isBlank()) {
+            existing.setIup(b.getIup());
+        }
+        existing.setDesignation(b.getDesignation());
+        existing.setCodeCategorie(b.getCodeCategorie());
+        existing.setCodeFamille(b.getCodeFamille());
+        existing.setCodeSousCategorie(b.getCodeSousCategorie());
+        existing.setCodeArticle(b.getCodeArticle());
+        existing.setDateAcquisition(b.getDateAcquisition());
+        existing.setValeur(b.getValeur());
+        existing.setEtat(b.getEtat());
+        existing.setLocalisation(b.getLocalisation());
+        existing.setService(b.getService());
+        existing.setPhotoUrl(b.getPhotoUrl());
+        existing.setObservation(b.getObservation());
+        existing.setDureeAmortissement(b.getDureeAmortissement());
+        existing.setStatutValidation(b.getStatutValidation());
+        existing.setDateValidation(b.getDateValidation());
+        existing.setModeAcquisition(b.getModeAcquisition());
+        existing.setStatutOperationnel(b.getStatutOperationnel());
+
+        // Copie polymorphique
+        if (existing instanceof BienImmobilier && b instanceof BienImmobilier) {
+            BienImmobilier ei = (BienImmobilier) existing;
+            BienImmobilier bi = (BienImmobilier) b;
+            ei.setTitreFoncier(bi.getTitreFoncier());
+            ei.setSuperficie(bi.getSuperficie());
+            ei.setCoordonneesGps(bi.getCoordonneesGps());
+            ei.setUsageImmobilier(bi.getUsageImmobilier());
+            ei.setPermisOccuper(bi.getPermisOccuper());
+            ei.setStatutJuridique(bi.getStatutJuridique());
+        } else if (existing instanceof BienMobilier && b instanceof BienMobilier) {
+            BienMobilier em = (BienMobilier) existing;
+            BienMobilier bm = (BienMobilier) b;
+            em.setNumSerie(bm.getNumSerie());
+            em.setFabricant(bm.getFabricant());
+            em.setSpecificationsTechniques(bm.getSpecificationsTechniques());
+            em.setFinGarantie(bm.getFinGarantie());
+            em.setDateDernierEntretien(bm.getDateDernierEntretien());
+            em.setDateProchaineMaintenance(bm.getDateProchaineMaintenance());
+        } else if (existing instanceof BienMaterielRoulant && b instanceof BienMaterielRoulant) {
+            BienMaterielRoulant er = (BienMaterielRoulant) existing;
+            BienMaterielRoulant br = (BienMaterielRoulant) b;
+            er.setImmatriculation(br.getImmatriculation());
+            er.setNumChassis(br.getNumChassis());
+            er.setMarque(br.getMarque());
+            er.setModele(br.getModele());
+            er.setPuissanceFiscale(br.getPuissanceFiscale());
+            er.setTypeCarburant(br.getTypeCarburant());
+            er.setTypeBoite(br.getTypeBoite());
+            er.setChargeUtile(br.getChargeUtile());
+            er.setDateProchaineVisiteTechnique(br.getDateProchaineVisiteTechnique());
         }
 
-    public Bien validate(Long id, com.patris.enums.statutValidation statut, String user) {
+        existing.setValeurNetteComptable(calculValeurNette(existing));
+        Bien updated = bienRepository.save(existing);
+
+        String nouvelleVal = "{\"valeur\":" + updated.getValeur() + ", \"localisation\":\"" + updated.getLocalisation() + "\", \"service\":\"" + updated.getService() + "\"}";
+
+        AuditLog logEntry = new AuditLog();
+        logEntry.setAction("BIEN_MODIFIE");
+        logEntry.setEntite("Bien");
+        logEntry.setEntiteId(updated.getId());
+        logEntry.setDateAction(LocalDateTime.now());
+        logEntry.setDetail("Modification des informations du bien");
+        logEntry.setAncienneValeur(ancienneVal);
+        logEntry.setNouvelleValeur(nouvelleVal);
+        String username = "system";
+        try {
+            if (org.springframework.security.core.context.SecurityContextHolder.getContext() != null && 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null) {
+                username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            }
+        } catch (Exception e) {}
+        logEntry.setUsername(username);
+        auditLogRepository.save(logEntry);
+
+        return updated;
+    }
+
+    public Bien validate(Long id, statutValidation statut, String user) {
         Bien bien = findById(id);
         bien.setStatutValidation(statut);
         bien.setValiderPar(user);
@@ -336,7 +356,230 @@ public class BienService {
         Bien bien = findById(id);
         bien.setArchived(true);
         bienRepository.save(bien);
+
+        AuditLog logEntry = new AuditLog();
+        logEntry.setAction("BIEN_ARCHIVE");
+        logEntry.setEntite("Bien");
+        logEntry.setEntiteId(id);
+        logEntry.setDateAction(LocalDateTime.now());
+        logEntry.setDetail("Archivage du bien");
+        String username = "system";
+        try {
+            if (org.springframework.security.core.context.SecurityContextHolder.getContext() != null && 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null) {
+                username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            }
+        } catch (Exception e) {}
+        logEntry.setUsername(username);
+        auditLogRepository.save(logEntry);
     }
 
-}
+    @Transactional
+    public Bien changerStatut(Long bienId, String nouveauStatut, String nouveauService, String acteur) {
+        Bien bien = findById(bienId);
 
+        statutOperationnel statut;
+        try {
+            statut = statutOperationnel.valueOf((nouveauStatut == null ? "ACTIF" : nouveauStatut).trim().toUpperCase());
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Statut operationnel invalide: " + nouveauStatut);
+        }
+
+        bien.setStatutOperationnel(statut);
+        if (nouveauService != null) {
+            bien.setService(nouveauService);
+        }
+
+        Bien updated = bienRepository.save(bien);
+
+        AuditLog logEntry = new AuditLog();
+        logEntry.setAction("CHANGEMENT_STATUT_BIEN");
+        logEntry.setEntite("Bien");
+        logEntry.setEntiteId(updated.getId());
+        logEntry.setUsername(acteur != null && !acteur.isBlank() ? acteur : "systeme");
+        logEntry.setDateAction(LocalDateTime.now());
+        logEntry.setDetail("{\"statutOperationnel\":\"" + statut.name() + "\",\"service\":\"" + (updated.getService() == null ? "" : updated.getService()) + "\"}");
+        auditLogRepository.save(logEntry);
+
+        return updated;
+    }
+
+    public List<HistoriqueBienDto> getHistorique(Long id) {
+        Bien bien = findById(id);
+        List<HistoriqueBienDto> historique = new ArrayList<>();
+
+        // 1. Mouvements de Stock (Entrée/Sortie/Transformation)
+        mouvementStockRepository.findByBienCreeIdOrderByDateMouvementDesc(id).forEach(mvt -> {
+            historique.add(HistoriqueBienDto.builder()
+                .date(mvt.getDateMouvement())
+                .typeEvenement("MOUVEMENT_STOCK")
+                .description("Mouvement de type " + mvt.getTypeMouvement())
+                .utilisateur("Système")
+                .details("Quantité: " + mvt.getQuantite() + ", Réf: " + mvt.getReferencePiece())
+                .build());
+        });
+
+        // 2. Affectations
+        affectationRepository.findByBienIdOrderByDateAffectationDesc(id).forEach(aff -> {
+            historique.add(HistoriqueBienDto.builder()
+                .date(aff.getDateAffectation())
+                .typeEvenement("AFFECTATION")
+                .description("Affectation à " + (aff.getBeneficiaire() != null ? aff.getBeneficiaire().getNom() : "N/A"))
+                .utilisateur(aff.getValidePar())
+                .details("Service: " + (aff.getServices() != null ? aff.getServices().getNomService() : "N/A"))
+                .build());
+        });
+
+        // 3. Entretiens
+        entretienRepository.findByBienId(id).forEach(ent -> {
+            LocalDate d = ent.getDateRealisee() != null ? ent.getDateRealisee() : ent.getDatePrevue();
+            historique.add(HistoriqueBienDto.builder()
+                .date(d != null ? d.atStartOfDay() : null)
+                .typeEvenement("ENTRETIEN")
+                .description("Entretien : " + (ent.getObservation() != null ? ent.getObservation() : "Maintenance"))
+                .utilisateur("N/A")
+                .details("Coût: " + ent.getCout() + ", Prestataire: " + ent.getPrestataire())
+                .build());
+        });
+
+        // 4. Sinistres
+        sinistreRepository.findByBienId(id).forEach(sin -> {
+            LocalDateTime dateS = null;
+            if (sin.getDateSinistre() != null) {
+                try {
+                    dateS = LocalDateTime.parse(sin.getDateSinistre());
+                } catch (Exception e) {
+                    try {
+                        dateS = LocalDate.parse(sin.getDateSinistre()).atStartOfDay();
+                    } catch (Exception e2) {
+                        // Ignore
+                    }
+                }
+            }
+            historique.add(HistoriqueBienDto.builder()
+                .date(dateS)
+                .typeEvenement("SINISTRE")
+                .description("Sinistre : " + sin.getType())
+                .utilisateur("N/A")
+                .details("Gravité: " + sin.getStatut() + ", Description: " + sin.getDescription())
+                .build());
+        });
+
+        // 5. Audit Logs
+        auditLogRepository.findByEntiteAndEntiteIdOrderByDateActionDesc("Bien", id).forEach(audit -> {
+            historique.add(HistoriqueBienDto.builder()
+                .date(audit.getDateAction())
+                .typeEvenement("AUDIT")
+                .description(audit.getAction())
+                .utilisateur(audit.getUsername())
+                .details("Action effectuée sur l'entité Bien")
+                .build());
+        });
+        return historique.stream()
+            .sorted(Comparator.comparing(HistoriqueBienDto::getDate, Comparator.nullsLast(Comparator.reverseOrder())))
+            .collect(Collectors.toList());
+    }
+
+    public IdentificationDto getIdentificationData(String iup) {
+        Bien bien = findByIup(iup);
+        return IdentificationDto.builder()
+            .iup(bien.getIup())
+            .designation(bien.getDesignation())
+            .service(bien.getService())
+            .localisation(bien.getLocalisation())
+            .dateIdentification(LocalDateTime.now().toString())
+            .qrCodeUrl("/api/identification/qr/" + bien.getIup())
+            .build();
+    }
+
+    /**
+     * Crée un Bien immobilisé à partir d'un article en stock (consommable).
+     * Réalise la décrémentation du stock et la création du mouvement de sortie.
+     */
+    @Transactional
+    public Bien createFromConsommable(Long consommableId, int quantite, BienDto bienDto, Long magasinId) {
+        // 1. Vérifier stock disponible
+        Stock stock = stockRepository.findByConsommableIdAndMagasinId(consommableId, magasinId)
+                .orElseThrow(() -> new RuntimeException("Stock introuvable pour ce consommable dans ce magasin"));
+
+        if (stock.getQuantite() < quantite) {
+            throw new RuntimeException("Stock insuffisant (disponible: " + stock.getQuantite() + ")");
+        }
+
+        // 2. Préparer et Créer le Bien
+        Bien bien = fromDto(bienDto);
+        
+        // Auto-génération de l'IUP si non fourni
+        if (bien.getIup() == null || bien.getIup().isBlank()) {
+            String codeCat = bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie();
+            bien.setIup(iupService.generateIup(codeCat));
+        }
+
+        Bien savedBien = bienRepository.save(bien);
+
+        // 3. Créer MouvementStock SORTIE
+        MouvementStock mvt = new MouvementStock();
+        mvt.setStock(stock);
+        mvt.setMagasin(stock.getMagasin());
+        mvt.setTypeMouvement(type_mouvement.SORTIE);
+        mvt.setQuantite(quantite);
+        mvt.setDateMouvement(LocalDateTime.now());
+        mvt.setReferencePiece("IMMOBILISATION_" + savedBien.getIup());
+        mvt.setBienCree(savedBien);
+        mvt.setEstValide(true);
+        
+        if (bienDto.getSourceBeneficiaireId() != null) {
+            beneficiaireRepository.findById(bienDto.getSourceBeneficiaireId())
+                    .ifPresent(mvt::setBeneficiaire);
+        }
+        
+        mouvementStockRepository.save(mvt);
+
+        // 4. Décrémenter Stock
+        stock.setQuantite(stock.getQuantite() - quantite);
+        stockRepository.save(stock);
+
+        // 5. Audit Log
+        AuditLog logEntry = new AuditLog();
+        logEntry.setAction("IMMOBILISATION_DEPUIS_STOCK");
+        logEntry.setEntite("Bien");
+        logEntry.setEntiteId(savedBien.getId());
+        logEntry.setDateAction(LocalDateTime.now());
+        logEntry.setDetail("Création depuis stock consommable ID: " + consommableId);
+        auditLogRepository.save(logEntry);
+
+        return savedBien;
+    }
+
+    private LocalDate parseDate(String date) {
+        if (date == null || date.isBlank()) return LocalDate.now();
+        try {
+            String cleanDate = date.replace("/", "-");
+            if (cleanDate.matches("\\d{4}-\\d{2}-\\d{2}")) return LocalDate.parse(cleanDate);
+            return LocalDate.parse(cleanDate, java.time.format.DateTimeFormatter.ofPattern("d-M-yyyy"));
+        } catch (Exception e) {
+            return LocalDate.now();
+        }
+    }
+
+    private LocalDate parseOptionalDate(String date) {
+        if (date == null || date.isBlank()) return null;
+        return parseDate(date);
+    }
+
+    private statutValidation parseStatut(String statut) {
+        if (statut == null || statut.isBlank()) return statutValidation.EN_ATTENTE;
+        return statutValidation.from(statut);
+    }
+
+    private LocalDateTime parseDateTime(String dateTime) {
+        if (dateTime == null || dateTime.isBlank()) return null;
+        try {
+            if (dateTime.length() == 10) return LocalDate.parse(dateTime).atStartOfDay();
+            if (dateTime.contains("/")) return LocalDate.parse(dateTime.replace("/", "-"), java.time.format.DateTimeFormatter.ofPattern("d-M-yyyy")).atStartOfDay();
+            return LocalDateTime.parse(dateTime);
+        } catch (Exception e) {
+            try { return LocalDate.parse(dateTime).atStartOfDay(); } catch (Exception ex) { return null; }
+        }
+    }
+}

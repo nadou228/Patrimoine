@@ -3,6 +3,7 @@ package com.patris.dto;
 public class AffectationDto {
     private Long id;
     private String bien;
+    private Long beneficiaireId;
     private String detenteur;
     private String service;
     private String dateAffectation;
@@ -35,6 +36,8 @@ public class AffectationDto {
     public void setId(Long id) { this.id = id; }
     public String getBien() { return bien; }
     public void setBien(String bien) { this.bien = bien; }
+    public Long getBeneficiaireId() { return beneficiaireId; }
+    public void setBeneficiaireId(Long beneficiaireId) { this.beneficiaireId = beneficiaireId; }
     public String getDetenteur() { return detenteur; }
     public void setDetenteur(String detenteur) { this.detenteur = detenteur; }
     public String getService() { return service; }

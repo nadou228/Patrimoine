@@ -6,6 +6,7 @@ export interface Bien {
   iup: string;
   designation: string;
   categorie: string;
+  type?: "immobilier" | "mobilier" | "roulant";
   categoriePrincipale?: string;
   codeFamille?: string;
   familleCatalogue?: string;
@@ -51,6 +52,7 @@ export interface Bien {
   fabricant?: string;
 
   dateMaintenance?: string;
+  dateDernierEntretien?: string;
   dateProchaineMaintenance?: string;
   dateProchaineVisiteTechnique?: string;
   quantite?: number;
@@ -64,6 +66,9 @@ export interface Bien {
   statutJuridique?: string;
   finGarantie?: string;
   permisOccuper?: boolean;
+  documentsUrls?: string[];
+  serviceAffectataire?: string;
+  dateAffectation?: string;
 }
 
 export interface BienCatalogueItem {
@@ -103,8 +108,44 @@ const MOCK_BIENS: Bien[] = [
   },
 ];
 
-export const getBiens = async (): Promise<Bien[]> => {
-  const response = await api.get('/biens');
+export type BienPayload = Omit<Bien, "id"> & { id?: number | null };
+
+export type GenerateIupPayload = {
+  categorie: string;
+  annee: number;
+  prefixeMinistere: string;
+};
+
+export type GenerateIupResponse = {
+  iup: string;
+  prefixe?: string;
+  categorie?: string;
+  annee?: number;
+  sequence?: string;
+};
+
+export type ValidateIupResponse = {
+  unique: boolean;
+};
+
+export type ValidateImmatriculationResponse = {
+  unique: boolean;
+};
+
+export type QrCodeResponse = {
+  qrCodeBase64: string;
+};
+
+export type BienHistoriqueEntry = {
+  date?: string;
+  typeEvenement?: string;
+  description?: string;
+  utilisateur?: string;
+  details?: string;
+};
+
+export const getBiens = async (archived = false): Promise<Bien[]> => {
+  const response = await api.get('/biens', { params: { archived } });
   return response.data;
 };
 
@@ -113,13 +154,26 @@ export const getBienById = async (id: number): Promise<Bien> => {
   return response.data;
 };
 
-export const createBien = async (bien: any) => {
+export const searchBiens = async (query: string, archived = false): Promise<Bien[]> => {
+  const response = await api.get('/biens', { params: { q: query, archived } });
+  return response.data;
+};
+
+export const createBien = async (bien: BienPayload): Promise<Bien> => {
   const response = await api.post('/biens', bien);
   return response.data;
 };
 
-export const updateBien = async (id: number, bien: any) => {
+export const updateBien = async (id: number, bien: Partial<BienPayload>): Promise<Bien> => {
   const response = await api.put(`/biens/${id}`, bien);
+  return response.data;
+};
+
+export const updateBienStatus = async (
+  id: number,
+  payload: { statutOperationnel: string; service?: string; quantite?: number }
+): Promise<Bien> => {
+  const response = await api.put(`/biens/${id}/statut`, payload);
   return response.data;
 };
 
@@ -136,6 +190,31 @@ export const uploadBienPhoto = async (id: number, file: File) => {
   return response.data;
 };
 
+export const generateIup = async (payload: GenerateIupPayload): Promise<GenerateIupResponse> => {
+  const response = await api.post('/biens/generate-iup', payload);
+  return response.data;
+};
+
+export const validateIup = async (iup: string): Promise<ValidateIupResponse> => {
+  const response = await api.get('/biens/validate-iup', { params: { iup } });
+  return response.data;
+};
+
+export const validateImmatriculation = async (
+  immatriculation: string,
+  excludeId?: number | null
+): Promise<ValidateImmatriculationResponse> => {
+  const response = await api.get('/biens/validate-immatriculation', {
+    params: { immatriculation, excludeId: excludeId ?? undefined },
+  });
+  return response.data;
+};
+
+export const getBienQrCode = async (iup: string): Promise<QrCodeResponse> => {
+  const response = await api.get('/biens/qrcode', { params: { iup } });
+  return response.data;
+};
+
 export const validateBien = async (id: number, statut: string) => {
   const response = await api.put(`/biens/${id}/validate?statut=${statut}`);
   return response.data;
@@ -143,5 +222,33 @@ export const validateBien = async (id: number, statut: string) => {
 
 export const getBienCatalogue = async (): Promise<BienCatalogueItem[]> => {
   const response = await api.get('/biens/catalogue');
+  return response.data;
+};
+
+export const getBienHistorique = async (id: number): Promise<BienHistoriqueEntry[]> => {
+  const response = await api.get(`/biens/${id}/historique`);
+  return response.data;
+};
+
+export interface CategoriePatrimoineDto {
+  id: number;
+  code: string;
+  libelle: string;
+  niveau: string;
+  codeParent?: string;
+  icone?: string;
+  couleur?: string;
+  ordre: number;
+  actif: boolean;
+  enfants: CategoriePatrimoineDto[];
+}
+
+export const getCategoryTree = async (): Promise<CategoriePatrimoineDto[]> => {
+  const response = await api.get('/categories/tree');
+  return response.data;
+};
+
+export const getFlatCategories = async (): Promise<CategoriePatrimoineDto[]> => {
+  const response = await api.get('/categories/flat');
   return response.data;
 };

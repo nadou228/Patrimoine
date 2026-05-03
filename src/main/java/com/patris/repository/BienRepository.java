@@ -24,6 +24,9 @@ public interface BienRepository extends JpaRepository<Bien, Long> {
     @Query("SELECT MAX(b.iup) FROM Bien b WHERE b.iup LIKE :prefix%")
     String findMaxIupByPrefix(@Param("prefix") String prefix);
 
+    @Query(value = "SELECT nextval('iup_sequence')", nativeQuery = true)
+    Long getNextIupSequenceValue();
+
     @Query("SELECT b FROM Bien b WHERE b.archived = false AND b.id NOT IN (SELECT e.bien.id FROM Entretien e WHERE e.datePrevue >= :limite OR e.dateRealisee >= :limite)")
     List<Bien> findBiensSansEntretienDepuis(@Param("limite") LocalDate limite);
 
@@ -31,5 +34,16 @@ public interface BienRepository extends JpaRepository<Bien, Long> {
 
     List<Bien> findByLocalisationContainingAndArchivedFalse(String localisation);
 
-    List<Bien> findByCategorieAndArchivedFalse(com.patris.enums.categorie categorie);
+    List<Bien> findByCodeCategorieAndArchivedFalse(String codeCategorie);
+
+    List<Bien> findByCodeSousCategorieAndArchivedFalse(String codeSousCategorie);
+
+    @Query("""
+        SELECT CASE WHEN COUNT(b) > 0 THEN true ELSE false END
+        FROM BienMaterielRoulant b
+        WHERE b.archived = false
+          AND UPPER(b.immatriculation) = UPPER(:immatriculation)
+          AND (:excludeId IS NULL OR b.id <> :excludeId)
+    """)
+    boolean existsActiveImmatriculation(@Param("immatriculation") String immatriculation, @Param("excludeId") Long excludeId);
 }

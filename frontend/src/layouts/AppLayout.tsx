@@ -133,12 +133,13 @@ const AppLayout: React.FC = () => {
   const user = getCurrentUser();
   const { hasPermission, loading, permissions } = usePermissions();
   const [theme, setTheme] = useState<"light" | "dark">(
-    () => (localStorage.getItem("theme") as "light" | "dark") || "dark"
+    () => (localStorage.getItem("theme") as "light" | "dark") || "light"
   );
   const [operationsOpen, setOperationsOpen] = useState<boolean>(() => {
     const stored = localStorage.getItem("sidebar-ops-open");
     return stored ? stored === "true" : true;
   });
+  const [online, setOnline] = useState<boolean>(() => navigator.onLine);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
@@ -148,6 +149,17 @@ const AppLayout: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("sidebar-ops-open", String(operationsOpen));
   }, [operationsOpen]);
+
+  useEffect(() => {
+    const setConnected = () => setOnline(true);
+    const setDisconnected = () => setOnline(false);
+    window.addEventListener("online", setConnected);
+    window.addEventListener("offline", setDisconnected);
+    return () => {
+      window.removeEventListener("online", setConnected);
+      window.removeEventListener("offline", setDisconnected);
+    };
+  }, []);
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -190,8 +202,14 @@ const AppLayout: React.FC = () => {
       },
       {
         path: "/utilisateurs",
-        label: "Administration",
+        label: "Comptes",
         requiredPermission: "READ_USERS",
+        icon: <SettingsIcon />,
+      },
+      {
+        path: "/admin",
+        label: "Système",
+        requiredPermission: "ADMIN_SYSTEM",
         icon: <SettingsIcon />,
       },
     ],
@@ -199,11 +217,14 @@ const AppLayout: React.FC = () => {
   );
 
   const visibleItems = navItems.filter((item) => hasPermission(item.requiredPermission));
-  const primaryItems = visibleItems.filter((item) => !item.inOperations && item.path !== "/utilisateurs");
+  const primaryItems = visibleItems.filter(
+    (item) => !item.inOperations && item.path !== "/utilisateurs" && item.path !== "/admin"
+  );
   const operationItems = visibleItems.filter((item) => item.inOperations);
-  const adminItems = visibleItems.filter((item) => item.path === "/utilisateurs");
+  const adminItems = visibleItems.filter((item) => item.path === "/utilisateurs" || item.path === "/admin");
 
-  const isPathActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
+  const isPathActive = (path: string) =>
+    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
   const handleLogout = () => {
     logout();
@@ -222,6 +243,10 @@ const AppLayout: React.FC = () => {
         </div>
 
         <div className="sidebar-account">
+          <div className={`connectivity-indicator ${online ? "online" : "offline"}`}>
+            <span aria-hidden="true" />
+            {online ? "En ligne" : "Hors ligne"}
+          </div>
           <div className="sidebar-account-meta">
             <div className="user-avatar" aria-hidden="true">
               {user?.nom?.slice(0, 2).toUpperCase() || "PT"}

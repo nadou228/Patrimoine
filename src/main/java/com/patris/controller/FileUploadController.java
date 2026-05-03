@@ -29,10 +29,27 @@ public class FileUploadController {
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/plain",
+        "application/octet-stream",   // IMPORTANT : type générique que certains OS envoient
+        ""                             // IMPORTANT : certains navigateurs n'envoient pas de Content-Type
     );
 
     private final FileStorageService fileStorageService;
+
+    private boolean isDocumentAllowed(MultipartFile file) {
+        String ct = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
+        String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        
+        boolean validMime = DOCUMENT_TYPES.contains(ct);
+        boolean validExt = name.endsWith(".pdf") || name.endsWith(".doc") || name.endsWith(".docx")
+                        || name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".ppt")
+                        || name.endsWith(".pptx") || name.endsWith(".txt") || name.endsWith(".csv");
+        
+        return validMime || validExt;
+    }
 
     @PostMapping("/image")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam(value = "file", required = false) MultipartFile file) {
@@ -46,21 +63,17 @@ public class FileUploadController {
 
     private ResponseEntity<Map<String, String>> upload(MultipartFile file, String folder, List<String> allowedTypes) {
         Map<String, String> response = new HashMap<>();
-
-        if (file == null) {
-            response.put("error", "Le parametre 'file' est manquant.");
+        if (file == null || file.isEmpty()) {
+            response.put("error", "Fichier absent ou vide.");
             return ResponseEntity.badRequest().body(response);
         }
-
-        if (file.isEmpty()) {
-            response.put("error", "Le fichier est vide.");
-            return ResponseEntity.badRequest().body(response);
-        }
-
-        String contentType = file.getContentType() == null ? "" : file.getContentType();
-        if (!allowedTypes.contains(contentType)) {
-            response.put("error", "Type de fichier non autorise.");
-            response.put("contentType", contentType);
+        
+        // Utiliser la validation par extension en priorité
+        if (!isDocumentAllowed(file)) {
+            response.put("error", "Type de fichier non autorisé.");
+            response.put("contentType", file.getContentType());
+            response.put("filename", file.getOriginalFilename());
+            response.put("conseil", "Types acceptés : PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX");
             return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(response);
         }
 

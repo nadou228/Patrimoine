@@ -1,6 +1,7 @@
-import { utils, writeFile, type CellObject, type WorkBook, type WorkSheet } from "xlsx";
+import ExcelJS from 'exceljs';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { utils, writeFile, WorkBook, WorkSheet, CellObject } from "xlsx";
 
 export interface ExportUser {
   nom: string;
@@ -13,6 +14,9 @@ export interface ExportUser {
 type Primitive = string | number | boolean | null | undefined;
 type ExportRow = Record<string, Primitive>;
 type ColumnWidth = { wch: number };
+type Rgb = [number, number, number];
+type PdfGStateConstructor = new (options: { opacity: number }) => unknown;
+type JsPdfWithGState = jsPDF & { GState: PdfGStateConstructor };
 
 const INDIGO = [55, 48, 163] as const;
 const INDIGO_LIGHT = [238, 242, 255] as const;
@@ -43,6 +47,84 @@ const normalizeFilename = (filename: string, extension: ".xlsx" | ".pdf"): strin
 
 const safeSheetName = (value: string): string =>
   value.replace(/[\\/?*\[\]:]/g, " ").slice(0, 31) || "Export";
+
+async function createStyledWorkbook(title: string, columns: any[], rows: any[], user?: ExportUser): Promise<ExcelJS.Workbook> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'PATRIS ERP';
+  wb.created = new Date();
+  
+  const ws = wb.addWorksheet(title, {
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true }
+  });
+
+  // Couleurs de charte
+  const BLEU_INST = '1A3A6E';
+  const BLEU_COL  = '2F75B6';
+  const DORE      = 'C9A84C';
+  const VERT_PALE = 'E2EFDA';
+  const BLEU_PALE = 'EBF3FB';
+  const SOUS_TOT  = 'D9E1F2';
+
+  // Ligne 1 — En-tête institutionnel fusionnée
+  ws.mergeCells(`A1:${String.fromCharCode(65 + columns.length - 1)}1`);
+  const headerCell = ws.getCell('A1');
+  headerCell.value = `REPUBLIQUE TOGOLAISE — ${title.toUpperCase()}`;
+  headerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + BLEU_INST } };
+  headerCell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 14, name: 'Calibri' };
+  headerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(1).height = 30;
+
+  // Ligne 2 — Poste comptable
+  // Ligne 3 — Sous-titre document
+  // ... (construire selon chaque type de document)
+  
+  // En-têtes colonnes
+  columns.forEach((col, i) => {
+    const cell = ws.getCell(5, i + 1);
+    cell.value = col.header;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + BLEU_COL } };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 9, name: 'Calibri' };
+    cell.alignment = { horizontal: 'center', wrapText: true };
+    cell.border = { top: { style: 'medium', color: { argb: 'FF1A4F7A' } }, bottom: { style: 'medium', color: { argb: 'FF1A4F7A' } }, left: { style: 'thin' }, right: { style: 'thin' } };
+    ws.getColumn(i + 1).width = col.width || 15;
+  });
+
+  // Données avec lignes alternées
+  rows.forEach((row, rowIdx) => {
+    const isEven = rowIdx % 2 === 0;
+    columns.forEach((col, colIdx) => {
+      const cell = ws.getCell(rowIdx + 6, colIdx + 1);
+      cell.value = row[col.key];
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFFFFFFF' : 'FF' + BLEU_PALE } };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } }, left: { style: 'thin' }, right: { style: 'thin' } };
+      cell.font = { size: 9, name: 'Calibri' };
+    });
+  });
+
+  // Ligne Total
+  const totalRow = ws.addRow([]);
+  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + BLEU_COL } };
+  totalRow.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+
+  // Signatures
+  // Ajouter 4 lignes vides + blocs de signature
+
+  return wb;
+}
+
+// Téléchargement natif .xlsx
+async function downloadNativeXlsx(wb: ExcelJS.Workbook, filename: string) {
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.endsWith('.xlsx') ? filename : filename + '.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 const toCellRef = (row: number, column: number) => utils.encode_cell({ r: row, c: column });
 
@@ -196,29 +278,42 @@ const addWatermark = (doc: jsPDF) => {
   });
 };
 
-const withPdfHeader = (doc: jsPDF, title: string) => {
-  const width = doc.internal.pageSize.getWidth();
-
-  addWatermark(doc);
-
-  doc.setFillColor(...INDIGO);
-  doc.rect(0, 0, width, 24, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("REPUBLIQUE TOGOLAISE", 14, 9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Travail - Liberte - Patrie", 14, 15);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("PATRIS", width - 14, 14, { align: "right" });
-
-  doc.setTextColor(...INDIGO);
-  doc.setFontSize(14);
-  doc.text(title, width / 2, 35, { align: "center" });
-};
+function buildInstitutionalPdfHeader(doc: jsPDF, title: string, user?: ExportUser) {
+  const W = doc.internal.pageSize.getWidth();
+  
+  // Bandeau bleu marine
+  doc.setFillColor(26, 58, 110);
+  doc.rect(0, 0, W, 28, 'F');
+  
+  // Ligne dorée
+  doc.setFillColor(201, 168, 76);
+  doc.rect(0, 28, W, 1.5, 'F');
+  
+  // Logo PATRIS
+  doc.setFontSize(10); doc.setTextColor(201, 168, 76);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PATRIS', W - 20, 10, { align: 'right' });
+  doc.setFontSize(7); doc.setTextColor(255,255,255);
+  doc.text('PILOTAGE PATRIMONIAL', W - 20, 15, { align: 'right' });
+  
+  // République Togolaise
+  doc.setFontSize(11); doc.setTextColor(255,255,255);
+  doc.text('REPUBLIQUE TOGOLAISE', 14, 10);
+  doc.setFontSize(8); doc.setTextColor(200,210,230);
+  doc.text('Travail — Liberté — Patrie', 14, 16);
+  
+  // Titre centré
+  doc.setFontSize(15); doc.setTextColor(26,58,110);
+  doc.setFont('helvetica', 'bold');
+  doc.text(title.toUpperCase(), W/2, 40, { align: 'center' });
+  
+  // Filigrane
+  doc.saveGraphicsState();
+  doc.setGState(new (doc as JsPdfWithGState).GState({ opacity: 0.04 }));
+  doc.setFontSize(60); doc.setTextColor(26,58,110);
+  doc.text('PATRIS', W/2, doc.internal.pageSize.getHeight()/2, { align: 'center', angle: 35 });
+  doc.restoreGraphicsState();
+}
 
 const drawPdfFooter = (doc: jsPDF) => {
   const width = doc.internal.pageSize.getWidth();
@@ -244,7 +339,7 @@ const drawPdfSignatures = (doc: jsPDF, startY: number) => {
 
   if (y > height - 52) {
     doc.addPage();
-    withPdfHeader(doc, "Signatures de validation");
+    buildInstitutionalPdfHeader(doc, "Signatures de validation");
     y = 44;
   }
 
@@ -279,13 +374,13 @@ export function exportPdf(
   const doc = new jsPDF({ orientation: "landscape", format: "a4" });
   const width = doc.internal.pageSize.getWidth();
 
-  withPdfHeader(doc, title);
+  buildInstitutionalPdfHeader(doc, title);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
   doc.text(
-    `${user?.posteComptable ? `${user.posteComptable} - ` : ""}Genere le ${new Date().toLocaleString("fr-FR")}`,
+    `${user?.posteComptable ? `${user.posteComptable} - ` : ""}Généré le ${new Date().toLocaleString("fr-FR")}`,
     14,
     44
   );
@@ -332,7 +427,7 @@ export function exportPdf(
       fillColor: [...INDIGO_LIGHT],
     },
     margin: { left: 14, right: 14, top: 50, bottom: 18 },
-    didDrawPage: () => withPdfHeader(doc, title),
+    didDrawPage: () => buildInstitutionalPdfHeader(doc, title),
   });
 
   const finalY = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? startY + 20;
@@ -359,114 +454,71 @@ export function exportXlsx<T extends ExportRow>(rows: T[], filename: string, she
   saveWorkbook(workbook, filename);
 }
 
-export function exportRegistrePatrimoineExcel(
+export async function exportRegistrePatrimoineExcel(
   biens: Array<Record<string, Primitive>>,
   filename: string,
   user?: ExportUser
 ) {
-  const headers = [
-    "N°",
-    "IUP",
-    "Designation",
-    "Categorie",
-    "Sous-categorie",
-    "Date acquisition",
-    "Valeur",
-    "Amortissement cumule",
-    "VNC",
-    "Etat",
-    "Service",
+  const columns = [
+    { header: "N°", key: "n", width: 8 },
+    { header: "IUP", key: "iup", width: 18 },
+    { header: "Désignation", key: "designation", width: 32 },
+    { header: "Catégorie", key: "categorie", width: 20 },
+    { header: "Sous-catégorie", key: "sousCategorie", width: 20 },
+    { header: "Date acquisition", key: "dateAcquisition", width: 16 },
+    { header: "Valeur", key: "valeur", width: 16 },
+    { header: "Amortissement cumulé", key: "amortissementCumule", width: 18 },
+    { header: "VNC", key: "vnc", width: 16 },
+    { header: "État", key: "etat", width: 14 },
+    { header: "Service", key: "service", width: 20 },
   ];
 
-  const body = biens.map((bien, index) => {
-    const valeur = Number(bien.valeur || 0);
-    const amortissement = Number(bien.amortissementCumule || 0);
+  const rows = biens.map((bien, index) => ({
+    n: index + 1,
+    iup: bien.iup,
+    designation: bien.designation,
+    categorie: bien.categoriePrincipale || bien.categorie,
+    sousCategorie: bien.sousCategorie || bien.codeSousCategorie,
+    dateAcquisition: formatDate(bien.dateAcquisition),
+    valeur: Number(bien.valeur || 0),
+    amortissementCumule: Number(bien.amortissementCumule || 0),
+    vnc: Number(bien.valeur || 0) - Number(bien.amortissementCumule || 0),
+    etat: bien.etat,
+    service: bien.service || bien.localisation,
+  }));
 
-    return [
-      index + 1,
-      bien.iup,
-      bien.designation,
-      bien.categoriePrincipale || bien.categorie,
-      bien.sousCategorie || bien.codeSousCategorie,
-      formatDate(bien.dateAcquisition),
-      valeur,
-      amortissement,
-      valeur - amortissement,
-      bien.etat,
-      bien.service || bien.localisation,
-    ];
-  });
-
-  const workbook = createWorkbook();
-
-  addSheet(
-    workbook,
-    "Registre patrimoine",
-    rowsToSheetData(
-      "Registre du patrimoine",
-      headers,
-      body,
-      [
-        [],
-        [
-          "TOTAL",
-          "",
-          "",
-          "",
-          "",
-          "",
-          biens.reduce((sum, bien) => sum + Number(bien.valeur || 0), 0),
-          biens.reduce((sum, bien) => sum + Number(bien.amortissementCumule || 0), 0),
-          biens.reduce((sum, bien) => sum + Number(bien.valeurNetteComptable || 0), 0),
-          "",
-          "",
-        ],
-      ],
-      "Liste consolidee des biens patrimoniaux",
-      user
-    ),
-    [8, 18, 32, 20, 20, 16, 16, 18, 16, 14, 20].map((wch) => ({ wch })),
-    undefined,
-    {
-      freezeHeader: true,
-      numericFormats: {
-        Valeur: "#,##0",
-        "Amortissement cumule": "#,##0",
-        VNC: "#,##0",
-      },
-    }
-  );
-
-  saveWorkbook(workbook, filename);
+  const wb = await createStyledWorkbook("Registre du Patrimoine", columns, rows, user);
+  
+  // Add total row
+  const ws = wb.getWorksheet("Registre du Patrimoine");
+  if (ws) {
+    const totalRow = ws.addRow(['TOTAL', '', '', '', '', '', biens.reduce((sum, bien) => sum + Number(bien.valeur || 0), 0), biens.reduce((sum, bien) => sum + Number(bien.amortissementCumule || 0), 0), biens.reduce((sum, bien) => sum + (Number(bien.valeur || 0) - Number(bien.amortissementCumule || 0)), 0), '', '']);
+    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F75B6' } };
+    totalRow.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  }
+  
+  await downloadNativeXlsx(wb, filename);
 }
 
-export function exportOrdreEntreeExcel(bien: Record<string, Primitive>, filename: string, user?: ExportUser) {
-  const workbook = createWorkbook();
-  addSheet(
-    workbook,
-    "Ordre entree",
-    rowsToSheetData(
-      "Ordre d'entree de matieres",
-      ["Champ", "Valeur"],
-      [
-        ["IUP", bien.iup],
-        ["Designation", bien.designation],
-        ["Categorie", bien.categoriePrincipale || bien.categorie],
-        ["Date acquisition", formatDate(bien.dateAcquisition)],
-        ["Valeur", formatCurrency(bien.valeur)],
-        ["Service", bien.service || bien.localisation],
-        ["Mode acquisition", bien.modeAcquisition],
-        ["Observation", bien.observation],
-      ],
-      undefined,
-      "Fiche unitaire d'entree de bien",
-      user
-    ),
-    [{ wch: 24 }, { wch: 40 }],
-    undefined,
-    { freezeHeader: true }
-  );
-  saveWorkbook(workbook, filename);
+export async function exportOrdreEntreeExcel(bien: Record<string, Primitive>, filename: string, user?: ExportUser) {
+  const columns = [
+    { header: "Champ", key: "champ", width: 24 },
+    { header: "Valeur", key: "valeur", width: 40 },
+  ];
+
+  const rows = [
+    { champ: "IUP", valeur: bien.iup },
+    { champ: "Désignation", valeur: bien.designation },
+    { champ: "Catégorie", valeur: bien.categoriePrincipale || bien.categorie },
+    { champ: "Date acquisition", valeur: formatDate(bien.dateAcquisition) },
+    { champ: "Valeur", valeur: formatCurrency(bien.valeur) },
+    { champ: "Service", valeur: bien.service || bien.localisation },
+    { champ: "Mode acquisition", valeur: bien.modeAcquisition },
+    { champ: "Observation", valeur: bien.observation },
+  ];
+
+  const wb = await createStyledWorkbook("Ordre d'Entrée de Matières", columns, rows, user);
+  await downloadNativeXlsx(wb, filename);
 }
 
 export function exportBordereauMutationExcel(
@@ -504,47 +556,37 @@ export function exportBordereauMutationExcel(
   saveWorkbook(workbook, filename);
 }
 
-export function exportLivreJournalImmobilisationsExcel(
+export async function exportLivreJournalImmobilisationsExcel(
   biens: Array<Record<string, Primitive>>,
   filename: string,
   user?: ExportUser
 ) {
+  const columns = [
+    { header: "Ordre", key: "ordre", width: 10 },
+    { header: "Date", key: "date", width: 16 },
+    { header: "Référence", key: "reference", width: 18 },
+    { header: "Désignation", key: "designation", width: 32 },
+    { header: "Catégorie", key: "categorie", width: 20 },
+    { header: "Quantité entrée", key: "quantiteEntree", width: 16 },
+    { header: "Valeur entrée", key: "valeurEntree", width: 18 },
+    { header: "Service", key: "service", width: 24 },
+  ];
+
   const rows = [...biens]
     .sort((a, b) => String(a.dateAcquisition || "").localeCompare(String(b.dateAcquisition || "")))
-    .map((bien, index) => [
-      index + 1,
-      formatDate(bien.dateAcquisition),
-      bien.codeSousCategorie || bien.codeBien || bien.iup,
-      bien.designation,
-      bien.categoriePrincipale || bien.categorie,
-      Number(bien.quantite || 1),
-      Number(bien.valeur || 0),
-      bien.service || bien.localisation,
-    ]);
+    .map((bien, index) => ({
+      ordre: index + 1,
+      date: formatDate(bien.dateAcquisition),
+      reference: bien.codeSousCategorie || bien.codeBien || bien.iup,
+      designation: bien.designation,
+      categorie: bien.categoriePrincipale || bien.categorie,
+      quantiteEntree: Number(bien.quantite || 1),
+      valeurEntree: Number(bien.valeur || 0),
+      service: bien.service || bien.localisation,
+    }));
 
-  const workbook = createWorkbook();
-  addSheet(
-    workbook,
-    "Livre journal",
-    rowsToSheetData(
-      "Livre journal des immobilisations",
-      ["Ordre", "Date", "Reference", "Designation", "Categorie", "Quantite entree", "Valeur entree", "Service"],
-      rows,
-      undefined,
-      "Chronologie des mouvements patrimoniaux",
-      user
-    ),
-    [10, 16, 18, 32, 20, 16, 18, 24].map((wch) => ({ wch })),
-    undefined,
-    {
-      freezeHeader: true,
-      numericFormats: {
-        "Quantite entree": "#,##0",
-        "Valeur entree": "#,##0",
-      },
-    }
-  );
-  saveWorkbook(workbook, filename);
+  const wb = await createStyledWorkbook("Livre Journal des Immobilisations", columns, rows, user);
+  await downloadNativeXlsx(wb, filename);
 }
 
 export function exportLivreJournalFournituresExcel(
@@ -638,63 +680,51 @@ export function exportFicheStockExcel(
   saveWorkbook(workbook, filename);
 }
 
-export function exportGrandLivreExcel(
+export async function exportGrandLivreExcel(
   biens: Array<Record<string, Primitive>>,
   filename: string,
   user?: ExportUser
 ) {
+  const columns = [
+    { header: "Compte", key: "compte", width: 16 },
+    { header: "Date", key: "date", width: 16 },
+    { header: "Référence", key: "reference", width: 18 },
+    { header: "Désignation", key: "designation", width: 32 },
+    { header: "Service", key: "service", width: 24 },
+    { header: "Débit", key: "debit", width: 16 },
+    { header: "Crédit", key: "credit", width: 16 },
+    { header: "Solde", key: "solde", width: 18 },
+  ];
+
+  const rows: any[] = [];
   const grouped = groupRowsByKey(biens, "codeFamille");
-  const body: Array<Array<Primitive>> = [];
 
   Object.entries(grouped).forEach(([compte, items]) => {
     let solde = 0;
-    body.push([compte, "SOUS-ENSEMBLE", "", "", "", "", "", ""]);
+    rows.push({ compte, date: "SOUS-ENSEMBLE", reference: "", designation: "", service: "", debit: "", credit: "", solde: "" });
 
     items
       .sort((a, b) => String(a.dateAcquisition || "").localeCompare(String(b.dateAcquisition || "")))
       .forEach((bien) => {
         const valeur = Number(bien.valeur || 0);
         solde += valeur;
-        body.push([
+        rows.push({
           compte,
-          formatDate(bien.dateAcquisition),
-          bien.codeSousCategorie || bien.iup,
-          bien.designation,
-          bien.service || bien.localisation,
-          valeur,
-          0,
+          date: formatDate(bien.dateAcquisition),
+          reference: bien.codeSousCategorie || bien.iup,
+          designation: bien.designation,
+          service: bien.service || bien.localisation,
+          debit: valeur,
+          credit: 0,
           solde,
-        ]);
+        });
       });
 
-    body.push([compte, "", "", `Sous-total ${compte}`, "", "", "", solde]);
-    body.push([]);
+    rows.push({ compte, date: "", reference: "", designation: `Sous-total ${compte}`, service: "", debit: "", credit: "", solde });
   });
 
-  const workbook = createWorkbook();
-  addSheet(
-    workbook,
-    "Grand livre",
-    rowsToSheetData(
-      "Grand livre des immobilisations",
-      ["Compte", "Date", "Reference", "Designation", "Service", "Debit", "Credit", "Solde"],
-      body,
-      undefined,
-      "Lecture comptable par compte patrimonial",
-      user
-    ),
-    [16, 16, 18, 32, 24, 16, 16, 18].map((wch) => ({ wch })),
-    undefined,
-    {
-      freezeHeader: true,
-      numericFormats: {
-        Debit: "#,##0",
-        Credit: "#,##0",
-        Solde: "#,##0",
-      },
-    }
-  );
-  saveWorkbook(workbook, filename);
+  const wb = await createStyledWorkbook("Grand Livre des Immobilisations", columns, rows, user);
+  await downloadNativeXlsx(wb, filename);
 }
 
 export function exportGrandLivreFournituresExcel(
@@ -885,30 +915,207 @@ export function exportInventaireCompletExcel(
   saveWorkbook(workbook, `Inventaire_${String(campagne.nom || "campagne")}.xlsx`);
 }
 
-export function exportPvInventaireCertifie(
-  campagne: Record<string, Primitive>,
-  fiches: Array<Record<string, Primitive>>,
-  ecarts: Array<Record<string, Primitive>>
-) {
-  const rows = ecarts.map((ecart) => ({
-    Bien: ecart.designation || ecart["bien.designation"] || "-",
-    IUP: ecart.iup || ecart["bien.iup"] || "-",
-    "Type d'ecart": ecart.typeEcart || "-",
-    Statut: ecart.statutValidation || "-",
-    Justification: ecart.justification || "-",
-  }));
+export async function exportCertificatInventaire(
+  campagne: any,
+  stats: { totalActifs: number; valeurTotale: number; conformite: number; ecarts: number },
+  user: ExportUser
+): Promise<void> {
+  const doc = new jsPDF({ orientation: 'portrait', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth(); // 210mm
+  const H = doc.internal.pageSize.getHeight(); // 297mm
 
-  exportPdf(
-    rows,
-    `Proces-verbal d'inventaire certifie - ${String(campagne.nom || "Campagne")}`,
-    `PV_Inventaire_${String(campagne.nom || "campagne")}.pdf`,
-    undefined,
-    [
-      { label: "Actifs audites", value: String(fiches.length) },
-      { label: "Ecarts", value: String(ecarts.length) },
-      { label: "Statut", value: String(campagne.statut || "N/A") },
-    ]
-  );
+  // ── COULEURS ──
+  const BLEU_MARINE: Rgb = [26, 58, 110];
+  const DORE: Rgb = [201, 168, 76];
+  const BLEU_MED: Rgb = [47, 117, 182];
+  const VERT_CERT: Rgb = [5, 150, 105];
+
+  // ── BORDURES DÉCORATIVES ──
+  doc.setDrawColor(...BLEU_MARINE);
+  doc.setLineWidth(1.5);
+  doc.rect(5, 5, W-10, H-10);   // bordure externe
+  doc.setDrawColor(...DORE);
+  doc.setLineWidth(0.5);
+  doc.rect(8, 8, W-16, H-16);   // bordure dorée interne
+
+  // ── BANDEAU EN-TÊTE ──
+  doc.setFillColor(...BLEU_MARINE);
+  doc.rect(8, 8, W-16, 42, 'F');
+  
+  // Ligne dorée sous l'en-tête
+  doc.setFillColor(...DORE);
+  doc.rect(8, 50, W-16, 1.2, 'F');
+
+  // Texte en-tête gauche
+  doc.setTextColor(201, 168, 76); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+  doc.text('REPUBLIQUE TOGOLAISE', 14, 22);
+  doc.setTextColor(255,255,255); doc.setFontSize(7);
+  doc.text('Travail — Liberté — Patrie', 14, 28);
+  doc.setFontSize(7); doc.setTextColor(180, 200, 230);
+  doc.text('Ministère de l\'Économie et des Finances', 14, 34);
+  doc.text('Direction Générale du Patrimoine', 14, 39);
+
+  // Badge PATRIS au centre
+  doc.setFillColor(201, 168, 76);
+  doc.circle(W/2, 28, 12, 'F');
+  doc.setFillColor(26, 58, 110);
+  doc.circle(W/2, 28, 9, 'F');
+  doc.setTextColor(201, 168, 76); doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+  doc.text('P', W/2, 32, { align: 'center' });
+  doc.setTextColor(240, 208, 128); doc.setFontSize(10);
+  doc.text('PATRIS', W/2, 44, { align: 'center' });
+
+  // Exercice à droite
+  doc.setTextColor(255,255,255); doc.setFontSize(8);
+  doc.text(`Exercice ${new Date().getFullYear()}`, W-14, 22, { align: 'right' });
+
+  // Banner type certificat
+  doc.setFillColor(201, 168, 76, 0.15);
+  doc.rect(8, 51, W-16, 10);
+  doc.setTextColor(201, 168, 76); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.text('CERTIFICAT OFFICIEL DE PATRIMOINE', W/2, 57.5, { align: 'center' });
+
+  // ── TITRE PRINCIPAL ──
+  doc.setTextColor(26, 58, 110); doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+  doc.text('INVENTAIRE CERTIFIÉ DU PATRIMOINE', W/2, 75, { align: 'center' });
+  doc.setFontSize(9); doc.setTextColor(90, 106, 138); doc.setFont('helvetica', 'normal');
+  doc.text('Procès-Verbal d\'Inventaire Physique & Évaluation Comptable', W/2, 82, { align: 'center' });
+
+  // Ligne séparatrice dorée
+  doc.setDrawColor(201, 168, 76); doc.setLineWidth(0.5);
+  doc.line(20, 86, W-20, 86);
+
+  // ── CARTES META (3 colonnes) ──
+  const metaCards = [
+    { label: 'Référence', value: `PV-${new Date().getFullYear()}-${String(campagne.id || 1).padStart(4,'0')}` },
+    { label: 'Date d\'émission', value: new Date().toLocaleDateString('fr-FR') },
+    { label: 'Exercice budgétaire', value: `${new Date().getFullYear()-1} – ${new Date().getFullYear()}` }
+  ];
+  metaCards.forEach((card, i) => {
+    const x = 14 + i * (W-28)/3 + 2;
+    const cardW = (W-28)/3 - 4;
+    doc.setFillColor(247, 248, 252); doc.setDrawColor(228, 232, 242);
+    doc.roundedRect(x, 90, cardW, 18, 2, 2, 'FD');
+    doc.setFontSize(7); doc.setTextColor(136, 153, 187); doc.setFont('helvetica', 'bold');
+    doc.text(card.label.toUpperCase(), x + cardW/2, 96, { align: 'center' });
+    doc.setFontSize(9); doc.setTextColor(13, 42, 94); doc.setFont('helvetica', 'bold');
+    doc.text(card.value, x + cardW/2, 103, { align: 'center' });
+  });
+
+  // ── INFOS POSTE COMPTABLE ──
+  doc.setFillColor(249, 249, 251); doc.setDrawColor(26, 58, 110);
+  doc.setLineWidth(0); doc.rect(14, 114, W-28, 36, 'F');
+  doc.setDrawColor(26, 58, 110); doc.setLineWidth(1.5);
+  doc.line(14, 114, 14, 150); // bordure gauche bleue
+  doc.setLineWidth(0.3); doc.setDrawColor(228, 232, 242);
+  doc.rect(14, 114, W-28, 36, 'D');
+
+  doc.setFontSize(7); doc.setTextColor(136,153,187); doc.setFont('helvetica', 'bold');
+  doc.text('INFORMATIONS DU POSTE COMPTABLE', 20, 121);
+  
+  const infoFields = [
+    ['Poste Comptable', campagne.sites || 'Direction du Matériel'],
+    ['Périmètre d\'inventaire', 'Patrimoine National — Lomé'],
+    ['Date de début de mission', campagne.dateDebut || '——'],
+    ['Date de clôture', campagne.dateFin || new Date().toLocaleDateString('fr-FR')],
+  ];
+  infoFields.forEach(([lbl, val], i) => {
+    const y = 128 + i * 6;
+    doc.setFontSize(8); doc.setTextColor(102,102,119); doc.setFont('helvetica', 'normal');
+    doc.text(lbl + ' :', 20, y);
+    doc.setTextColor(26, 42, 78); doc.setFont('helvetica', 'bold');
+    doc.text(val, W/2, y, { align: 'left' });
+  });
+
+  // ── KPI CARDS ──
+  const kpis: Array<{ val: string; lbl: string; color: Rgb }> = [
+    { val: stats.totalActifs.toString(), lbl: 'Actifs recensés', color: [37, 99, 235] },
+    { val: `${(stats.valeurTotale/1e6).toFixed(1)}M`, lbl: 'Valeur FCFA', color: [5, 150, 105] },
+    { val: `${stats.conformite}%`, lbl: 'Conformité', color: [217, 119, 6] },
+    { val: stats.ecarts.toString(), lbl: 'Écarts constatés', color: [124, 58, 237] },
+  ];
+  kpis.forEach((kpi, i) => {
+    const x = 14 + i * (W-28)/4 + 2;
+    const kW = (W-28)/4 - 4;
+    doc.setFillColor(255,255,255); doc.setDrawColor(224, 228, 240);
+    doc.roundedRect(x, 156, kW, 24, 2, 2, 'FD');
+    doc.setFillColor(...kpi.color);
+    doc.rect(x, 156, kW, 1.5, 'F');
+    doc.setFontSize(16); doc.setTextColor(...kpi.color); doc.setFont('helvetica', 'bold');
+    doc.text(kpi.val, x + kW/2, 170, { align: 'center' });
+    doc.setFontSize(7); doc.setTextColor(136,153,187); doc.setFont('helvetica', 'bold');
+    doc.text(kpi.lbl.toUpperCase(), x + kW/2, 176, { align: 'center' });
+  });
+
+  // ── BANDE DE STATUT ──
+  doc.setFillColor(240, 253, 248); doc.setDrawColor(110, 231, 183);
+  doc.roundedRect(14, 186, W-28, 14, 2, 2, 'FD');
+  doc.setFillColor(5, 150, 105); doc.circle(22, 193, 4, 'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+  doc.text('✓', 22, 195.5, { align: 'center' });
+  doc.setTextColor(6, 95, 70); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.text('INVENTAIRE CERTIFIÉ CONFORME — Validé par la Commission Officielle', 30, 195);
+
+  // ── ATTESTATION ──
+  doc.setFillColor(255, 253, 245); doc.setDrawColor(184, 160, 96);
+  doc.setLineWidth(0); doc.rect(14, 206, W-28, 28, 'F');
+  doc.setLineWidth(1.5); doc.setDrawColor(184, 160, 96);
+  doc.line(14, 206, 14, 234);
+  doc.setLineWidth(0.3); doc.setDrawColor(220, 210, 180); doc.rect(14, 206, W-28, 28, 'D');
+  doc.setFontSize(7); doc.setTextColor(136,153,187); doc.setFont('helvetica', 'bold');
+  doc.text('ATTESTATION DE CERTIFICATION', 20, 213);
+  doc.setFontSize(8); doc.setTextColor(68,68,68); doc.setFont('helvetica', 'italic');
+  const attestText = '"La Commission d\'Inventaire, dûment constituée par arrêté, certifie avoir procédé au recensement physique et à la valorisation comptable du patrimoine. Le présent certificat est délivré conformément aux dispositions de la réglementation togolaise sur la comptabilité des matières."';
+  const lines = doc.splitTextToSize(attestText, W-40);
+  doc.text(lines, 20, 220);
+
+  // ── CACHET VERT (CERTIFIÉ) ──
+  doc.setDrawColor(5, 150, 105); doc.setLineWidth(1.5);
+  doc.circle(W-30, 220, 14, 'D');
+  doc.setDrawColor(5, 150, 105); doc.setLineWidth(0.5);
+  doc.circle(W-30, 220, 11, 'D');
+  doc.setTextColor(5, 150, 105); doc.setFontSize(6); doc.setFont('helvetica', 'bold');
+  doc.text('CERTIFIÉ', W-30, 217, { align: 'center' });
+  doc.text('CONFORME', W-30, 221, { align: 'center' });
+  doc.text('PATRIS', W-30, 225, { align: 'center' });
+
+  // ── SIGNATURES ──
+  const sigs = [
+    { titre: 'L\'Agent Comptable', nom: user.nom },
+    { titre: 'Le Superviseur d\'Audit', nom: '' },
+    { titre: 'L\'Ordonnateur des Matières', nom: '' }
+  ];
+  doc.setDrawColor(26, 58, 110); doc.setLineWidth(0.3);
+  doc.line(14, 238, W-14, 238);
+  sigs.forEach((sig, i) => {
+    const x = 14 + i * (W-28)/3 + 2;
+    const sw = (W-28)/3 - 4;
+    doc.setFontSize(7); doc.setTextColor(13, 42, 94); doc.setFont('helvetica', 'bold');
+    doc.text(sig.titre.toUpperCase(), x + sw/2, 244, { align: 'center' });
+    doc.setFillColor(248, 249, 252); doc.setDrawColor(200, 207, 224);
+    doc.roundedRect(x, 247, sw, 20, 1, 1, 'FD');
+    doc.setDrawColor(13, 42, 94); doc.setLineWidth(1);
+    doc.line(x+4, 267, x+sw-4, 267);
+    doc.setFontSize(6); doc.setTextColor(100, 116, 139); doc.setFont('helvetica', 'normal');
+    doc.text('Nom, Prénom & Signature', x + sw/2, 272, { align: 'center' });
+  });
+
+  // Ligne séparatrice dorée
+  doc.setDrawColor(201, 168, 76); doc.setLineWidth(0.5);
+  doc.line(14, 276, W-14, 276);
+
+  // ── PIED DE PAGE ──
+  doc.setFillColor(26, 58, 110);
+  doc.rect(8, 278, W-16, 19, 'F');
+  doc.setTextColor(201, 168, 76); doc.setFontSize(8); doc.setFont('courier', 'bold');
+  const ref = `PATRIS-PV-${new Date().getFullYear()}-${String(campagne.id || 1).padStart(4,'0')}-CT-LME`;
+  doc.text(ref, 14, 286);
+  doc.setTextColor(180, 200, 230); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} — PATRIS ERP — Confidentiel`, 14, 292);
+  doc.setTextColor(201, 168, 76); doc.setFontSize(7);
+  doc.text('Vérifiez l\'authenticité sur patris.gouv.tg', W-14, 292, { align: 'right' });
+
+  doc.save(`Certificat_Inventaire_${campagne.nom || 'PATRIS'}_${new Date().getFullYear()}.pdf`);
 }
 
 export function exportLivreJournalPremiumExcel(
@@ -919,10 +1126,10 @@ export function exportLivreJournalPremiumExcel(
   exportLivreJournalImmobilisationsExcel(biens, filename, user);
 }
 
-export function exportGrandLivrePremiumExcel(
+export async function exportGrandLivrePremiumExcel(
   biens: Array<Record<string, Primitive>>,
   filename: string,
   user?: ExportUser
 ) {
-  exportGrandLivreExcel(biens, filename, user);
+  await exportGrandLivreExcel(biens, filename, user);
 }

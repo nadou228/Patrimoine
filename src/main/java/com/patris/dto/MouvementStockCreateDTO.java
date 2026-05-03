@@ -11,18 +11,9 @@ public class MouvementStockCreateDTO {
     private int quantite;
     private Double prixUnitaire;
     private String observations;
+    private Long beneficiaireId;
 
     public MouvementStockCreateDTO() {}
-
-    public MouvementStockCreateDTO(Long consommableId, LocalDateTime dateOperation, String typeOperation, String pieceJustificative, int quantite, Double prixUnitaire, String observations) {
-        this.consommableId = consommableId;
-        this.dateOperation = dateOperation;
-        this.typeOperation = typeOperation;
-        this.pieceJustificative = pieceJustificative;
-        this.quantite = quantite;
-        this.prixUnitaire = prixUnitaire;
-        this.observations = observations;
-    }
 
     public Long getConsommableId() { return consommableId; }
     public void setConsommableId(Long consommableId) { this.consommableId = consommableId; }
@@ -40,4 +31,6 @@ public class MouvementStockCreateDTO {
     public void setPrixUnitaire(Double prixUnitaire) { this.prixUnitaire = prixUnitaire; }
     public String getObservations() { return observations; }
     public void setObservations(String observations) { this.observations = observations; }
+    public Long getBeneficiaireId() { return beneficiaireId; }
+    public void setBeneficiaireId(Long beneficiaireId) { this.beneficiaireId = beneficiaireId; }
 }

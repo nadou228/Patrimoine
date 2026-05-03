@@ -7,8 +7,10 @@ import {
   validerZoneInventaire, certifierInventaire,
   getServices
 } from '../api/api';
-import { exportPvInventaireCertifie, exportInventaireCompletExcel } from '../utils/exporters';
+import { exportCertificatInventaire, exportInventaireCompletExcel } from '../utils/exporters';
 import FileUpload from '../components/FileUpload';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useToast } from '../contexts/ToastContext';
 
 const MISSION_TEMPLATES = [
   { id: 'ANNUAL', name: 'Inventaire Annuel', desc: 'Audit complet de fin d\'exercice pour certification officielle des comptes patrimoniaux.', icon: '📅', color: '#6366f1' },
@@ -58,6 +60,8 @@ const EmptyState = ({ icon, title, subtitle, action, onAction }: any) => (
 
 /* ─── Main Component ─── */
 const InventairePage: React.FC = () => {
+  const { confirm } = useConfirm();
+  const { showToast } = useToast();
   type ViewType = 'DASHBOARD'|'PREPARATION'|'EXECUTION'|'RECONCILIATION'|'CERTIFICATION';
   const [view, setView] = useState<ViewType>('DASHBOARD');
   const [campagnes,       setCampagnes]       = useState<any[]>([]);
@@ -69,6 +73,7 @@ const InventairePage: React.FC = () => {
   const [wizardStep,      setWizardStep]      = useState(1);
   const [auditModal,      setAuditModal]      = useState<any|null>(null);
   const [superviseurModal, setSuperviseurModal] = useState<any|null>(null);
+  const [scanInput, setScanInput] = useState('');
   const [form, setForm] = useState({
     nom:'', sites:'', equipes:'',
     dateDebut: new Date().toISOString().split('T')[0], dateFin:'', templateId:'ANNUAL'
@@ -118,7 +123,10 @@ const InventairePage: React.FC = () => {
       await validerFicheAgent(auditModal.id, 'VALIDE');
       setAuditModal(null);
       openCampagne(selectedCampagne);
-    } catch { alert("Erreur lors de l'enregistrement de la fiche."); }
+      showToast({ type: "success", title: "Fiche enregistree" });
+    } catch {
+      showToast({ type: "error", title: "Erreur lors de l'enregistrement de la fiche" });
+    }
   };
 
   const handleSuperviseurSubmit = async () => {
@@ -126,26 +134,63 @@ const InventairePage: React.FC = () => {
       await validerFicheSuperviseur(superviseurModal.id, superviseurModal.decisionSup);
       setSuperviseurModal(null);
       openCampagne(selectedCampagne);
-    } catch { alert("Erreur lors de la validation superviseur."); }
+      showToast({ type: "success", title: "Validation superviseur effectuee" });
+    } catch {
+      showToast({ type: "error", title: "Erreur lors de la validation superviseur" });
+    }
+  };
+
+  const handleScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scanInput.trim()) return;
+    const found = fiches.find(f => (f.bien?.iup === scanInput.trim() || f.codeIup === scanInput.trim()));
+    if (found) {
+      if (found.validationAgent !== 'VALIDE') {
+        setAuditModal({...found});
+        showToast({ type: 'info', title: 'IUP Détecté', message: `Ouverture de la fiche pour ${found.bien?.designation || found.codeIup}` });
+      } else {
+        showToast({ type: 'info', title: 'Déjà audité', message: 'Ce bien a déjà été scanné et validé.' });
+      }
+    } else {
+      showToast({ type: 'error', title: 'IUP introuvable', message: 'Ce bien n\'est pas dans le périmètre de la mission.' });
+    }
+    setScanInput('');
   };
 
   const handleGlobalValidate = async () => {
-    if (!window.confirm("Valider automatiquement toutes les fiches CONFORMES (sans anomalie) de cette campagne ?")) return;
+    const approved = await confirm({
+      title: "Valider les fiches conformes ?",
+      message: "Toutes les fiches sans anomalie seront validees automatiquement pour cette campagne.",
+      confirmLabel: "Valider",
+      tone: "warning",
+    });
+    if (!approved) return;
     try {
       await validerZoneInventaire(selectedCampagne.id);
       goView('EXECUTION');
-    } catch (err: any) { alert("Erreur : " + (err.response?.data || err.message)); }
+      showToast({ type: "success", title: "Zone validee" });
+    } catch (err: any) {
+      showToast({ type: "error", title: "Validation impossible", message: String(err.response?.data || err.message || "Erreur") });
+    }
   };
 
   const handleCertify = async () => {
-    if (!window.confirm("Certifier officiellement cette campagne ? Cette action est IRRÉVERSIBLE et met à jour le registre du patrimoine.")) return;
+    const approved = await confirm({
+      title: "Certifier officiellement cette campagne ?",
+      message: "Cette action met a jour le registre du patrimoine et doit rester exceptionnelle.",
+      confirmLabel: "Certifier",
+      tone: "danger",
+    });
+    if (!approved) return;
     try {
       await certifierInventaire(selectedCampagne.id);
-      alert("📜 Campagne certifiée avec succès !");
+      showToast({ type: "success", title: "Campagne certifiee avec succes" });
       loadInitialData();
       setSelectedCampagne(null);
       setView('DASHBOARD');
-    } catch (err: any) { alert("Impossible de certifier : " + (err.response?.data || err.message)); }
+    } catch (err: any) {
+      showToast({ type: "error", title: "Certification impossible", message: String(err.response?.data || err.message || "Erreur") });
+    }
   };
 
   const captureGPS = () => {
@@ -164,6 +209,17 @@ const InventairePage: React.FC = () => {
   const fichesValidees        = fiches.filter(f => f.validationAgent === 'VALIDE');
   const ecartsEnAttente       = ecarts.filter(e => e.statutValidation === 'EN_ATTENTE');
   const progressPercent       = fiches.length ? Math.round((fichesValidees.length / fiches.length) * 100) : 0;
+
+  const handleExportCertificat = async () => {
+    if (!selectedCampagne) return;
+    const stats = {
+      totalActifs: fiches.length,
+      valeurTotale: fiches.reduce((s, f) => s + (f.bien?.valeur || 0), 0),
+      conformite: Math.round((fiches.filter(f => !f.anomalie).length / Math.max(fiches.length, 1)) * 100),
+      ecarts: ecarts.length
+    };
+    await exportCertificatInventaire(selectedCampagne, stats, { nom: 'Agent Comptable', prenom: '', role: 'Comptable' });
+  };
 
   return (
     <div className="inv-page fade-in">
@@ -256,12 +312,25 @@ const InventairePage: React.FC = () => {
                           try {
                             const [f, e] = await Promise.all([getInventaireFiches(c.id), getInventaireEcarts(c.id)]);
                             exportInventaireCompletExcel(c, f || [], e || []);
-                          } catch { alert("Erreur lors de l'export"); }
+                          } catch {
+                            showToast({ type: "error", title: "Erreur lors de l'export" });
+                          }
                         }}>📊 Exporter</button>
                       {isCert && (
-                        <button className="inv-btn-pdf" onClick={() => exportPvInventaireCertifie(c, [], [])}>📥 PV PDF</button>
+                        <button className="inv-btn-pdf" onClick={() => exportCertificatInventaire(c, { totalActifs: 0, valeurTotale: 0, conformite: 100, ecarts: 0 }, { nom: 'Agent Comptable' })}>📥 PV PDF</button>
                       )}
-                      <button className="inv-btn-del" title="Supprimer" onClick={() => { if(window.confirm("Supprimer ?")) deleteInventaire(c.id).then(loadInitialData); }}>🗑️</button>
+                      <button className="inv-btn-del" title="Supprimer" onClick={async () => {
+                        const approved = await confirm({
+                          title: "Supprimer cette mission ?",
+                          message: "La campagne et ses donnees associees seront retirees.",
+                          confirmLabel: "Supprimer",
+                          tone: "danger",
+                        });
+                        if (!approved) return;
+                        await deleteInventaire(c.id);
+                        showToast({ type: "success", title: "Mission supprimee" });
+                        await loadInitialData();
+                      }}>🗑️</button>
                     </div>
                   </div>
                 );
@@ -379,8 +448,16 @@ const InventairePage: React.FC = () => {
                 <div style={{ display:'flex', gap:16, justifyContent:'center' }}>
                   <button className="inv-btn-back" onClick={() => setWizardStep(2)}>← Ajuster</button>
                   <button className="inv-btn-launch" onClick={async () => {
-                    try { await createInventaire(form); alert("🚀 Mission lancée avec succès !"); loadInitialData(); setView('DASHBOARD'); setWizardStep(1); }
-                    catch { alert("Erreur de lancement."); }
+                    try {
+                      await createInventaire(form);
+                      showToast({ type: "success", title: "Mission lancee avec succes" });
+                      loadInitialData();
+                      setView('DASHBOARD');
+                      setWizardStep(1);
+                    }
+                    catch {
+                      showToast({ type: "error", title: "Erreur de lancement" });
+                    }
                   }}>PROPULSER LA MISSION</button>
                 </div>
               </div>
@@ -411,6 +488,21 @@ const InventairePage: React.FC = () => {
               <button className="inv-btn-export" onClick={() => exportInventaireCompletExcel(selectedCampagne, fiches, ecarts)}>📊 Exporter XLS</button>
               <button className="inv-btn-zone" onClick={handleGlobalValidate}>✅ Zone Confort</button>
             </div>
+          </div>
+
+          <div style={{ margin: '0 0 24px', display: 'flex', justifyContent: 'center' }}>
+            <form onSubmit={handleScan} style={{ display: 'flex', gap: 10, background: 'var(--card-bg)', padding: '12px 16px', borderRadius: 16, border: '1px solid var(--glass-border)', alignItems: 'center', width: '100%', maxWidth: 500 }}>
+              <span style={{ fontSize: 20 }}>📷</span>
+              <input 
+                type="text" 
+                placeholder="Scanner QR code ou saisir un IUP..." 
+                value={scanInput} 
+                onChange={(e) => setScanInput(e.target.value)} 
+                style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: 'var(--text-main)', fontSize: 15 }} 
+                autoFocus
+              />
+              <button type="submit" className="inv-btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>Rechercher</button>
+            </form>
           </div>
 
           {fiches.length === 0 ? (
@@ -506,7 +598,7 @@ const InventairePage: React.FC = () => {
                         const j = window.prompt("Décision / justification du superviseur :");
                         if (j !== null) {
                           try { await validerEcart(e.id, 'VALIDE'); goView('RECONCILIATION'); }
-                          catch { alert("Erreur"); }
+                          catch { showToast({ type: "error", title: "Erreur lors de la validation de l'ecart" }); }
                         }
                       }}>
                         ✔ Valider l'écart
@@ -536,7 +628,7 @@ const InventairePage: React.FC = () => {
                 <div><span>Certifié le</span><strong>{new Date().toLocaleDateString()}</strong></div>
                 <div><span>Signataire</span><strong>{selectedCampagne.validePar || 'Système PATRIS'}</strong></div>
               </div>
-              <button className="inv-btn-primary" onClick={() => exportPvInventaireCertifie(selectedCampagne, fiches, ecarts)}>
+              <button className="inv-btn-primary" onClick={handleExportCertificat}>
                 📥 Télécharger le PV d'Inventaire Certifié (PDF)
               </button>
             </div>

@@ -11,7 +11,10 @@ import EntretiensPage from './pages/EntretiensPage';
 import StocksPage from './pages/StocksPage';
 import UsersPage from './pages/UsersPage';
 import LoginPage from './pages/LoginPage';
+import AdminPage from './pages/AdminPage';
 import { getCurrentUser } from './api/auth';
+import { ConfirmProvider } from './contexts/ConfirmContext';
+import { ToastProvider } from './contexts/ToastContext';
 import './styles.css';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
@@ -25,29 +28,34 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        
-        <Route path="/" element={
-          <ProtectedRoute>
-            <PermissionsProvider>
-              <AppLayout />
-            </PermissionsProvider>
-          </ProtectedRoute>
-        }>
-          <Route index element={<DashboardPage />} />
-          <Route path="biens" element={<BiensPage />} />
-          <Route path="affectations" element={<AffectationsPage />} />
-          <Route path="inventaire" element={<InventairePage />} />
-          <Route path="reforme" element={<ReformePage />} />
-          <Route path="sinistres" element={<SinistresPage />} />
-          <Route path="entretiens" element={<EntretiensPage />} />
-          <Route path="stocks" element={<StocksPage />} />
-          <Route path="utilisateurs" element={<UsersPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <ConfirmProvider>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            
+            <Route path="/" element={
+              <ProtectedRoute>
+                <PermissionsProvider>
+                  <AppLayout />
+                </PermissionsProvider>
+              </ProtectedRoute>
+            }>
+              <Route index element={<DashboardPage />} />
+              <Route path="biens" element={<BiensPage />} />
+              <Route path="affectations" element={<AffectationsPage />} />
+              <Route path="inventaire" element={<InventairePage />} />
+              <Route path="reforme" element={<ReformePage />} />
+              <Route path="sinistres" element={<SinistresPage />} />
+              <Route path="entretiens" element={<EntretiensPage />} />
+              <Route path="stocks" element={<StocksPage />} />
+              <Route path="utilisateurs" element={<UsersPage />} />
+              <Route path="admin" element={<AdminPage />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ConfirmProvider>
+    </ToastProvider>
   );
 }
 

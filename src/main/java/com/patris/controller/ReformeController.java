@@ -48,6 +48,18 @@ public class ReformeController {
         return service.update(id, reforme);
     }
 
+    @PutMapping("/{id}/valider")
+    public ResponseEntity<Reforme> valider(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> payload) {
+        String acteur = payload != null ? payload.getOrDefault("validateur", "systeme") : "systeme";
+        return ResponseEntity.ok(service.valider(id, acteur));
+    }
+
+    @PutMapping("/{id}/annuler")
+    public ResponseEntity<Reforme> annuler(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> payload) {
+        String acteur = payload != null ? payload.getOrDefault("validateur", "systeme") : "systeme";
+        return ResponseEntity.ok(service.annuler(id, acteur));
+    }
+
     @PostMapping("/{id}/rapport")
     public Reforme uploadRapport(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
         String url = fileStorageService.store("rapports", file);

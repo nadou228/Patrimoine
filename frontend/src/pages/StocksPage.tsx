@@ -10,9 +10,12 @@ import {
   getStocks,
   validerMouvementStock,
 } from "../api/api";
+import BeneficiaireSelect from "../components/BeneficiaireSelect";
+import { useToast } from "../contexts/ToastContext";
 import { exportFicheStockExcel } from "../utils/exporters";
 
 const StocksPage: React.FC = () => {
+  const { showToast } = useToast();
   const [view, setView] = useState<"DASHBOARD" | "CATALOGUE" | "MOUVEMENTS" | "MAGASINS">("DASHBOARD");
   const [loading, setLoading] = useState(true);
   const [articles, setArticles] = useState<any[]>([]);
@@ -46,6 +49,8 @@ const StocksPage: React.FC = () => {
     prixUnitaire: 0,
     pieceJustificative: "",
     observations: "",
+    beneficiaire: "",
+    destination: "",
   });
 
   useEffect(() => {
@@ -128,6 +133,15 @@ const StocksPage: React.FC = () => {
 
   const submitMouvement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mouvType === "SORTIE" && !mouvForm.beneficiaire) {
+      showToast({
+        type: "warning",
+        title: "Beneficiaire obligatoire",
+        message: "Une sortie de stock doit etre rattachee a un beneficiaire identifie.",
+      });
+      return;
+    }
+
     await createMouvementStock({
       consommableId: Number(mouvForm.consommableId),
       magasinId: mouvForm.magasinId ? Number(mouvForm.magasinId) : null,
@@ -135,10 +149,12 @@ const StocksPage: React.FC = () => {
       prixUnitaire: Number(mouvForm.prixUnitaire),
       pieceJustificative: mouvForm.pieceJustificative,
       observations: mouvForm.observations,
+      destination: mouvForm.destination,
       typeOperation: mouvType,
       dateOperation: new Date().toISOString().slice(0, 19),
+      beneficiaireId: mouvType === "SORTIE" && mouvForm.beneficiaire ? Number(mouvForm.beneficiaire) : null,
     });
-    setMouvForm({ consommableId: "", magasinId: "", quantite: 0, prixUnitaire: 0, pieceJustificative: "", observations: "" });
+    setMouvForm({ consommableId: "", magasinId: "", quantite: 0, prixUnitaire: 0, pieceJustificative: "", observations: "", beneficiaire: "", destination: "" });
     await loadData();
     setView("MOUVEMENTS");
   };
@@ -162,7 +178,7 @@ const StocksPage: React.FC = () => {
   };
 
   return (
-    <div className="stocks-module fade-in">
+    <div className="stocks-module fade-in module-container-premium">
       <header className="page-header-premium">
         <div className="header-meta">
           <span className="badge-pill-glow">Logistique, stock & consommation</span>
@@ -268,10 +284,30 @@ const StocksPage: React.FC = () => {
                       <label>Pièce justificative</label>
                       <input value={mouvForm.pieceJustificative} onChange={e => setMouvForm({ ...mouvForm, pieceJustificative: e.target.value })} required />
                     </div>
-                    <div className="form-group-modern">
+                    <div className="form-group-modern" style={{ gridColumn: "span 2" }}>
                       <label>Observations</label>
                       <input value={mouvForm.observations} onChange={e => setMouvForm({ ...mouvForm, observations: e.target.value })} />
                     </div>
+                    {mouvType === "SORTIE" && (
+                      <>
+                        <div className="form-group-modern" style={{ gridColumn: "span 1" }}>
+                          <label>Bénéficiaire (Obligatoire)</label>
+                          <BeneficiaireSelect 
+                            value={mouvForm.beneficiaire} 
+                            onChange={val => setMouvForm({ ...mouvForm, beneficiaire: val })} 
+                          />
+                        </div>
+                        <div className="form-group-modern" style={{ gridColumn: "span 1" }}>
+                          <label>Destination</label>
+                          <select value={mouvForm.destination} onChange={e => setMouvForm({...mouvForm, destination: e.target.value})}>
+                            <option value="">-- Autre --</option>
+                            <option value="PATRIMOINE">Affectation au Patrimoine (Immobilisation)</option>
+                            <option value="SERVICE">Consommation Service</option>
+                            <option value="PROJET">Projet Spécifique</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
                   </div>
                   <button className="primary" type="submit" style={{ width: "100%", marginTop: 14 }}>Enregistrer le mouvement</button>
                 </form>

@@ -2,6 +2,7 @@ package com.patris.audit;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -21,6 +22,16 @@ public class AuditLog {
     private Long entiteId;
     private String username;
     private LocalDateTime dateAction;
+
+    /** Contexte, motif ou détail supplémentaire (traçabilité). */
+    @Column(length = 2000)
+    private String detail;
+
+    @Column(length = 2000)
+    private String ancienneValeur;
+
+    @Column(length = 2000)
+    private String nouvelleValeur;
 
     public AuditLog() {}
 
@@ -45,4 +56,10 @@ public class AuditLog {
     public void setUsername(String username) { this.username = username; }
     public LocalDateTime getDateAction() { return dateAction; }
     public void setDateAction(LocalDateTime dateAction) { this.dateAction = dateAction; }
+    public String getDetail() { return detail; }
+    public void setDetail(String detail) { this.detail = detail; }
+    public String getAncienneValeur() { return ancienneValeur; }
+    public void setAncienneValeur(String ancienneValeur) { this.ancienneValeur = ancienneValeur; }
+    public String getNouvelleValeur() { return nouvelleValeur; }
+    public void setNouvelleValeur(String nouvelleValeur) { this.nouvelleValeur = nouvelleValeur; }
 }

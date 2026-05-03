@@ -16,9 +16,10 @@ import com.patris.dto.MouvementStockCreateDTO;
 import com.patris.enums.type_mouvement;
 import com.patris.model.MouvementStock;
 import com.patris.model.Stock;
-import com.patris.repository.MagasinRepository;
 import com.patris.service.MouvementStockService;
 import com.patris.service.StockService;
+import com.patris.repository.BeneficiaireRepository;
+import com.patris.repository.MagasinRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,6 +31,7 @@ public class MouvementStockController {
     private final MouvementStockService service;
     private final StockService stockService;
     private final MagasinRepository magasinRepository;
+    private final BeneficiaireRepository beneficiaireRepository;
 
     @GetMapping
     public List<MouvementStock> findAll(){
@@ -63,7 +65,12 @@ public class MouvementStockController {
         mouvementStock.setReferencePiece(dto.getPieceJustificative());
         mouvementStock.setPrixUnitaire(dto.getPrixUnitaire());
         mouvementStock.setDestination(dto.getObservations());
-        mouvementStock.setServiceDemandeur(dto.getObservations());
+        
+        if (dto.getBeneficiaireId() != null) {
+            mouvementStock.setBeneficiaire(
+                beneficiaireRepository.findById(dto.getBeneficiaireId()).orElse(null)
+            );
+        }
 
         if (dto.getMagasinId() != null) {
             mouvementStock.setMagasin(

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { uploadImageFile } from '../api/upload';
+import React, { useEffect, useState } from "react";
+import { uploadImageFile } from "../api/upload";
+import { useToast } from "../contexts/ToastContext";
 
 interface ImageUploadProps {
   value: string;
@@ -10,22 +11,23 @@ interface ImageUploadProps {
 
 const API_BASE_URL = "http://localhost:8082";
 
-export default function ImageUpload({ value, onChange, className, label = "📸 Cliquer pour ajouter une photo" }: ImageUploadProps) {
+export default function ImageUpload({ value, onChange, className, label = "Cliquer pour ajouter une photo" }: ImageUploadProps) {
+  const { showToast } = useToast();
+
   const formatInitialValue = (val: string) => {
-    if (!val) return '';
-    if (val.startsWith('blob:') || val.startsWith('http')) return val;
-    return `${API_BASE_URL}${val.startsWith('/') ? '' : '/'}${val}`;
+    if (!val) return "";
+    if (val.startsWith("blob:") || val.startsWith("http")) return val;
+    return `${API_BASE_URL}${val.startsWith("/") ? "" : "/"}${val}`;
   };
 
   const [preview, setPreview] = useState<string>(formatInitialValue(value));
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    // Si la valeur externe change (ex: reset form ou chargement d'un bien existant)
-    if (value && !value.startsWith('blob:')) {
-       setPreview(value.startsWith('http') ? value : `${API_BASE_URL}${value.startsWith('/') ? '' : '/'}${value}`);
+    if (value && !value.startsWith("blob:")) {
+      setPreview(value.startsWith("http") ? value : `${API_BASE_URL}${value.startsWith("/") ? "" : "/"}${value}`);
     } else if (!value) {
-       setPreview('');
+      setPreview("");
     }
   }, [value]);
 
@@ -33,86 +35,78 @@ export default function ImageUpload({ value, onChange, className, label = "📸 
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 1. Affiche un aperçu immédiat via URL.createObjectURL
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
     setIsUploading(true);
 
     try {
-      // 2. Envoie le fichier au backend via FormData avec Axios
       const data = await uploadImageFile(file);
-      
-      // 3. Stocke l'URL de retour dans l'état de l'actif
       if (data && data.url) {
-         onChange(data.url);
+        onChange(data.url);
+        showToast({ type: "success", title: "Photo enregistree" });
       }
-    } catch (error: any) {
-      console.error('Erreur lors de l\'upload de l\'image:', error);
-      const data = error.response?.data;
-      const backendError = data ? `${data.error} - ${data.message}` : null;
-      const errorMessage = backendError ? `Refus du serveur: ${backendError}` : 'Erreur réseau ou crash serveur lors du transfert de la photo.';
-      alert(`Impossible d'enregistrer l'image.\n\n${errorMessage}\n\nAvez-vous bien redémarré le backend Spring Boot ?`);
-      setPreview(value ? (value.startsWith('http') ? value : `${API_BASE_URL}${value.startsWith('/') ? '' : '/'}${value}`) : '');
+    } catch (error: unknown) {
+      console.error("Erreur lors de l'upload de l'image:", error);
+      showToast({
+        type: "error",
+        title: "Upload image impossible",
+        message: "Verifiez que le backend Spring Boot et le service d'upload sont bien disponibles.",
+      });
+      setPreview(value ? (value.startsWith("http") ? value : `${API_BASE_URL}${value.startsWith("/") ? "" : "/"}${value}`) : "");
     } finally {
       setIsUploading(false);
     }
   };
 
   return (
-    <div className={`image-upload-container ${className || ''}`} style={{ width: '100%' }}>
-      <label 
-        className="btn-export" 
+    <div className={`image-upload-container ${className || ""}`} style={{ width: "100%" }}>
+      <label
+        className="btn-export"
         style={{
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          cursor: isUploading ? 'wait' : 'pointer', 
-          textAlign: 'center', 
-          width: '100%',
-          minHeight: '120px',
-          padding: '10px',
-          border: '2px dashed var(--primary)',
-          background: 'rgba(99, 102, 241, 0.05)',
-          overflow: 'hidden',
-          position: 'relative'
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: isUploading ? "wait" : "pointer",
+          textAlign: "center",
+          width: "100%",
+          minHeight: "120px",
+          padding: "10px",
+          border: "2px dashed var(--primary)",
+          background: "rgba(99, 102, 241, 0.05)",
+          overflow: "hidden",
+          position: "relative",
         }}
       >
         {preview ? (
-          <img 
-            src={preview} 
-            alt="Aperçu" 
-            style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0, opacity: isUploading ? 0.5 : 1 }} 
+          <img
+            src={preview}
+            alt="Apercu"
+            style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", top: 0, left: 0, opacity: isUploading ? 0.5 : 1 }}
           />
         ) : (
           <span style={{ opacity: 0.7 }}>{label}</span>
         )}
-        
-        {isUploading && (
-          <div style={{ position: 'absolute', zIndex: 10, background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: '20px', color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
+
+        {isUploading ? (
+          <div style={{ position: "absolute", zIndex: 10, background: "rgba(0,0,0,0.6)", padding: "5px 15px", borderRadius: "20px", color: "white", fontSize: "12px", fontWeight: "bold" }}>
             Upload en cours...
           </div>
-        )}
-        
-        {!preview && !isUploading && (
-          <div style={{ fontSize: '11px', opacity: 0.5, marginTop: '8px' }}>
+        ) : null}
+
+        {!preview && !isUploading ? (
+          <div style={{ fontSize: "11px", opacity: 0.5, marginTop: "8px" }}>
             JPG, PNG (max 5MB)
           </div>
-        )}
+        ) : null}
 
-        {preview && !isUploading && (
-           <div style={{ position: 'absolute', bottom: '5px', right: '5px', background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: '20px', color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
-              Modifier
-           </div>
-        )}
+        {preview && !isUploading ? (
+          <div style={{ position: "absolute", bottom: "5px", right: "5px", background: "rgba(0,0,0,0.6)", padding: "5px 15px", borderRadius: "20px", color: "white", fontSize: "12px", fontWeight: "bold" }}>
+            Modifier
+          </div>
+        ) : null}
 
-        <input 
-          type="file" 
-          accept=".png,.jpg,.jpeg" 
-          hidden 
-          disabled={isUploading}
-          onChange={handleFileChange} 
-        />
+        <input type="file" accept=".png,.jpg,.jpeg" hidden disabled={isUploading} onChange={handleFileChange} />
       </label>
     </div>
   );

@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getUsers, createUser, deleteUser } from '../api/api';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useToast } from '../contexts/ToastContext';
+
+interface RoleDto {
+  id?: number;
+  code: string;
+  libelle?: string;
+}
 
 interface User {
   id: number;
@@ -8,9 +17,9 @@ interface User {
   email?: string;
   fonction?: string;
   telephone?: string;
-  role: string;
+  role?: RoleDto | string;
   derniereConnexion?: string;
-  statut?: 'ACTIF' | 'SUSPENDU';
+  statut?: 'ACTIF' | 'SUSPENDU' | 'EN_ATTENTE';
 }
 
 // Mapping des rôles frontend vers backend
@@ -37,6 +46,9 @@ const ROLE_LABELS: { [key: string]: { label: string; icon: string } } = {
 };
 
 const UsersPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { confirm } = useConfirm();
+  const { showToast } = useToast();
   const [view, setView] = useState<'LIST' | 'FORM'>('LIST');
   const [data, setData] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +79,16 @@ const UsersPage: React.FC = () => {
     setErrorMessage('');
 
     try {
-      const created = await createUser(form);
+      const payload = {
+        nom: form.nom,
+        username: form.username,
+        email: form.email,
+        fonction: form.fonction,
+        telephone: form.telephone,
+        password: form.password,
+        role: { code: form.role },
+      };
+      const created = await createUser(payload);
       setData([created, ...data]);
       setSuccessMessage(`✅ Utilisateur ${created.nom || created.username} créé avec succès !`);
       setForm({ nom: '', username: '', email: '', fonction: '', telephone: '', role: 'AGENT_INVENTAIRE', password: '' });
@@ -83,14 +104,21 @@ const UsersPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Êtes-vous sûr de vouloir suppimer cet utilisateur?')) {
-      try {
-        await deleteUser(id);
-        setData(data.filter(u => u.id !== id));
-        alert('Utilisateur supprimé');
-      } catch (error: any) {
-        alert('Erreur: ' + error.message);
-      }
+    const approved = await confirm({
+      title: "Supprimer cet utilisateur ?",
+      message: "Le compte sera retire de la liste active des utilisateurs.",
+      confirmLabel: "Supprimer",
+      tone: "danger",
+    });
+    if (!approved) return;
+
+    try {
+      await deleteUser(id);
+      setData(data.filter(u => u.id !== id));
+      showToast({ type: "success", title: "Utilisateur supprime" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      showToast({ type: "error", title: "Suppression impossible", message });
     }
   };
 
@@ -102,7 +130,10 @@ const UsersPage: React.FC = () => {
           <h2 style={{fontSize: '32px', marginTop: '8px'}}>Administration des Comptes</h2>
         </div>
         {view === 'LIST' ? (
-          <button className="primary" onClick={() => setView('FORM')}>+ Créer un Compte</button>
+          <div style={{display: 'flex', gap: '10px'}}>
+            <button className="btn-export" onClick={() => navigate('/admin')}>📁 Configurer le Catalogue</button>
+            <button className="primary" onClick={() => setView('FORM')}>+ Créer un Compte</button>
+          </div>
         ) : (
           <button className="btn-export" onClick={() => setView('LIST')}>Annuler</button>
         )}
@@ -177,7 +208,12 @@ const UsersPage: React.FC = () => {
               <p style={{marginTop: '20px', opacity: 0.6}}>Chargement des utilisateurs...</p>
             </div>
           ) : data.length > 0 ? (
-            data.map(user => (
+            data.map(user => {
+              const roleCode =
+                typeof user.role === 'object' && user.role && 'code' in user.role
+                  ? user.role.code
+                  : String(user.role ?? '');
+              return (
               <div key={user.id} className="asset-card">
                 <div style={{display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '20px'}}>
                   <div style={{
@@ -207,10 +243,10 @@ const UsersPage: React.FC = () => {
                   <p style={{margin: '0 0 8px', fontSize: '13px'}}><strong>Téléphone :</strong> {user.telephone || 'Non défini'}</p>
                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px'}}>
                     <span className="badge-premium" style={{fontSize: '9px', background: 'rgba(255,255,255,0.05)'}}>
-                      {ROLE_LABELS[user.role]?.icon || '👤'} {user.role}
+                      {ROLE_LABELS[roleCode]?.icon || '👤'} {ROLE_LABELS[roleCode]?.label || roleCode}
                     </span>
                     <span className="status-pill status-neuf" style={{fontSize: '9px'}}>
-                      ✓ ACTIF
+                      {user.statut === 'ACTIF' ? '✓ Actif' : user.statut === 'SUSPENDU' ? 'Suspendu' : user.statut === 'EN_ATTENTE' ? 'En attente' : '—'}
                     </span>
                   </div>
                   <p style={{fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right', margin: '6px 0 0'}}>
@@ -223,7 +259,8 @@ const UsersPage: React.FC = () => {
                   <button className="btn-export" style={{padding: '8px', color: 'var(--danger)'}} onClick={() => handleDelete(user.id)}>🗑️</button>
                 </div>
               </div>
-            ))
+            );
+            })
           ) : (
             <div className="asset-card" style={{gridColumn: '1/-1', padding: '60px', textAlign: 'center'}}>
               <div style={{fontSize: '60px', marginBottom: '20px'}}>👥</div>

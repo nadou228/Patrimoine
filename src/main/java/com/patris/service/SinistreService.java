@@ -35,6 +35,9 @@ public class SinistreService {
                     .orElseThrow(() -> new RuntimeException("Bien introuvable"));
             sinistre.setBien(bien);
         }
+        if (sinistre.getStatut() == null) {
+            sinistre.setStatut(com.patris.enums.statutSinistre.from("DECLARE"));
+        }
         return sinistreRepository.save(sinistre);
     }
 
@@ -45,6 +48,14 @@ public class SinistreService {
         sinistre.setDescription(s.getDescription());
         sinistre.setMontantEstime(s.getMontantEstime());
         sinistre.setStatut(s.getStatut());
+        sinistre.setReferenceAssurance(s.getReferenceAssurance());
+        sinistre.setNumeroDossierAssureur(s.getNumeroDossierAssureur());
+        sinistre.setMontantIndemnise(s.getMontantIndemnise());
+        sinistre.setMontantRembourse(s.getMontantRembourse());
+        sinistre.setDatePaiement(s.getDatePaiement());
+        sinistre.setPiecesJointes(s.getPiecesJointes());
+        sinistre.setLieuSinistre(s.getLieuSinistre());
+        sinistre.setDateCloture(s.getDateCloture());
 
         // Mise Ã  jour du bien si fourni
         if (s.getBien() != null && s.getBien().getId() != null) {

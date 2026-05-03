@@ -18,6 +18,7 @@ import com.patris.model.Document;
 import com.patris.service.DocumentService;
 import com.patris.service.FileStorageService;
 import com.patris.enums.typeDocument;
+import com.patris.repository.BienRepository;
 
 import lombok.RequiredArgsConstructor;
 import java.time.LocalDateTime;
@@ -29,6 +30,7 @@ public class DocumentController {
 
     private final DocumentService service;
     private final FileStorageService fileStorageService;
+    private final BienRepository bienRepository;
     
     @GetMapping
     public List<Document> findAll(){
@@ -57,8 +59,7 @@ public class DocumentController {
         document.setTypeDocument(typeDocument);
         document.setDateUpload(LocalDateTime.now());
         document.setCheminFichier(url);
-        document.setBien(new com.patris.model.Bien());
-        document.getBien().setId(bienId);
+        document.setBien(bienRepository.getReferenceById(bienId));
         return ResponseEntity.ok(service.save(document));
     }
 

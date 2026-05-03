@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { deleteAuditLog, getAuditLogs, getBiens, getStocks, getUsers } from "../api/api";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, Legend } from "recharts";
+import { DashboardStatsResponse, deleteAuditLog, getBiens } from "../api/api";
 import { getCurrentUser } from "../api/auth";
+import { useConfirm } from "../contexts/ConfirmContext";
 import { usePermissions } from "../contexts/PermissionsContext";
+import { useToast } from "../contexts/ToastContext";
+import { useApi } from "../hooks/useApi";
 import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
 
 type LooseRecord = Record<string, unknown>;
@@ -69,77 +72,57 @@ const MetricValue = ({ metric }: { metric: DashboardMetric }) => {
 
 const DashboardPage: React.FC = () => {
   const [biens, setBiens] = useState<LooseRecord[]>([]);
-  const [users, setUsers] = useState<LooseRecord[]>([]);
-  const [stocks, setStocks] = useState<LooseRecord[]>([]);
-  const [activities, setActivities] = useState<LooseRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: statsData, loading: statsLoading } = useApi<DashboardStatsResponse>("/dashboard/stats", []);
   const currentUser = getCurrentUser();
+  const { confirm } = useConfirm();
   const { permissions } = usePermissions();
+  const { showToast } = useToast();
   const isAdmin = permissions?.role === "ADMIN";
 
   useEffect(() => {
     const load = async () => {
       try {
-        setLoading(true);
-        const [biensData, usersData, stocksData, auditData] = await Promise.all([
+        const [biensData] = await Promise.all([
           getBiens().catch(() => []),
-          getUsers().catch(() => []),
-          getStocks().catch(() => []),
-          isAdmin ? getAuditLogs().catch(() => []) : Promise.resolve([]),
         ]);
-
         setBiens((biensData as LooseRecord[]) ?? []);
-        setUsers((usersData as LooseRecord[]) ?? []);
-        setStocks((stocksData as LooseRecord[]) ?? []);
-        setActivities(((auditData as LooseRecord[]) ?? []).slice().reverse());
-      } finally {
-        setLoading(false);
       }
+      finally {}
     };
 
     void load();
-  }, [isAdmin]);
-
-  const isSoon = (value?: unknown, days = 30) => {
-    if (!value) return false;
-    const date = new Date(String(value));
-    if (Number.isNaN(date.getTime())) return false;
-    const limit = new Date();
-    limit.setDate(limit.getDate() + days);
-    return date <= limit;
-  };
+  }, []);
 
   const metrics = useMemo(() => {
-    const totalValue = biens.reduce((sum, bien) => sum + Number(bien.valeur || 0), 0);
-    const totalStockValue = stocks.reduce(
-      (sum, stock) =>
-        sum +
-        Number(stock.quantite || 0) * Number(stock.prixUnitaireMoyen || (stock.consommable as LooseRecord | undefined)?.prixMoyenPondere || 0),
-      0
-    );
-    const maintenanceAlerts = biens.filter((bien) => isSoon(bien.dateProchaineMaintenance, 30)).length;
-    const visiteAlerts = biens.filter((bien) => isSoon(bien.dateProchaineVisiteTechnique, 30)).length;
-    const lowStock = stocks.filter(
-      (stock) =>
-        Number(stock.quantite || 0) <= Number(stock.seuilAlerte || (stock.consommable as LooseRecord | undefined)?.seuilAlerte || 0)
-    ).length;
+    const totalValue = Number(statsData?.valeurTotale || 0);
+    const totalNetValue = Number(statsData?.valeurNette || 0);
+    const maintenanceAlerts = Number(statsData?.prochainesMaintenance?.filter((item) => item.typeAlerte === "MAINTENANCE").length || 0);
+    const visiteAlerts = Number(statsData?.prochainesMaintenance?.filter((item) => item.typeAlerte === "VISITE_TECHNIQUE").length || 0);
+    const lowStock = Number(statsData?.stocksEnAlerte || 0);
     const criticalCount = maintenanceAlerts + visiteAlerts + lowStock;
     const recentlyAdded = [...biens]
       .filter((bien) => bien.dateAcquisition)
       .sort((a, b) => String(b.dateAcquisition || "").localeCompare(String(a.dateAcquisition || "")))
       .slice(0, 5);
 
+    const typeDistribution = [
+      { name: 'Immobilier', value: biens.filter(b => b.type === 'immobilier').length, color: '#6366f1' },
+      { name: 'Mobilier', value: biens.filter(b => b.type === 'mobilier').length, color: '#22c55e' },
+      { name: 'Véhicules', value: biens.filter(b => b.type === 'roulant').length, color: '#f59e0b' },
+    ].filter(d => d.value > 0);
+
     return {
       totalValue,
-      totalStockValue,
+      totalNetValue,
       maintenanceAlerts,
       visiteAlerts,
       lowStock,
       criticalCount,
       recentlyAdded,
-      emptyPortfolio: biens.length === 0 && stocks.length === 0,
+      typeDistribution,
+      emptyPortfolio: biens.length === 0 && Number(statsData?.totalBiens || 0) === 0,
     };
-  }, [biens, stocks]);
+  }, [biens, statsData]);
 
   const chartData = useMemo(() => {
     const formatter = new Intl.DateTimeFormat("fr-FR", { month: "short" });
@@ -175,7 +158,7 @@ const DashboardPage: React.FC = () => {
         value: metrics.totalValue,
         suffix: "FCFA",
         tone: metrics.totalValue > 0 ? "success" : "neutral",
-        status: metrics.totalValue > 0 ? `${biens.length} biens actifs` : "Aucun actif comptabilise",
+        status: metrics.totalValue > 0 ? `${statsData?.totalBiens || biens.length} biens actifs` : "Aucun actif comptabilise",
         detail:
           metrics.totalValue > 0
             ? "Lecture consolidee de la valeur brute du portefeuille national."
@@ -183,16 +166,16 @@ const DashboardPage: React.FC = () => {
         emptyLabel: "Portefeuille vide",
       },
       {
-        label: "Valeur stock",
-        value: metrics.totalStockValue,
+        label: "Valeur nette",
+        value: metrics.totalNetValue,
         suffix: "FCFA",
-        tone: metrics.lowStock > 0 ? "warning" : "neutral",
-        status: metrics.lowStock > 0 ? `${metrics.lowStock} seuil(s) critiques` : "Aucune tension stock",
+        tone: metrics.totalNetValue > 0 ? "neutral" : "warning",
+        status: `${statsData?.biensAffectes || 0} bien(s) affecte(s)`,
         detail:
-          metrics.totalStockValue > 0
-            ? "Estimation valorisee des consommables disponibles."
-            : "Initialisez les lignes magasin pour activer le suivi logistique.",
-        emptyLabel: "Stock non initialise",
+          metrics.totalNetValue > 0
+            ? "Vision nette apres amortissement des immobilisations suivies."
+            : "La valeur nette apparaitra des que les calculs comptables seront alimentes.",
+        emptyLabel: "VNC indisponible",
       },
       {
         label: "Echeances proches",
@@ -210,19 +193,19 @@ const DashboardPage: React.FC = () => {
         emptyLabel: "Aucune alerte",
       },
       {
-        label: "Adoption applicative",
-        value: users.length,
-        suffix: "utilisateur(s)",
-        tone: users.length > 0 ? "success" : "neutral",
-        status: users.length > 0 ? `${users.length} comptes actifs` : "Aucun utilisateur visible",
+        label: "Flux du mois",
+        value: Number(statsData?.mouvementsThisMois || 0),
+        suffix: "mouvement(s)",
+        tone: Number(statsData?.mouvementsThisMois || 0) > 0 ? "success" : "neutral",
+        status: `${statsData?.stocksEnAlerte || 0} alerte(s) stock`,
         detail:
-          users.length > 0
-            ? "Le reseau d'utilisateurs alimente la trace de gestion."
-            : "Les comptes apparaitront ici des leur activation.",
-        emptyLabel: "Aucun compte",
+          Number(statsData?.mouvementsThisMois || 0) > 0
+            ? "Lecture temps reel des mouvements de stock et d'exploitation du mois en cours."
+            : "Aucun mouvement journalise sur le mois en cours.",
+        emptyLabel: "Aucun flux",
       },
     ],
-    [biens.length, metrics.lowStock, metrics.maintenanceAlerts, metrics.totalStockValue, metrics.totalValue, metrics.visiteAlerts, users.length]
+    [biens.length, metrics.lowStock, metrics.maintenanceAlerts, metrics.totalNetValue, metrics.totalValue, metrics.visiteAlerts, statsData]
   );
 
   const executiveAlerts = useMemo<Array<{ tone: AlertTone; title: string; detail: string }>>(() => {
@@ -249,6 +232,13 @@ const DashboardPage: React.FC = () => {
         detail: `${metrics.lowStock} ligne(s) de stock ont atteint leur seuil d'alerte.`,
       });
     }
+    if ((statsData?.biensSinistres || 0) > 0) {
+      alerts.push({
+        tone: "danger",
+        title: "Sinistres en cours",
+        detail: `${statsData?.biensSinistres || 0} bien(s) sont actuellement marques en sinistre.`,
+      });
+    }
     if (alerts.length === 0) {
       alerts.push({
         tone: "success",
@@ -260,7 +250,7 @@ const DashboardPage: React.FC = () => {
     }
 
     return alerts;
-  }, [metrics.emptyPortfolio, metrics.lowStock, metrics.maintenanceAlerts, metrics.visiteAlerts]);
+  }, [metrics.emptyPortfolio, metrics.lowStock, metrics.maintenanceAlerts, metrics.visiteAlerts, statsData]);
 
   const exportActions = useMemo(
     () => [
@@ -302,21 +292,27 @@ const DashboardPage: React.FC = () => {
             currentUser || undefined,
             [
               { label: "Valeur patrimoine", value: formatCurrency(metrics.totalValue) },
-              { label: "Valeur stock", value: formatCurrency(metrics.totalStockValue) },
+              { label: "Valeur nette", value: formatCurrency(metrics.totalNetValue) },
               { label: "Alertes", value: String(metrics.criticalCount) },
             ]
           ),
       },
     ],
-    [biens, currentUser, metrics.criticalCount, metrics.totalStockValue, metrics.totalValue]
+    [biens, currentUser, metrics.criticalCount, metrics.totalNetValue, metrics.totalValue]
   );
 
-  const visibleActivities = useMemo(() => activities.slice(0, 8), [activities]);
+  const visibleActivities = useMemo(() => (statsData?.activiteRecente || []).slice(0, 8), [statsData]);
 
   const handleDeleteActivity = async (id: number) => {
-    if (!window.confirm("Supprimer cette activite du journal ?")) return;
+    const approved = await confirm({
+      title: "Supprimer cette activite ?",
+      message: "Cette entree d'audit sera retiree du journal visible.",
+      confirmLabel: "Supprimer",
+      tone: "danger",
+    });
+    if (!approved) return;
     await deleteAuditLog(id);
-    setActivities((previous) => previous.filter((activity) => Number(activity.id) !== id));
+    showToast({ type: "success", title: "Activite supprimee" });
   };
 
   return (
@@ -342,7 +338,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </header>
 
-      {loading ? (
+      {statsLoading ? (
         <div className="empty-state-modern skeleton-block" aria-live="polite">
           Chargement du cockpit patrimoine...
         </div>
@@ -390,7 +386,7 @@ const DashboardPage: React.FC = () => {
                 </div>
                 <div className="executive-chart-summary">
                   <strong>{formatCurrency(metrics.totalValue)}</strong>
-                  <span>{biens.length} biens traces</span>
+                  <span>{statsData?.totalBiens || biens.length} biens traces</span>
                 </div>
               </div>
               <div className="executive-chart-shell">
@@ -437,6 +433,33 @@ const DashboardPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </article>
+
+            <article className="asset-card card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '30px' }}>
+              <div className="section-header-inline" style={{ width: '100%', marginBottom: '20px' }}>
+                <div>
+                  <span className="executive-kicker">Répartition</span>
+                  <h3>Composition du parc</h3>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={metrics.typeDistribution}
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {metrics.typeDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36}/>
+                </PieChart>
+              </ResponsiveContainer>
+              {metrics.typeDistribution.length === 0 && <p className="muted-paragraph">Données insuffisantes</p>}
             </article>
 
             <article className="asset-card executive-actions-card card">
@@ -493,7 +516,7 @@ const DashboardPage: React.FC = () => {
                             {String(activity.action || "ACTION")} sur {String(activity.entite || "element")}
                           </strong>
                           <span>
-                            {String(activity.username || "Systeme")} - {formatDateTime(activity.dateAction)}
+                            {String(activity.acteur || "Systeme")} - {formatDateTime(activity.timestamp)}
                           </span>
                         </div>
                         <button
@@ -549,7 +572,7 @@ const DashboardPage: React.FC = () => {
               <div className="executive-status-grid">
                 <div className="executive-status-card success">
                   <span>Valeur du stock</span>
-                  <strong>{formatCurrency(metrics.totalStockValue)}</strong>
+                  <strong>{formatCurrency(metrics.totalNetValue)}</strong>
                 </div>
                 <div className="executive-status-card warning">
                   <span>Risque operationnel</span>

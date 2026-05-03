@@ -16,11 +16,21 @@ public class AuditService {
     private final AuditLogRepository repository;
 
     public void save(String action, String entite, Long entiteId) {
+        save(action, entite, entiteId, null);
+    }
 
-        String username = SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getName();
+    public void save(String action, String entite, Long entiteId, String detail) {
+        save(action, entite, entiteId, detail, null, null);
+    }
+
+    public void save(String action, String entite, Long entiteId, String detail, String ancienneValeur, String nouvelleValeur) {
+        String username = "system";
+        try {
+            if (SecurityContextHolder.getContext() != null && 
+                SecurityContextHolder.getContext().getAuthentication() != null) {
+                username = SecurityContextHolder.getContext().getAuthentication().getName();
+            }
+        } catch (Exception e) {}
 
         AuditLog log = new AuditLog();
         log.setAction(action);
@@ -28,6 +38,9 @@ public class AuditService {
         log.setEntiteId(entiteId);
         log.setUsername(username);
         log.setDateAction(LocalDateTime.now());
+        log.setDetail(detail);
+        log.setAncienneValeur(ancienneValeur);
+        log.setNouvelleValeur(nouvelleValeur);
 
         repository.save(log);
     }

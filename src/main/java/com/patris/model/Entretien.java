@@ -30,7 +30,15 @@ public class Entretien {
     
     private String prestataire;
 
+    private String type;
+
     private String observation;
+
+    private String description;
+
+    private String rapportUrl;
+
+    private String statut;
 
     @ManyToOne
     @JoinColumn(name = "bien_id")

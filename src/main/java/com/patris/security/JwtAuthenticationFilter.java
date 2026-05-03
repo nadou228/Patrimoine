@@ -1,6 +1,8 @@
 package com.patris.security;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,6 +19,8 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     private final JwtService jwtService;
     private final CustomUserDetailsService customUserDetailsService;
 
@@ -27,8 +31,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
-        // âœ… Ignore les endpoints publics
-        if (path.startsWith("/auth/login") || path.startsWith("/utilisateurs/register")) {
+        if (path.startsWith("/auth/login") || path.startsWith("/api/auth/login")
+                || path.startsWith("/utilisateurs/register") || path.startsWith("/api/utilisateurs/register")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -51,15 +55,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
-                System.out.println("DEBUG: Authenticated user " + username + " with authorities: " + userDetails.getAuthorities());
+                log.debug("Utilisateur authentifié : {} avec autorités {}", username, userDetails.getAuthorities());
             } else if (token != null) {
-                System.out.println("DEBUG: Token validation failed for token: " + token.substring(0, Math.min(token.length(), 10)) + "...");
-            } else {
-                // System.out.println("DEBUG: No token found in Authorization header for path: " + path);
+                log.debug("Jeton JWT invalide ou expiré (préfixe masqué).");
             }
         } catch (Exception ex) {
-            System.err.println("DEBUG: Error in JwtAuthenticationFilter: " + ex.getMessage());
-            ex.printStackTrace();
+            log.warn("Erreur dans JwtAuthenticationFilter : {}", ex.getMessage());
         }
 
         filterChain.doFilter(request, response);

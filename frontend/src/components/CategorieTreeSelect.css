@@ -1,0 +1,57 @@
+.categorie-tree-select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.node-row {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.node-row:hover {
+  background: rgba(129, 140, 248, 0.1);
+}
+
+.node-row.selected {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.toggle-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.spacer {
+  width: 20px;
+}
+
+.node-label {
+  flex: 1;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.node-children {
+  margin-left: 1.5rem;
+  border-left: 1px dashed var(--border-color);
+  padding-left: 0.5rem;
+}

@@ -6,10 +6,10 @@ import java.util.List;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import com.patris.enums.categorie;
 import com.patris.enums.inventaireStatut;
 import com.patris.enums.statutValidation;
 import com.patris.model.Bien;
+import com.patris.model.CategoriePatrimoine;
 import com.patris.model.InventaireCampagne;
 import com.patris.model.InventaireFiche;
 import com.patris.repository.BienRepository;
@@ -55,8 +55,8 @@ public class InventaireCampagneService {
         if (campagne.getSites() != null && !campagne.getSites().isBlank()) {
             biens = bienRepository.findByLocalisationContainingAndArchivedFalse(campagne.getSites());
         } else if (campagne.getEquipes() != null && campagne.getEquipes().startsWith("CAT:")) {
-            String catStr = campagne.getEquipes().substring(4);
-            biens = bienRepository.findByCategorieAndArchivedFalse(categorie.valueOf(catStr));
+            String catCode = campagne.getEquipes().substring(4);
+            biens = bienRepository.findByCodeCategorieAndArchivedFalse(catCode);
         } else {
             biens = bienRepository.findAllByArchivedFalse();
         }
@@ -136,7 +136,10 @@ public class InventaireCampagneService {
         return repository.save(campagne);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public void delete(Long id) {
+        ecartRepository.deleteAll(ecartRepository.findByCampagneId(id));
+        ficheRepository.deleteAll(ficheRepository.findByCampagneId(id));
         repository.deleteById(id);
     }
 }

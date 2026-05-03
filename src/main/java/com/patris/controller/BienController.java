@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -29,7 +30,11 @@ import com.patris.service.DocumentService;
 import com.patris.service.FileStorageService;
 import com.patris.service.QrCodeService;
 import com.patris.enums.typeDocument;
+import com.patris.dto.EtiquetteDto;
+import com.patris.service.IupService;
+import com.patris.service.RateLimitingService;
 import org.springframework.security.core.Authentication;
+import org.springframework.beans.factory.annotation.Value;
 
 import lombok.RequiredArgsConstructor;
 import java.time.LocalDateTime;
@@ -45,11 +50,38 @@ public class BienController {
     private final DocumentService documentService;
     private final FileStorageService fileStorageService;
     private final QrCodeService qrCodeService;
+    private final IupService iupService;
+    private final RateLimitingService rateLimitingService;
     private final ObjectMapper objectMapper;
+    private final com.patris.repository.BienRepository bienRepository;
+
+    @Value("${app.domain:localhost:8082}")
+    private String appDomain;
 
     @GetMapping
-    public List<Bien> findAll(){
-        return bienService.findAll();
+    public ResponseEntity<?> findAll(
+        @RequestParam(required = false) String q,
+        @RequestParam(required = false) Boolean archived
+    ){
+        try {
+            if (q != null && !q.isBlank()) {
+                return searchBiens(q, null, null);
+            }
+            log.info("Appel de bienService.findAll()");
+            List<Bien> list = Boolean.TRUE.equals(archived) ? bienRepository.findAll() : bienService.findAll();
+            log.info("bienService.findAll() réussi. Nb éléments : {}", list.size());
+            // test serialization to catch Jackson errors before returning
+            log.info("Appel de objectMapper.writeValueAsString()");
+            objectMapper.writeValueAsString(list);
+            log.info("objectMapper.writeValueAsString() réussi.");
+            return ResponseEntity.ok(list);
+        } catch (Exception e) {
+            log.error("Erreur GET /api/biens", e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Internal Server Error");
+            error.put("message", e.getMessage() != null ? e.getMessage() : e.toString());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     @GetMapping("/search")
@@ -67,11 +99,10 @@ public class BienController {
                 || containsIgnoreCase(bien.getDesignation(), query)
                 || containsIgnoreCase(bien.getIup(), query)
                 || containsIgnoreCase(bien.getCodeBien(), query)
-                || containsIgnoreCase(bien.getCodeSousCategorie(), query)
                 || containsIgnoreCase(bien.getLocalisation(), query))
             .filter(bien -> category.isBlank()
-                || containsIgnoreCase(bien.getCategoriePrincipale(), category)
-                || (bien.getCategorie() != null && containsIgnoreCase(bien.getCategorie().name(), category)))
+                || containsIgnoreCase(bien.getCodeCategorie(), category)
+                || containsIgnoreCase(bien.getCodeSousCategorie(), category))
             .filter(bien -> state.isBlank()
                 || containsIgnoreCase(bien.getEtat(), state)
                 || (bien.getStatutValidation() != null && containsIgnoreCase(bien.getStatutValidation().name(), state)))
@@ -88,10 +119,53 @@ public class BienController {
     @GetMapping("/{id}/qrcode")
     public ResponseEntity<Map<String, String>> getQrCode(@PathVariable Long id) {
         Bien bien = bienService.findById(id);
-        String qrCode = qrCodeService.generateQrCodeBase64(bien.getIup());
+        String qrCode = qrCodeService.generateQrCodeBase64(bien.getIup(), appDomain);
         Map<String, String> response = new HashMap<>();
         response.put("qrcode", qrCode);
+        response.put("qrCodeBase64", qrCode);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/qrcode")
+    public ResponseEntity<Map<String, String>> getQrCodeByIup(@RequestParam String iup) {
+        Bien bien = bienService.findByIup(iup);
+        String qrCode = qrCodeService.generateQrCodeBase64(bien.getIup(), appDomain);
+        Map<String, String> response = new HashMap<>();
+        response.put("qrcode", qrCode);
+        response.put("qrCodeBase64", qrCode);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/etiquette")
+    public ResponseEntity<EtiquetteDto> getEtiquetteData(@PathVariable Long id) {
+        Bien bien = bienService.findById(id);
+        String qrCode = qrCodeService.generateQrCodeBase64(bien.getIup(), appDomain);
+        
+        EtiquetteDto dto = EtiquetteDto.builder()
+                .iup(bien.getIup())
+                .designation(bien.getDesignation())
+                .categorie(bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie())
+                .service(bien.getService())
+                .localisation(bien.getLocalisation())
+                .dateAcquisition(bien.getDateAcquisition() != null ? bien.getDateAcquisition().toString() : "N/A")
+                .valeur(String.format("%.0f FCFA", bien.getValeur()))
+                .qrCodeBase64(qrCode)
+                .logoMinistere("/logo-ministere.png")
+                .build();
+        
+        return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/scan/{iup}")
+    public ResponseEntity<?> scanBien(@PathVariable String iup, jakarta.servlet.http.HttpServletRequest request) {
+        String ip = request.getRemoteAddr();
+        if (!rateLimitingService.resolveBucket(ip).tryConsume(1)) {
+            return ResponseEntity.status(429).body("Trop de tentatives. Veuillez réessayer plus tard.");
+        }
+        
+        log.info("Scan IUP reçu de {} : {}", ip, iup);
+        Bien bien = bienService.findByIup(iup);
+        return ResponseEntity.ok(bien);
     }
 
     @GetMapping("/iup/{iup}")
@@ -115,7 +189,8 @@ public class BienController {
 
             BienDto dto = objectMapper.convertValue(cleanedPayload, BienDto.class);
             Bien bien = bienService.fromDto(dto);
-            Bien saved = bienService.saveBien(bien);
+            Bien saved = bienService.saveBien(bien, dto.getSourceStockId(), dto.getSourceStockQuantite(),
+                    dto.getSourceBeneficiaireId());
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             log.error("ÉCHEC CRITIQUE lors de la création du bien. Cause : {}", e.getMessage());
@@ -150,6 +225,48 @@ public class BienController {
             body.put("payload", payload);
             return ResponseEntity.badRequest().body(body);
         }
+    }
+
+    @PutMapping("/{id}/statut")
+    public ResponseEntity<Bien> updateStatut(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> payload,
+        Authentication authentication
+    ) {
+        String acteur = authentication != null ? authentication.getName() : "systeme";
+        Bien updated = bienService.changerStatut(id, payload.get("statutOperationnel"), payload.get("service"), acteur);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/generate-iup")
+    public ResponseEntity<Map<String, Object>> generateIup(@RequestBody Map<String, Object> payload) {
+        String categorie = Optional.ofNullable(payload.get("categorie")).map(Object::toString).orElse("");
+        String iup = iupService.generateIup(categorie);
+        String[] parts = iup.split("-");
+        Map<String, Object> response = new HashMap<>();
+        response.put("iup", iup);
+        response.put("prefixe", parts.length > 0 ? parts[0] : "");
+        response.put("categorie", parts.length > 1 ? parts[1] : categorie);
+        response.put("annee", parts.length > 2 ? parts[2] : "");
+        response.put("sequence", parts.length > 3 ? parts[3] : "");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/validate-iup")
+    public ResponseEntity<Map<String, Boolean>> validateIup(@RequestParam String iup) {
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("unique", bienService.isIupUnique(iup));
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/validate-immatriculation")
+    public ResponseEntity<Map<String, Boolean>> validateImmatriculation(
+        @RequestParam String immatriculation,
+        @RequestParam(required = false) Long excludeId
+    ) {
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("unique", bienService.isImmatriculationUnique(immatriculation, excludeId));
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/photo")
@@ -205,7 +322,7 @@ public class BienController {
             document.setDateUpload(LocalDateTime.now());
             document.setCheminFichier(url);
             
-            Bien bien = new Bien();
+            Bien bien = bienRepository.getReferenceById(id);
             bien.setId(id);
             document.setBien(bien);
             
@@ -234,6 +351,11 @@ public class BienController {
     ) {
         Bien updated = bienService.validate(id, com.patris.enums.statutValidation.from(statut), authentication.getName());
         return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/{id}/historique")
+    public ResponseEntity<java.util.List<com.patris.dto.HistoriqueBienDto>> getHistorique(@PathVariable Long id) {
+        return ResponseEntity.ok(bienService.getHistorique(id));
     }
 
     private boolean containsIgnoreCase(String source, String expected) {

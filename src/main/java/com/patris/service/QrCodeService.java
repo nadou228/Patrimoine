@@ -12,10 +12,11 @@ import java.util.Base64;
 @Service
 public class QrCodeService {
 
-    public String generateQrCodeBase64(String text) {
+    public String generateQrCodeBase64(String iup, String domain) {
         try {
+            String url = String.format("https://%s/api/biens/scan/%s", domain, iup);
             QRCodeWriter qrCodeWriter = new QRCodeWriter();
-            BitMatrix bitMatrix = qrCodeWriter.encode(text, BarcodeFormat.QR_CODE, 250, 250);
+            BitMatrix bitMatrix = qrCodeWriter.encode(url, BarcodeFormat.QR_CODE, 300, 300);
 
             ByteArrayOutputStream pngOutputStream = new ByteArrayOutputStream();
             MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);

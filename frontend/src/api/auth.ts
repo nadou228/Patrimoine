@@ -10,6 +10,8 @@ export interface LoginResponse {
   nom: string;
   role: string;
   token: string;
+  /** Permissions effectives (aligné sur le claim JWT `permissions`). */
+  permissions?: string[];
 }
 
 interface JwtPayload {

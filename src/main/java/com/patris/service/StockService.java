@@ -6,7 +6,10 @@ import com.patris.model.Stock;
 import com.patris.repository.ConsommableRepository;
 import com.patris.repository.MouvementStockRepository;
 import com.patris.repository.StockRepository;
+import com.patris.model.Bien;
+import com.patris.model.BienMobilier;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Lazy;
 import java.util.List;
 
 @Service
@@ -15,13 +18,16 @@ public class StockService {
     private final StockRepository repository;
     private final ConsommableRepository consommableRepository;
     private final MouvementStockRepository mouvementRepository;
+    private final BienService bienService;
 
     public StockService(StockRepository repository,
                         ConsommableRepository consommableRepository,
-                        MouvementStockRepository mouvementRepository) {
+                        MouvementStockRepository mouvementRepository,
+                        @Lazy BienService bienService) {
         this.repository = repository;
         this.consommableRepository = consommableRepository;
         this.mouvementRepository = mouvementRepository;
+        this.bienService = bienService;
     }
 
     public List<Stock> findAll() {
@@ -59,10 +65,24 @@ public class StockService {
             stock.setQuantite(nouvelleQte);
             consommableRepository.save(article);
         } else if (mouv.getTypeMouvement() == com.patris.enums.type_mouvement.SORTIE) {
+            if (mouv.getBeneficiaire() == null) {
+                throw new RuntimeException("Un bénéficiaire est obligatoire pour valider une sortie de stock");
+            }
             if (stock.getQuantite() < mouv.getQuantite()) {
                 throw new RuntimeException("Stock insuffisant pour cette sortie");
             }
             stock.setQuantite(stock.getQuantite() - mouv.getQuantite());
+            
+            // Remarque 6: Interconnexion - Si la sortie est pour le patrimoine
+            if (mouv.getDestination() != null && mouv.getDestination().toUpperCase().contains("PATRIMOINE")) {
+                for (int i = 0; i < mouv.getQuantite(); i++) {
+                    Bien nouveauBien = new BienMobilier();
+                    nouveauBien.setDesignation(article.getNomProduit());
+                    nouveauBien.setValeur(mouv.getPrixUnitaire() != null ? mouv.getPrixUnitaire() : article.getPrixMoyenPondere());
+                    nouveauBien.setObservation("Créé automatiquement depuis mouvement de stock " + mouv.getId());
+                    bienService.saveBien(nouveauBien);
+                }
+            }
         }
 
         mouv.setEstValide(true);

@@ -1,25 +1,29 @@
 package com.patris.security;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 import com.patris.model.Utilisateur;
+import lombok.Getter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
-import java.util.List;
 
-@RequiredArgsConstructor
+/**
+ * Détails utilisateur pour Spring Security : autorités pré-calculées (rôle + permissions effectives).
+ */
+@Getter
 public class CustomUserDetails implements UserDetails {
 
     private final Utilisateur utilisateur;
-    public Utilisateur getUtilisateur(){
-        return utilisateur;
+    private final Collection<? extends GrantedAuthority> authorities;
+
+    public CustomUserDetails(Utilisateur utilisateur, Collection<? extends GrantedAuthority> authorities) {
+        this.utilisateur = utilisateur;
+        this.authorities = authorities;
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + utilisateur.getRole().name()));
+        return authorities;
     }
 
     @Override
@@ -49,6 +53,6 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return utilisateur.getStatut() == com.patris.enums.StatutUtilisateur.ACTIF;
     }
 }

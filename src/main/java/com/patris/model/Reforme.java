@@ -1,5 +1,6 @@
 package com.patris.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDate;
 
 import jakarta.persistence.Entity;
@@ -9,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Transient;
 
 @Entity
 @Table(name = "reforme")
@@ -26,6 +28,11 @@ public class Reforme {
     private String motif;
     private String rapportTechniqueUrl;
     private Double valeurResiduelle;
+    private Double prixCession;
+    private String acheteur;
+    private String referenceActe;
+    private String ministereDestinataire;
+    private String ordreTransfert;
     private String decision;
     private LocalDate dateReforme;
     private String statut; // EN_COURS, VALIDE, REJETE
@@ -64,6 +71,21 @@ public class Reforme {
     public Double getValeurResiduelle() { return valeurResiduelle; }
     public void setValeurResiduelle(Double valeurResiduelle) { this.valeurResiduelle = valeurResiduelle; }
 
+    public Double getPrixCession() { return prixCession; }
+    public void setPrixCession(Double prixCession) { this.prixCession = prixCession; }
+
+    public String getAcheteur() { return acheteur; }
+    public void setAcheteur(String acheteur) { this.acheteur = acheteur; }
+
+    public String getReferenceActe() { return referenceActe; }
+    public void setReferenceActe(String referenceActe) { this.referenceActe = referenceActe; }
+
+    public String getMinistereDestinataire() { return ministereDestinataire; }
+    public void setMinistereDestinataire(String ministereDestinataire) { this.ministereDestinataire = ministereDestinataire; }
+
+    public String getOrdreTransfert() { return ordreTransfert; }
+    public void setOrdreTransfert(String ordreTransfert) { this.ordreTransfert = ordreTransfert; }
+
     public String getDecision() { return decision; }
     public void setDecision(String decision) { this.decision = decision; }
 
@@ -72,4 +94,26 @@ public class Reforme {
 
     public String getStatut() { return statut; }
     public void setStatut(String statut) { this.statut = statut; }
+
+    @Transient
+    @JsonProperty("dateSortie")
+    public LocalDate getDateSortie() {
+        return dateReforme;
+    }
+
+    @JsonProperty("dateSortie")
+    public void setDateSortie(LocalDate dateSortie) {
+        this.dateReforme = dateSortie;
+    }
+
+    @Transient
+    @JsonProperty("statutValidation")
+    public String getStatutValidation() {
+        return statut;
+    }
+
+    @JsonProperty("statutValidation")
+    public void setStatutValidation(String statutValidation) {
+        this.statut = statutValidation;
+    }
 }

@@ -1,38 +1,34 @@
 package com.patris.service;
 
+import com.patris.audit.AuditService;
 import com.patris.dto.AffectationDto;
+import com.patris.enums.statutOperationnel;
+import com.patris.enums.statutValidation;
+import com.patris.enums.type_mouvement;
 import com.patris.model.Affectation;
-import com.patris.model.Bien;
+import com.patris.model.Beneficiaire;
+import com.patris.model.Mouvement;
 import com.patris.model.Services;
-import com.patris.repository.AffectationRepository;
-import com.patris.repository.BienRepository;
-import com.patris.repository.ServicesRepository;
-
+import com.patris.repository.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import com.patris.enums.statutValidation;
-import com.patris.enums.type_mouvement;
-import com.patris.model.Mouvement;
-import com.patris.repository.MouvementRepository;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class AffectationService {
 
     private final AffectationRepository repository;
     private final BienRepository bienRepository;
     private final ServicesRepository servicesRepository;
     private final MouvementRepository mouvementRepository;
-
-    public AffectationService(AffectationRepository repository, BienRepository bienRepository, ServicesRepository servicesRepository, MouvementRepository mouvementRepository){
-        this.repository = repository;
-        this.bienRepository = bienRepository;
-        this.servicesRepository = servicesRepository;
-        this.mouvementRepository = mouvementRepository;
-    }
+    private final BeneficiaireRepository beneficiaireRepository;
+    private final AuditService auditService;
+    private final BienService bienService;
 
     public List<Affectation> findAll() {
         return repository.findAll();
@@ -42,9 +38,16 @@ public class AffectationService {
         return repository.findById(id).orElseThrow(()-> new RuntimeException("Affectation introuvable"));
     }
 
+    @Transactional
     public Affectation saveFromDto(AffectationDto dto) {
         Affectation affectation = new Affectation();
-        affectation.setBeneficaire(dto.getDetenteur());
+        
+        if (dto.getBeneficiaireId() != null) {
+            Beneficiaire b = beneficiaireRepository.findById(dto.getBeneficiaireId())
+                    .orElseThrow(() -> new RuntimeException("Bénéficiaire introuvable"));
+            affectation.setBeneficiaire(b);
+        }
+        
         affectation.setFonction(dto.getFonction() != null ? dto.getFonction() : dto.getMotif());
         
         if (dto.getDateAffectation() != null && !dto.getDateAffectation().isBlank()) {
@@ -73,17 +76,33 @@ public class AffectationService {
         aff.setValidePar(validator);
         aff.setDateValidation(LocalDateTime.now());
         
-        // CrÃ©ation automatique du mouvement de transfert
+        // Création automatique du mouvement de transfert
         Mouvement m = new Mouvement();
         m.setType(type_mouvement.TRANSFERT);
         m.setBien(aff.getBien());
         m.setServiceDestination(aff.getServices());
-        m.setObservation("Affectation validée pour : " + aff.getBeneficaire());
+        String nomBeneficiaire = aff.getBeneficiaire() != null ? 
+            (aff.getBeneficiaire().getNom() + " " + aff.getBeneficiaire().getPrenom()) : "N/A";
+        m.setObservation("Affectation validée pour : " + nomBeneficiaire);
         m.setDateCreation(LocalDateTime.now());
         m.setStatutValidation(statutValidation.VALIDE);
         m.setValidePar(validator);
         m.setDateValidation(LocalDateTime.now());
         mouvementRepository.save(m);
+
+        if (aff.getBien() != null) {
+            bienService.changerStatut(
+                aff.getBien().getId(),
+                statutOperationnel.AFFECTE.name(),
+                aff.getServices() != null ? aff.getServices().getNomService() : aff.getBien().getService(),
+                validator
+            );
+        }
+        
+        String ancienneVal = "{\"statutValidation\":\"EN_ATTENTE\"}";
+        String nouvelleVal = "{\"statutValidation\":\"VALIDE\"}";
+        // Audit log
+        auditService.save("VALIDATION_AFFECTATION", "Affectation", aff.getId(), "Validation affectation", ancienneVal, nouvelleVal);
         
         return repository.save(aff);
     }
@@ -94,12 +113,27 @@ public class AffectationService {
         aff.setStatutValidation(statutValidation.REJETE);
         aff.setValidePar(validator);
         aff.setDateValidation(LocalDateTime.now());
+        
+        String ancienneVal = "{\"statutValidation\":\"EN_ATTENTE\"}";
+        String nouvelleVal = "{\"statutValidation\":\"REJETE\"}";
+        // Audit log
+        auditService.save("REJET_AFFECTATION", "Affectation", aff.getId(), "Rejet affectation", ancienneVal, nouvelleVal);
+        
         return repository.save(aff);
     }
 
+    @Transactional
     public Affectation updateFromDto(Long id, AffectationDto dto) {
         Affectation affectation = findById(id);
-        if (dto.getDetenteur() != null) affectation.setBeneficaire(dto.getDetenteur());
+        String ancienneVal = "{\"fonction\":\"" + affectation.getFonction() + "\", \"ministere\":\"" + affectation.getMinistere() + "\"}";
+        
+        
+        if (dto.getBeneficiaireId() != null) {
+            Beneficiaire b = beneficiaireRepository.findById(dto.getBeneficiaireId())
+                    .orElseThrow(() -> new RuntimeException("Bénéficiaire introuvable"));
+            affectation.setBeneficiaire(b);
+        }
+        
         if (dto.getFonction() != null) affectation.setFonction(dto.getFonction());
         if (dto.getMotif() != null && dto.getFonction() == null) affectation.setFonction(dto.getMotif());
         
@@ -113,6 +147,9 @@ public class AffectationService {
         if (dto.getMinistere() != null) affectation.setMinistere(dto.getMinistere());
         if (dto.getPosteComptable() != null) affectation.setPosteComptable(dto.getPosteComptable());
         if (dto.getDetenteurA() != null) affectation.setDetenteurA(dto.getDetenteurA());
+
+        String nouvelleVal = "{\"fonction\":\"" + affectation.getFonction() + "\", \"ministere\":\"" + affectation.getMinistere() + "\"}";
+        auditService.save("AFFECTATION_MODIFIEE", "Affectation", id, "Mise à jour de l'affectation", ancienneVal, nouvelleVal);
 
         return repository.save(affectation);
     }
@@ -135,7 +172,6 @@ public class AffectationService {
                 servicesRepository.findByNomService(dto.getService()).ifPresentOrElse(
                     affectation::setServices,
                     () -> {
-                        // Crée le service dynamiquement s'il n'existe pas en BDD
                         Services newService = new Services();
                         newService.setNomService(dto.getService());
                         newService = servicesRepository.save(newService);
@@ -148,12 +184,30 @@ public class AffectationService {
 
     public String findPreviousHolder(Long bienId) {
         return repository.findTopByBienIdAndStatutValidationOrderByDateValidationDesc(bienId, statutValidation.VALIDE)
-                .map(Affectation::getBeneficaire)
+                .map(aff -> aff.getBeneficiaire() != null ? (aff.getBeneficiaire().getNom() + " " + aff.getBeneficiaire().getPrenom()) : "N/A")
                 .orElse("MAGASIN CENTRAL");
     }
 
     public void delete(Long id){
+        auditService.save("AFFECTATION_SUPPRIMEE", "Affectation", id, "Suppression de l'affectation", null, null);
         repository.deleteById(id);
+    }
+
+    @Transactional
+    public Affectation retournerAffectation(Long id, String motif, String dateRetour, String acteur) {
+        Affectation affectation = findById(id);
+        String ancienneVal = "{\"dateFin\":\"" + affectation.getDateFin() + "\", \"fonction\":\"" + affectation.getFonction() + "\"}";
+        affectation.setDateFin(LocalDateTime.now());
+        affectation.setFonction(motif != null && !motif.isBlank() ? motif : affectation.getFonction());
+        affectation.setValidePar(acteur);
+
+        if (affectation.getBien() != null) {
+            bienService.changerStatut(affectation.getBien().getId(), statutOperationnel.ACTIF.name(), "", acteur);
+        }
+
+        String nouvelleVal = "{\"dateFin\":\"" + affectation.getDateFin() + "\", \"fonction\":\"" + affectation.getFonction() + "\"}";
+        auditService.save("RETOUR_AFFECTATION", "Affectation", affectation.getId(), motif, ancienneVal, nouvelleVal);
+        return repository.save(affectation);
     }
 
 }

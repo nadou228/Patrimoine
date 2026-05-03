@@ -1,0 +1,135 @@
+.etiquette-modal {
+  max-width: 500px !important;
+}
+
+.etiquette-container {
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  background: #f0f2f5;
+}
+
+.etiquette-card {
+  width: 100mm;
+  height: 60mm;
+  background: white;
+  border: 1px solid #ddd;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+.etiquette-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px solid #2d5a27;
+  padding-bottom: 5px;
+  margin-bottom: 8px;
+}
+
+.mini-logo {
+  height: 35px;
+  width: auto;
+}
+
+.header-text h3 {
+  font-size: 10px;
+  margin: 0;
+  font-weight: 800;
+  color: #1a1a1a;
+}
+
+.header-text p {
+  font-size: 8px;
+  margin: 0;
+  color: #666;
+}
+
+.etiquette-body {
+  display: flex;
+  gap: 15px;
+  flex: 1;
+}
+
+.qr-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+}
+
+.qr-code {
+  width: 90px;
+  height: 90px;
+}
+
+.iup-label {
+  font-size: 9px;
+  font-weight: 700;
+  margin-top: 5px;
+  font-family: monospace;
+}
+
+.info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.info-row {
+  display: flex;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.info-row .label {
+  font-weight: 600;
+  width: 65px;
+  color: #555;
+}
+
+.info-row .value {
+  flex: 1;
+  font-weight: 700;
+  color: #000;
+}
+
+.etiquette-footer {
+  font-size: 7px;
+  text-align: center;
+  margin-top: auto;
+  padding-top: 5px;
+  border-top: 1px dashed #ccc;
+  color: #888;
+}
+
+/* Impression */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-etiquette, #printable-etiquette * {
+    visibility: visible;
+  }
+  #printable-etiquette {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    padding: 0;
+  }
+  .etiquette-card {
+    box-shadow: none;
+    border: 1px solid #000;
+  }
+}

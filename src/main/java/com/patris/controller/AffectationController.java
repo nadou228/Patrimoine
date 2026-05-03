@@ -52,6 +52,16 @@ public class AffectationController {
     public ResponseEntity<Affectation> rejeter(@PathVariable Long id, @RequestParam String validator) {
         return ResponseEntity.ok(service.rejeterAffectation(id, validator));
     }
+
+    @PutMapping("/{id}/retour")
+    public ResponseEntity<Affectation> retour(@PathVariable Long id, @RequestBody java.util.Map<String, String> payload) {
+        return ResponseEntity.ok(service.retournerAffectation(
+            id,
+            payload.get("motif"),
+            payload.get("dateRetour"),
+            payload.getOrDefault("acteur", "systeme")
+        ));
+    }
     
     @GetMapping("/origine/{bienId}")
     public String getOrigine(@PathVariable Long bienId) {

@@ -35,7 +35,11 @@ public class MouvementStock {
     private String referencePiece;
     private Double prixUnitaire;
     private String fournisseur;
-    private String serviceDemandeur;
+    
+    @ManyToOne
+    @JoinColumn(name = "beneficiaire_id")
+    private Beneficiaire beneficiaire;
+
     private String destination;
     private boolean estValide = false;
 
@@ -46,5 +50,9 @@ public class MouvementStock {
     @ManyToOne
     @JoinColumn(name = "stock_id")
     private Stock stock;
+
+    @ManyToOne
+    @JoinColumn(name = "bien_cree_id")
+    private Bien bienCree;
 
 }
