@@ -23,9 +23,21 @@ import { useToast } from "../contexts/ToastContext";
 import { useApi } from "../hooks/useApi";
 import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
 import NomenclatureSelector from "../components/NomenclatureSelector";
+import { 
+  Sparkles, Search, CheckCircle2, ChevronRight, X, Loader2, 
+  Building2, Armchair, Monitor, Car, Wrench, FileText, Palette, Dog, LayoutGrid, Check, ArrowRight, ArrowLeft, PlusCircle
+} from "lucide-react";
 
-type MainCategory = "IMMOBILIER" | "MOBILIER" | "MATERIEL_ROULANT";
-type StepKey = 1 | 2 | 3;
+type MainCategory = 
+  | "IMMOBILIER" 
+  | "MOBILIER" 
+  | "INFORMATIQUE" 
+  | "MATERIEL_ROULANT" 
+  | "MATERIEL_TECHNIQUE" 
+  | "INCORPORELS" 
+  | "OEUVRES_COLLECTIONS" 
+  | "CHEPTELS";
+type StepKey = 0 | 1 | 2 | 3;
 type ViewMode = "grid" | "list";
 type SortMode = "date" | "valeur" | "designation";
 type IupMeta = {
@@ -98,6 +110,16 @@ type ConfirmationState = {
   onConfirm: () => Promise<void>;
 } | null;
 
+type IndividualUnitData = {
+  iup: string;
+  numSerie: string;
+  immatriculation: string;
+  numChassis: string;
+  numInventaire: string;
+  localisation: string;
+  etat: string;
+};
+
 type HistoryPanelState = {
   bien: Bien;
   loading: boolean;
@@ -158,43 +180,54 @@ const EMPTY_FORM: BienForm = {
   nomenclatureCode: "",
 };
 
-const CATEGORY_META: Record<MainCategory, { label: string; short: string; color: string; icon: React.ReactNode }> = {
+const CATEGORY_META: Record<MainCategory, { label: string; description: string; color: string; icon: React.ReactNode }> = {
   IMMOBILIER: {
     label: "Immobilier",
-    short: "IMMO",
-    color: "asset-immobilier",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 10.5 12 4l9 6.5" />
-        <path d="M5 10v10h14V10" />
-        <path d="M10 20v-5h4v5" />
-      </svg>
-    ),
+    description: "Terrains, bâtiments, ouvrages et infrastructures",
+    color: "#1D9E75",
+    icon: <Building2 size={32} />,
   },
   MOBILIER: {
     label: "Mobilier",
-    short: "MOB",
-    color: "asset-mobilier",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="4" y="5" width="16" height="11" rx="2" />
-        <path d="M9 19h6" />
-        <path d="M12 16v3" />
-      </svg>
-    ),
+    description: "Meubles, équipements de bureau et de logement",
+    color: "#378ADD",
+    icon: <Armchair size={32} />,
+  },
+  INFORMATIQUE: {
+    label: "Matériel informatique",
+    description: "Ordinateurs, imprimantes, réseaux et accessoires",
+    color: "#534AB7",
+    icon: <Monitor size={32} />,
   },
   MATERIEL_ROULANT: {
-    label: "Materiel roulant",
-    short: "ROUL",
-    color: "asset-roulant",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 16 7 9h10l2 7" />
-        <path d="M4 16h16v3H4Z" />
-        <circle cx="7.5" cy="18.5" r="1.5" />
-        <circle cx="16.5" cy="18.5" r="1.5" />
-      </svg>
-    ),
+    label: "Matériel roulant",
+    description: "Véhicules de service, transport en commun et marchandises",
+    color: "#BA7517",
+    icon: <Car size={32} />,
+  },
+  MATERIEL_TECHNIQUE: {
+    label: "Matériel technique",
+    description: "Outillages, équipements médicaux, agricoles et spécialisés",
+    color: "#D85A30",
+    icon: <Wrench size={32} />,
+  },
+  INCORPORELS: {
+    label: "Immobilisations incorporelles",
+    description: "Brevets, licences, logiciels, marques et droits",
+    color: "#993556",
+    icon: <FileText size={32} />,
+  },
+  OEUVRES_COLLECTIONS: {
+    label: "Œuvres et collections",
+    description: "Peintures, sculptures, trophées et objets de collection",
+    color: "#0F6E56",
+    icon: <Palette size={32} />,
+  },
+  CHEPTELS: {
+    label: "Cheptels",
+    description: "Animaux d'élevage, de trait et de zoo",
+    color: "#639922",
+    icon: <Dog size={32} />,
   },
 };
 
@@ -232,10 +265,10 @@ const toPayload = (form: BienForm): BienPayload => ({
   nomenclature: form.nomenclatureCode ? { code: form.nomenclatureCode } : undefined,
   type:
     form.categoriePrincipale === "IMMOBILIER"
-      ? "immobilier"
+      ? "IMMOBILIER"
       : form.categoriePrincipale === "MATERIEL_ROULANT"
-      ? "roulant"
-      : "mobilier",
+      ? "MATERIEL_ROULANT"
+      : "MOBILIER",
   coordonneeGps: form.coordonneesGps,
 });
 
@@ -283,6 +316,8 @@ function ErrorText({ message }: { message?: string }) {
 }
 
 function Stepper({ active, maxStep, onGo }: { active: StepKey; maxStep: StepKey; onGo: (step: StepKey) => void }) {
+  if (active === 0) return null; // Ne pas afficher le stepper à l'étape de choix de famille
+
   const steps: Array<{ key: StepKey; label: string }> = [
     { key: 1, label: "Recensement" },
     { key: 2, label: "Identification" },
@@ -290,22 +325,23 @@ function Stepper({ active, maxStep, onGo }: { active: StepKey; maxStep: StepKey;
   ];
 
   return (
-    <div className="stepper-bar">
+    <div className="step-indicator-premium">
       {steps.map((step) => {
         const done = step.key < active || step.key < maxStep;
+        const activeItem = active === step.key;
         const clickable = step.key <= maxStep;
         return (
-          <button
+          <div
             key={step.key}
-            type="button"
-            disabled={!clickable}
+            className={`step-item-premium ${activeItem ? "active" : ""} ${done ? "completed" : ""}`}
             onClick={() => clickable && onGo(step.key)}
-            className={`stepper-step ${active === step.key ? "active" : done ? "done" : "pending"}`}
+            style={{ cursor: clickable ? "pointer" : "default" }}
           >
-            <span className="stepper-circle">{done ? "✓" : step.key}</span>
-            <span>{step.label}</span>
-            {step.key < 3 ? <i className="stepper-line" /> : null}
-          </button>
+            <div className="step-circle-premium">
+              {done ? "✓" : step.key}
+            </div>
+            <div className="step-label-premium">{step.label}</div>
+          </div>
         );
       })}
     </div>
@@ -326,8 +362,8 @@ export default function BiensPage() {
   const [generatingQr, setGeneratingQr] = useState(false);
   const [validatingImmatriculation, setValidatingImmatriculation] = useState(false);
   const [returningToGallery, setReturningToGallery] = useState(false);
-  const [activeStep, setActiveStep] = useState<StepKey>(1);
-  const [maxStep, setMaxStep] = useState<StepKey>(1);
+  const [activeStep, setActiveStep] = useState<StepKey>(0);
+  const [maxStep, setMaxStep] = useState<StepKey>(0);
   const [manualIup, setManualIup] = useState(false);
   const [iupUnique, setIupUnique] = useState<boolean | null>(null);
   const [iupMeta, setIupMeta] = useState<IupMeta | null>(null);
@@ -345,6 +381,9 @@ export default function BiensPage() {
     query: "",
   });
 
+  const [individualUnits, setIndividualUnits] = useState<IndividualUnitData[]>([]);
+  const [currentUnitIndex, setCurrentUnitIndex] = useState(0);
+
   const resetFlow = () => {
     setForm(EMPTY_FORM);
     setErrors({});
@@ -355,8 +394,8 @@ export default function BiensPage() {
     setCreatedBien(null);
     setShowAffectationPrompt(false);
     setReturningToGallery(false);
-    setActiveStep(1);
-    setMaxStep(1);
+    setActiveStep(0);
+    setMaxStep(0);
     setView("gallery");
   };
 
@@ -457,6 +496,14 @@ export default function BiensPage() {
   const updateField = <K extends keyof BienForm>(key: K, value: BienForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
+  };
+
+  const updateUnitField = (index: number, key: keyof IndividualUnitData, value: string) => {
+    setIndividualUnits((current) => {
+      const next = [...current];
+      next[index] = { ...next[index], [key]: value };
+      return next;
+    });
   };
 
   const selectCategory = (category: MainCategory) => {
@@ -570,6 +617,20 @@ export default function BiensPage() {
         setValidatingImmatriculation(false);
       }
     }
+    // Initialiser les données individuelles pour chaque unité
+    const count = form.quantite || 1;
+    const initialUnits: IndividualUnitData[] = Array.from({ length: count }, (_, i) => ({
+      iup: "",
+      numSerie: form.numSerie,
+      immatriculation: form.immatriculation,
+      numChassis: form.numChassis,
+      numInventaire: form.numInventaire ? `${form.numInventaire}-${i + 1}` : "",
+      localisation: form.localisation,
+      etat: form.etat,
+    }));
+    setIndividualUnits(initialUnits);
+    setCurrentUnitIndex(0);
+    
     setMaxStep(2);
     setActiveStep(2);
   };
@@ -605,14 +666,36 @@ export default function BiensPage() {
     }
   };
 
-  const handleGenerateQr = async () => {
-    if (!form.iup) {
-      setErrors((current) => ({ ...current, iup: "Generez ou saisissez un IUP avant le QR Code." }));
+  const handleGenerateIupForUnit = async (index: number) => {
+    const code = form.nomenclatureCode || form.codeSousCategorie || form.codeFamille;
+    if (!code) {
+      showToast({ type: "warning", title: "Codification manquante", message: "Veuillez selectionner un article dans la nomenclature." });
       return;
     }
     try {
+      setGeneratingIup(true);
+      const result = await generateIup({
+        nomenclatureCode: code,
+        annee: new Date(form.dateAcquisition || today).getFullYear(),
+      }).catch(() => null);
+
+      if (!result?.iup) {
+        showToast({ type: "error", title: "Generation IUP impossible" });
+        return;
+      }
+      updateUnitField(index, "iup", result.iup);
+      showToast({ type: "success", title: `IUP généré pour l'unité ${index + 1}`, message: result.iup });
+    } finally {
+      setGeneratingIup(false);
+    }
+  };
+
+  const handleGenerateQrForUnit = async (index: number) => {
+    const unitIup = individualUnits[index]?.iup;
+    if (!unitIup) return;
+    try {
       setGeneratingQr(true);
-      const result = await getBienQrCode(form.iup).catch(() => null);
+      const result = await getBienQrCode(unitIup).catch(() => null);
       if (!result?.qrCodeBase64) {
         showToast({ type: "error", title: "QR Code indisponible" });
         return;
@@ -632,28 +715,45 @@ export default function BiensPage() {
     }
   };
 
-  const saveBien = async () => {
-    if (!form.iup.trim()) {
-      setErrors((current) => ({ ...current, iup: "L'IUP est obligatoire avant l'enregistrement." }));
+  const saveAllUnits = async () => {
+    // Vérifier que toutes les unités ont un IUP
+    const missingIup = individualUnits.some(u => !u.iup);
+    if (missingIup) {
+      showToast({ type: 'error', title: 'IUP Manquants', message: 'Toutes les unités doivent avoir un IUP généré ou saisi.' });
       return;
     }
-    const liveValidation = await validateIup(form.iup.trim()).catch(() => ({ unique: false }));
-    setIupUnique(liveValidation.unique);
-    if (!liveValidation.unique) {
-      setErrors((current) => ({ ...current, iup: "L'IUP doit respecter le format attendu et rester unique." }));
-      return;
-    }
+
     try {
       setSaving(true);
-      const saved = form.id ? await updateBien(form.id, toPayload(form)) : await createBien(toPayload(form));
-      setCreatedBien(saved);
+      
+      // On boucle pour créer chaque unité. 
+      // Note: Pour une meilleure UX, on pourrait faire un Promise.all, 
+      // mais pour respecter la logique et éviter de surcharger le serveur si quantite est grande:
+      const savedBiens: Bien[] = [];
+      for (const unit of individualUnits) {
+        const unitPayload: BienPayload = {
+          ...toPayload(form),
+          iup: unit.iup,
+          numSerie: unit.numSerie,
+          immatriculation: unit.immatriculation,
+          numChassis: unit.numChassis,
+          numInventaire: unit.numInventaire,
+          localisation: unit.localisation,
+          etat: unit.etat,
+          quantite: 1, // Chaque fiche individuelle a une quantité de 1
+        };
+        const saved = await createBien(unitPayload);
+        savedBiens.push(saved);
+      }
+
+      setCreatedBien(savedBiens[0]); // Pour l'affichage du succès, on prend le premier
       await refresh();
-      showToast({ type: "success", title: `Bien ${saved.iup || form.iup} enregistre avec succes` });
+      showToast({ type: "success", title: `${savedBiens.length} actif(s) enregistré(s) avec succès` });
       setMaxStep(3);
       setActiveStep(3);
       setShowAffectationPrompt(true);
-    } catch {
-      showToast({ type: "error", title: "Enregistrement impossible", message: "Le bien n'a pas pu etre enregistre. Verifiez les champs puis reessayez." });
+    } catch (err) {
+      showToast({ type: "error", title: "Erreur d'enregistrement", message: "Une ou plusieurs unités n'ont pas pu être enregistrées." });
     } finally {
       setSaving(false);
     }
@@ -706,8 +806,8 @@ export default function BiensPage() {
     setIupUnique(null);
     setIupMeta(null);
     setQrCode("");
-    setActiveStep(1);
-    setMaxStep(1);
+    setActiveStep(0);
+    setMaxStep(0);
     setView("form");
   };
 
@@ -913,290 +1013,394 @@ export default function BiensPage() {
         </section>
       ) : (
         <section className="registration-flow">
-          <div className="centered-form-card large-form-card slide-in-right">
-            <div className="form-header-premium">
-              <div>
-                <h2>{form.id ? "Modifier le bien" : "Enregistrer un bien"}</h2>
-                <p className="form-subtitle">Flux ministeriel en trois phases : recensement, identification, affectation.</p>
+          <div className="centered-form-card large-form-card fade-in-up">
+            <div className="form-header-premium glass-card" style={{ marginBottom: 24, borderBottom: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div className="step-circle-premium active" style={{ width: 48, height: 48, fontSize: 20 }}>
+                  <Sparkles />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.8rem' }}>{form.id ? "Modification d'Actif" : "Nouvel Enregistrement"}</h2>
+                  <p className="form-subtitle" style={{ margin: 0, opacity: 0.8 }}>Flux métier : Recensement, Identification & Affectation</p>
+                </div>
               </div>
-              <button type="button" className="btn-export" onClick={() => setView("gallery")}>Retour galerie</button>
+              <button type="button" className="btn-export glass-card" style={{ padding: '8px 20px', borderRadius: 12 }} onClick={() => setView("gallery")}>
+                <X size={18} style={{ marginRight: 8 }} /> Fermer
+              </button>
             </div>
 
             <Stepper active={activeStep} maxStep={maxStep} onGo={setActiveStep} />
 
-            {activeStep === 1 ? (
-              <div className="step-panel slide-in-right">
-                <div className="category-card-row">
+            {activeStep === 0 ? (
+              <div className="step-panel fade-in-up">
+                <div style={{ textAlign: 'center', marginBottom: 40 }}>
+                  <h3 style={{ fontSize: '1.5rem', marginBottom: 10 }}>Sélectionnez la famille du bien</h3>
+                  <p style={{ opacity: 0.7 }}>Choisissez le type d'actif pour adapter automatiquement le formulaire de recensement.</p>
+                </div>
+                
+                <div className="family-selection-grid">
                   {(Object.keys(CATEGORY_META) as MainCategory[]).map((category) => (
                     <button
                       key={category}
                       type="button"
-                      className={`category-choice ${CATEGORY_META[category].color} ${form.categoriePrincipale === category ? "selected" : ""}`}
-                      onClick={() => selectCategory(category)}
+                      className={`family-card-premium glass-card ${form.categoriePrincipale === category ? "selected" : ""}`}
+                      onClick={() => {
+                        selectCategory(category);
+                        setMaxStep(1);
+                        setActiveStep(1);
+                      }}
                     >
-                      <span>{CATEGORY_META[category].icon}</span>
-                      <strong>{CATEGORY_META[category].label}</strong>
-                      <small className="badge-premium monospace">{category}</small>
+                      <div className="family-icon" style={{ color: CATEGORY_META[category].color }}>
+                        {CATEGORY_META[category].icon}
+                      </div>
+                      <div className="family-info">
+                        <strong>{CATEGORY_META[category].label}</strong>
+                        <p>{CATEGORY_META[category].description}</p>
+                      </div>
+                      <div className="family-check">
+                        <ChevronRight size={24} />
+                      </div>
                     </button>
                   ))}
                 </div>
-                <ErrorText message={errors.categoriePrincipale} />
+              </div>
+            ) : null}
 
+            {activeStep === 1 ? (
+              <div className="step-panel fade-in-up">
+                {/* Section 1: Classification */}
+                <div className="glass-card stagger-1" style={{ marginBottom: 24 }}>
+                  <h3 className="premium-section-title"><Sparkles size={18} /> 1. Classification & Nomenclature</h3>
+                  <ErrorText message={errors.categoriePrincipale} />
 
+                  <div className="full-span" style={{ marginTop: 24 }}>
+                    <div className="selected-family-badge" style={{ background: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color + '22', border: `1px solid ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.color}` }}>
+                      <span style={{ color: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color }}>
+                        {CATEGORY_META[form.categoriePrincipale as MainCategory]?.icon}
+                      </span>
+                      <strong>Famille : {CATEGORY_META[form.categoriePrincipale as MainCategory]?.label}</strong>
+                      <button type="button" onClick={() => setActiveStep(0)} className="change-family-btn">Changer</button>
+                    </div>
 
-                <div className="full-span" style={{ marginBottom: 24 }}>
-                  <NomenclatureSelector
-                    partie="A"
-                    onSelect={(article) => {
-                      setForm((cur) => ({
-                        ...cur,
-                        nomenclatureCode: article.code,
-                        codeSousCategorie: article.code,
-                        sousCategorie: article.intitule,
-                        codeFamille: article.famille,
-                        familleCatalogue: article.famille,
-                        designation: cur.designation || article.intitule,
-                      }));
-                      setErrors((cur) => ({ ...cur, codeSousCategorie: undefined, designation: undefined }));
-                    }}
-                  />
+                    <div style={{ marginTop: 20 }}>
+                      <label className="field-label-modern">Rechercher dans la nomenclature {CATEGORY_META[form.categoriePrincipale as MainCategory]?.label}</label>
+                      <NomenclatureSelector
+                        partie="A"
+                        family={form.categoriePrincipale}
+                        onSelect={(article) => {
+                          setForm((cur) => ({
+                            ...cur,
+                            nomenclatureCode: article.code,
+                            codeSousCategorie: article.code,
+                            sousCategorie: article.intitule,
+                            codeFamille: article.famille,
+                            familleCatalogue: article.famille,
+                            designation: cur.designation || article.intitule,
+                          }));
+                          setErrors((cur) => ({ ...cur, codeSousCategorie: undefined, designation: undefined }));
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid-2">
-                  <Field label="Designation" error={errors.designation}>
-                    <input value={form.designation} onChange={(event) => updateField("designation", event.target.value)} />
-                  </Field>
-                  <Field label="Date acquisition" error={errors.dateAcquisition}>
-                    <input type="date" value={form.dateAcquisition} onChange={(event) => updateField("dateAcquisition", event.target.value)} />
-                  </Field>
-                  <Field label="Mode acquisition" error={errors.modeAcquisition}>
-                    <select value={form.modeAcquisition} onChange={(event) => updateField("modeAcquisition", event.target.value)}>
-                      {["ACHAT", "DON", "LEGS", "TRANSFERT", "PRODUCTION_PROPRE"].map((item) => <option key={item}>{item}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Valeur acquisition FCFA" error={errors.valeur}>
-                    <input type="number" min={0} value={form.valeur} onChange={(event) => updateField("valeur", Number(event.target.value))} />
-                    <small className="field-hint">{formatMoney(form.valeur)}</small>
-                  </Field>
-                  <Field label="Duree amortissement">
-                    <input type="number" min={0} value={form.dureeAmortissement} onChange={(event) => updateField("dureeAmortissement", Number(event.target.value))} />
-                  </Field>
-                  <Field label="VNC calculee">
-                    <input readOnly value={formatMoney(form.valeurNetteComptable)} />
-                  </Field>
-                  <Field label="Localisation precise" error={errors.localisation}>
-                    <input value={form.localisation} onChange={(event) => updateField("localisation", event.target.value)} />
-                  </Field>
-                  <Field label="Coordonnees GPS" error={errors.coordonneesGps}>
-                    <div className="field-inline">
-                      <input value={form.coordonneesGps} onChange={(event) => updateField("coordonneesGps", event.target.value)} />
-                      <button type="button" className="btn-export" onClick={captureGps}>GPS</button>
-                    </div>
-                  </Field>
-                  <Field label="Service detenteur" error={errors.service}>
-                    <select value={form.service} onChange={(event) => updateField("service", event.target.value)}>
-                      <option value="">-- Choisir --</option>
-                      {services.map((service) => {
-                        const name = serviceName(service);
-                        return <option key={service.id || name} value={name}>{name}</option>;
-                      })}
-                    </select>
-                  </Field>
-                  <Field label="Etat initial">
-                    <select value={form.etat} onChange={(event) => updateField("etat", event.target.value)}>
-                      {["NEUF", "BON", "MOYEN", "DEGRADE", "HORS_SERVICE"].map((item) => <option key={item}>{item}</option>)}
-                    </select>
-                  </Field>
-                  {form.categoriePrincipale !== "IMMOBILIER" ? (
-                    <Field label="Quantite" error={errors.quantite}>
-                      <input type="number" min={1} value={form.quantite} onChange={(event) => updateField("quantite", Number(event.target.value))} />
+                {/* Section 2: Identification de base */}
+                <div className="glass-card stagger-2" style={{ marginBottom: 24 }}>
+                  <h3 className="premium-section-title"><Search size={18} /> 2. Identification de l'Actif</h3>
+                  <div className="grid-2">
+                    <Field label="Désignation de l'article" error={errors.designation}>
+                      <input 
+                        className="premium-input" 
+                        placeholder="Ex: Ordinateur Portable HP EliteBook"
+                        value={form.designation} 
+                        onChange={(event) => updateField("designation", event.target.value)} 
+                      />
                     </Field>
-                  ) : (
-                    <Field label="Quantite">
-                      <input readOnly value="1" />
+                    <Field label="Localisation précise" error={errors.localisation}>
+                      <input 
+                        className="premium-input"
+                        placeholder="Ex: Bureau 204, 2ème étage"
+                        value={form.localisation} 
+                        onChange={(event) => updateField("localisation", event.target.value)} 
+                      />
                     </Field>
-                  )}
-                  <Field label="Photo">
-                    <ImageUpload value={form.photoUrl} onChange={(url) => updateField("photoUrl", url)} />
-                  </Field>
-                  <Field label="Documents joints">
-                    <FileUpload onUploadSuccess={(url) => updateField("documentsUrls", [...form.documentsUrls, url])} />
-                    {form.documentsUrls.length > 0 ? (
-                      <small className="field-hint">{form.documentsUrls.length} document(s) deja joint(s).</small>
-                    ) : null}
-                  </Field>
-                  <Field label="Observations" span>
-                    <textarea rows={3} value={form.observation} onChange={(event) => updateField("observation", event.target.value)} />
-                  </Field>
+                    <Field label="Service détenteur" error={errors.service}>
+                      <select className="premium-input" value={form.service} onChange={(event) => updateField("service", event.target.value)}>
+                        <option value="">-- Choisir un service --</option>
+                        {services.map((service) => {
+                          const name = serviceName(service);
+                          return <option key={service.id || name} value={name}>{name}</option>;
+                        })}
+                      </select>
+                    </Field>
+                    <Field label="État initial">
+                      <select className="premium-input" value={form.etat} onChange={(event) => updateField("etat", event.target.value)}>
+                        {["NEUF", "BON", "MOYEN", "DEGRADE", "HORS_SERVICE"].map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+
+                {/* Section 3: Acquisition & Valeur */}
+                <div className="glass-card stagger-3" style={{ marginBottom: 24 }}>
+                  <h3 className="premium-section-title"><CheckCircle2 size={18} /> 3. Acquisition & Données Comptables</h3>
+                  <div className="grid-2">
+                    <Field label="Date d'acquisition" error={errors.dateAcquisition}>
+                      <input type="date" className="premium-input" value={form.dateAcquisition} onChange={(event) => updateField("dateAcquisition", event.target.value)} />
+                    </Field>
+                    <Field label="Mode d'acquisition" error={errors.modeAcquisition}>
+                      <select className="premium-input" value={form.modeAcquisition} onChange={(event) => updateField("modeAcquisition", event.target.value)}>
+                        {["ACHAT", "DON", "LEGS", "TRANSFERT", "PRODUCTION_PROPRE"].map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Valeur d'acquisition (FCFA)" error={errors.valeur}>
+                      <div className="input-with-icon">
+                        <input type="number" className="premium-input" min={0} value={form.valeur} onChange={(event) => updateField("valeur", Number(event.target.value))} />
+                        <span className="input-unit">CFA</span>
+                      </div>
+                      <small className="field-hint" style={{ color: 'var(--primary)', fontWeight: 700 }}>{formatMoney(form.valeur)}</small>
+                    </Field>
+                    <Field label="Durée d'amortissement (Années)">
+                      <input type="number" className="premium-input" min={0} value={form.dureeAmortissement} onChange={(event) => updateField("dureeAmortissement", Number(event.target.value))} />
+                    </Field>
+                    <Field label="VNC calculée">
+                      <input readOnly className="premium-input readonly" value={formatMoney(form.valeurNetteComptable)} />
+                    </Field>
+                    <Field label="Coordonnées GPS" error={errors.coordonneesGps}>
+                      <div className="field-inline">
+                        <input className="premium-input" placeholder="Latitude, Longitude" value={form.coordonneesGps} onChange={(event) => updateField("coordonneesGps", event.target.value)} />
+                        <button type="button" className="btn-export glass-card" style={{ whiteSpace: 'nowrap' }} onClick={captureGps}>Capturer GPS</button>
+                      </div>
+                    </Field>
+                  </div>
+                </div>
+
+                {/* Section 4: Médias & Observations */}
+                <div className="glass-card stagger-4" style={{ marginBottom: 24 }}>
+                  <h3 className="premium-section-title"><X size={18} /> 4. Détails Supplémentaires & Médias</h3>
+                  <div className="grid-2">
+                    {form.categoriePrincipale !== "IMMOBILIER" ? (
+                      <Field label="Quantité" error={errors.quantite}>
+                        <input type="number" className="premium-input" min={1} value={form.quantite} onChange={(event) => updateField("quantite", Number(event.target.value))} />
+                      </Field>
+                    ) : (
+                      <Field label="Quantité">
+                        <input readOnly className="premium-input readonly" value="1" />
+                      </Field>
+                    )}
+                    <Field label="Photo de l'actif">
+                      <ImageUpload value={form.photoUrl} onChange={(url) => updateField("photoUrl", url)} />
+                    </Field>
+                    <Field label="Documents joints (Factures, PV...)">
+                      <FileUpload onUploadSuccess={(url) => updateField("documentsUrls", [...form.documentsUrls, url])} />
+                      {form.documentsUrls.length > 0 ? (
+                        <div className="badge-pill-glow" style={{ marginTop: 8, display: 'inline-block' }}>{form.documentsUrls.length} document(s) joint(s)</div>
+                      ) : null}
+                    </Field>
+                    <Field label="Observations" span>
+                      <textarea rows={3} className="premium-input" placeholder="Remarques éventuelles sur l'état ou l'origine du bien..." value={form.observation} onChange={(event) => updateField("observation", event.target.value)} />
+                    </Field>
+                  </div>
                 </div>
 
                 <SpecificFields form={form} updateField={updateField} errors={errors} />
 
-                <div className="form-footer">
+                <div className="form-footer glass-card" style={{ background: 'var(--premium-accent)', color: 'white', border: 'none' }}>
                   <button
                     type="button"
-                    className="primary"
+                    className="primary-premium"
+                    style={{ background: 'white', color: 'var(--premium-accent)', fontWeight: 800, padding: '12px 30px', borderRadius: 15, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, width: '100%', justifyContent: 'center' }}
                     disabled={validatingImmatriculation}
                     onClick={() => void goIdentification()}
                   >
-                    {validatingImmatriculation ? "Verification immatriculation..." : "Suivant > Identification du bien"}
+                    {validatingImmatriculation ? "Validation en cours..." : "Continuer vers l'identification du bien"} <ChevronRight size={20} />
                   </button>
                 </div>
               </div>
             ) : null}
 
             {activeStep === 2 ? (
-              <div className="step-panel slide-in-left">
-                <div className="recap-card">
-                  <strong>{form.designation}</strong>
-                  <span>{form.categoriePrincipale} - {formatMoney(form.valeur)} - {form.service || "Sans service"}</span>
-                  <small className="field-hint">
-                    {renderCataloguePath(
-                      form.categoriePrincipale,
-                      form.codeFamille,
-                      form.familleCatalogue,
-                      form.codeSousCategorie,
-                      form.sousCategorie
-                    )}
-                  </small>
-                </div>
-                <div className="identification-grid">
-                  <div className="iup-panel">
-                    <div className="asset-card" style={{ padding: 16 }}>
-                      <div className="card-badge-row">
-                        <strong>Resume phase 1</strong>
-                        <span className="field-hint">Lecture seule</span>
-                      </div>
-                      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-                          <div>
-                            <small className="field-hint">Designation</small>
-                            <strong>{form.designation || "Non renseignee"}</strong>
-                          </div>
-                          <div>
-                            <small className="field-hint">Valeur acquisition</small>
-                            <strong>{formatMoney(form.valeur)}</strong>
-                          </div>
-                          <div>
-                            <small className="field-hint">Service detenteur</small>
-                            <strong>{form.service || "Non renseigne"}</strong>
-                          </div>
-                          <div>
-                            <small className="field-hint">Localisation</small>
-                            <strong>{form.localisation || "Non renseignee"}</strong>
-                          </div>
-                        </div>
-                        <div>
-                          <small className="field-hint">Codification</small>
-                          <div className="badge-premium monospace" style={{ width: "fit-content" }}>
-                            {`${form.categoriePrincipale || "CAT"} / ${form.codeFamille || "FAM"} / ${form.codeSousCategorie || "SCAT"}`}
-                          </div>
-                        </div>
-                      </div>
+              <div className="step-panel fade-in-up">
+                <div className="glass-card" style={{ marginBottom: 24, borderLeft: `4px solid ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.color || '#7c3aed'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <h3 style={{ margin: 0 }}>{form.designation}</h3>
+                      <p style={{ margin: '4px 0', opacity: 0.7 }}>
+                        {form.categoriePrincipale} · {formatMoney(form.valeur)} · {form.service || "Sans service"}
+                      </p>
                     </div>
-                    <button type="button" className="primary" disabled={generatingIup} onClick={() => void handleGenerateIup()}>
-                      {generatingIup ? "Generation IUP..." : "Generer l'IUP"}
-                    </button>
-                    <label className="checkbox-modern">
-                      <input
-                        type="checkbox"
-                        checked={manualIup}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setManualIup(checked);
-                          if (checked) {
-                            setQrCode("");
-                          }
-                        }}
-                      />
-                      <span>Saisie manuelle de l'IUP</span>
-                    </label>
-                    <Field label="IUP" error={errors.iup}>
-                      <input
-                        className="monospace"
-                        readOnly={!manualIup && Boolean(form.iup)}
-                        value={form.iup}
-                        onChange={(event) => updateField("iup", event.target.value.toUpperCase())}
-                      />
-                    </Field>
-                    {form.iup ? (
-                      <button type="button" className="iup-display" onClick={() => void copyIup(form.iup)}>
-                        <strong>{form.iup}</strong>
-                        <span>
-                          {(iupMeta?.prefixe || "PREFIXE") +
-                            "-" +
-                            (iupMeta?.categorie || "CAT") +
-                            "-" +
-                            String(iupMeta?.annee || new Date(form.dateAcquisition || today).getFullYear()) +
-                            "-" +
-                            (iupMeta?.sequence || "SEQUENCE")}
-                        </span>
-                      </button>
-                    ) : null}
-                    {iupUnique !== null ? (
-                      <span className={iupUnique ? "badge-ok" : "badge-danger"}>
-                        {iupUnique ? "Identifiant unique verifie" : "Format invalide ou deja utilise"}
-                      </span>
-                    ) : null}
-                    <Field label="Numero inventaire physique">
-                      <input value={form.numInventaire} onChange={(event) => updateField("numInventaire", event.target.value)} />
-                    </Field>
+                    <div className="badge-pill-glow" style={{ fontSize: 10 }}>
+                      {renderCataloguePath(form.categoriePrincipale, form.codeFamille, form.familleCatalogue, form.codeSousCategorie, form.sousCategorie)}
+                    </div>
                   </div>
-                  <div className="qr-panel">
+                </div>
+
+                {form.quantite > 1 && (
+                  <div className="unit-navigator-premium glass-card stagger-1">
+                    <div className="unit-nav-info">
+                      <span className="unit-count-badge">Unité {currentUnitIndex + 1} / {form.quantite}</span>
+                      <p>Veuillez identifier individuellement chaque unité de ce lot.</p>
+                    </div>
+                    <div className="unit-nav-dots">
+                      {individualUnits.map((_, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`unit-dot ${idx === currentUnitIndex ? 'active' : ''} ${individualUnits[idx].iup ? 'filled' : ''}`}
+                          onClick={() => setCurrentUnitIndex(idx)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="identification-grid stagger-2">
+                  <div className="iup-panel glass-card">
+                    <h3 className="premium-section-title"><CheckCircle2 size={18} /> Identification Individuelle</h3>
+                    <p style={{ fontSize: 13, marginBottom: 20 }}>Saisissez les informations spécifiques pour cette unité (N° de série, IUP, etc.).</p>
+                    
+                    <button 
+                      type="button" 
+                      className="primary-premium" 
+                      style={{ width: '100%', marginBottom: 16, background: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color || 'var(--premium-accent)', color: 'white', border: 'none', padding: '12px', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }} 
+                      disabled={generatingIup} 
+                      onClick={() => void handleGenerateIupForUnit(currentUnitIndex)}
+                    >
+                      {generatingIup ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />} {generatingIup ? "Génération..." : "Générer l'IUP Automatiquement"}
+                    </button>
+
+                    <Field label="Identifiant Unique (IUP)" error={errors.iup}>
+                      <input
+                        className="premium-input monospace"
+                        style={{ fontSize: '1.1rem', letterSpacing: 1, textAlign: 'center' }}
+                        value={individualUnits[currentUnitIndex]?.iup || ""}
+                        placeholder="IUP-XXXX-2024-XXXXXX"
+                        onChange={(event) => updateUnitField(currentUnitIndex, "iup", event.target.value.toUpperCase())}
+                      />
+                    </Field>
+
+                    <div className="grid-2" style={{ marginTop: 20 }}>
+                      {form.categoriePrincipale === "MATERIEL_ROULANT" ? (
+                        <>
+                          <Field label="Immatriculation">
+                            <input className="premium-input" value={individualUnits[currentUnitIndex]?.immatriculation || ""} onChange={(e) => updateUnitField(currentUnitIndex, "immatriculation", e.target.value.toUpperCase())} />
+                          </Field>
+                          <Field label="N° Châssis">
+                            <input className="premium-input" value={individualUnits[currentUnitIndex]?.numChassis || ""} onChange={(e) => updateUnitField(currentUnitIndex, "numChassis", e.target.value)} />
+                          </Field>
+                        </>
+                      ) : (
+                        <Field label="N° de Série" span={form.categoriePrincipale === "IMMOBILIER"}>
+                          <input className="premium-input" placeholder={form.categoriePrincipale === "IMMOBILIER" ? "Référence cadastrale" : "Numéro de série fabricant"} value={individualUnits[currentUnitIndex]?.numSerie || ""} onChange={(e) => updateUnitField(currentUnitIndex, "numSerie", e.target.value)} />
+                        </Field>
+                      )}
+                      <Field label="N° Inventaire Physique">
+                        <input className="premium-input" value={individualUnits[currentUnitIndex]?.numInventaire || ""} onChange={(e) => updateUnitField(currentUnitIndex, "numInventaire", e.target.value)} />
+                      </Field>
+                      <Field label="Localisation Spécifique">
+                        <input className="premium-input" value={individualUnits[currentUnitIndex]?.localisation || ""} onChange={(e) => updateUnitField(currentUnitIndex, "localisation", e.target.value)} />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="qr-panel glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                    <h3 className="premium-section-title"><Sparkles size={18} /> Étiquette de l'unité</h3>
+                    
+                    <div className="print-label glass-card" style={{ background: 'white', color: 'black', padding: 20, width: '100%', maxWidth: 250, margin: '20px 0', border: '2px solid #eee' }}>
+                      <strong className="monospace" style={{ fontSize: 16, display: 'block', marginBottom: 10 }}>{individualUnits[currentUnitIndex]?.iup || "IUP-PENDING"}</strong>
+                      {qrCode ? (
+                        <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" style={{ width: 120, height: 120 }} />
+                      ) : (
+                        <div className="qr-placeholder" style={{ width: 120, height: 120, background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', borderRadius: 8, border: '1px dashed #ccc' }}>
+                          <LayoutGrid size={30} style={{ opacity: 0.2 }} />
+                        </div>
+                      )}
+                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700 }}>{form.designation}</div>
+                      <div style={{ fontSize: 10, opacity: 0.7 }}>{form.service || "Service non défini"}</div>
+                    </div>
+
                     <button
                       type="button"
-                      className="btn-export"
-                      disabled={!form.iup.trim() || iupUnique === false || generatingQr}
-                      onClick={() => void handleGenerateQr()}
+                      className="btn-export glass-card"
+                      style={{ width: '100%' }}
+                      disabled={!individualUnits[currentUnitIndex]?.iup || generatingQr}
+                      onClick={() => void handleGenerateQrForUnit(currentUnitIndex)}
                     >
-                      {generatingQr ? "Generation QR..." : "Generer le QR Code"}
+                      {generatingQr ? <Loader2 className="animate-spin" size={16} /> : <PlusCircle size={16} style={{ marginRight: 8 }} />} 
+                      {generatingQr ? "Génération..." : "Générer QR Code"}
                     </button>
-                    <div className="print-label">
-                      <strong className="monospace">{form.iup || "IUP"}</strong>
-                      {qrCode ? <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" /> : <div className="qr-placeholder">QR</div>}
-                      <span>{form.designation}</span>
-                      <small>{form.service} - {form.localisation}</small>
-                    </div>
-                    <button type="button" className="btn-export" onClick={() => window.print()}>Imprimer l'etiquette</button>
                   </div>
                 </div>
-                <div className="form-footer">
-                  <button type="button" className="btn-export" onClick={() => setActiveStep(1)}>Retour recensement</button>
-                  <button type="button" className="primary" disabled={saving} onClick={() => void saveBien()}>
-                    {saving ? "Enregistrement..." : "Enregistrer le bien"}
+
+                <div className="form-footer glass-card" style={{ display: 'flex', gap: 16, marginTop: 24 }}>
+                  <button type="button" className="btn-export glass-card" style={{ flex: 1 }} onClick={() => setActiveStep(1)}>
+                    <ArrowLeft size={18} style={{ marginRight: 8 }} /> Recensement
                   </button>
+                  
+                  {form.quantite > 1 && currentUnitIndex > 0 && (
+                    <button type="button" className="btn-export glass-card" onClick={() => setCurrentUnitIndex(prev => prev - 1)}>
+                      Précédent
+                    </button>
+                  )}
+
+                  {form.quantite > 1 && currentUnitIndex < form.quantite - 1 ? (
+                    <button 
+                      type="button" 
+                      className="primary-premium" 
+                      style={{ flex: 2, background: 'var(--text-main)', color: 'white' }}
+                      onClick={() => {
+                        if (!individualUnits[currentUnitIndex].iup) {
+                          showToast({ type: 'warning', title: 'IUP Manquant', message: 'Veuillez générer ou saisir un IUP pour cette unité.' });
+                          return;
+                        }
+                        setCurrentUnitIndex(prev => prev + 1);
+                      }}
+                    >
+                      Unité suivante <ArrowRight size={18} style={{ marginLeft: 8 }} />
+                    </button>
+                  ) : (
+                    <button 
+                      type="button" 
+                      className="primary-premium" 
+                      style={{ flex: 2, background: 'var(--premium-accent)', color: 'white', border: 'none', padding: '12px', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }} 
+                      disabled={saving} 
+                      onClick={() => void saveAllUnits()}
+                    >
+                      {saving ? <Loader2 className="animate-spin" /> : <Check size={18} style={{ marginRight: 8 }} />} 
+                      {saving ? "Enregistrement..." : `Finaliser l'enregistrement (${form.quantite} unité${form.quantite > 1 ? 's' : ''})`}
+                    </button>
+                  )}
                 </div>
               </div>
             ) : null}
 
             {activeStep === 3 ? (
-              <div className="step-panel">
-                <div className="recap-card">
-                  <strong>Affectation immediate</strong>
-                  <span>Le bien peut etre affecte maintenant ou plus tard depuis la galerie.</span>
-                </div>
-                <div className="asset-card" style={{ padding: 18 }}>
-                  <div className="card-badge-row">
-                    <strong>{createdBien?.designation || form.designation || "Bien enregistre"}</strong>
-                    <span className="badge-ok">{createdBien?.iup || form.iup || "IUP"}</span>
+              <div className="step-panel fade-in-up">
+                <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 0 30px rgba(16,185,129,0.4)' }}>
+                    <CheckCircle2 size={40} color="white" />
                   </div>
-                  <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                    <span>{renderCataloguePath(form.categoriePrincipale, form.codeFamille, form.familleCatalogue, form.codeSousCategorie, form.sousCategorie)}</span>
-                    <span>{formatMoney(form.valeur)} - {form.service || "Sans service"} - {form.localisation || "Sans localisation"}</span>
-                    <small className="field-hint">
-                      {returningToGallery
-                        ? "Retour en cours vers la galerie..."
-                        : "Choisissez une affectation immediate ou laissez le bien revenir dans la galerie."}
-                    </small>
+                  <h2 style={{ marginBottom: 10 }}>Actif Enregistré avec Succès !</h2>
+                  <p style={{ opacity: 0.7, maxWidth: 500, margin: '0 auto 30px' }}>
+                    Le bien <strong>{createdBien?.designation}</strong> ({createdBien?.iup}) est désormais inscrit au registre patrimonial.
+                  </p>
+
+                  <div className="glass-card" style={{ background: 'rgba(255,255,255,0.05)', border: '1px dashed var(--glass-border)', maxWidth: 400, margin: '0 auto 40px' }}>
+                    <h3 style={{ fontSize: 16, marginBottom: 15 }}>Souhaitez-vous l'affecter immédiatement ?</h3>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button type="button" className="primary-premium" style={{ flex: 1, background: 'var(--premium-accent)', color: 'white', border: 'none', padding: '12px', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }} disabled={returningToGallery} onClick={() => openAffectationFlow(createdBien)}>
+                        Affecter l'Actif
+                      </button>
+                      <button type="button" className="btn-export glass-card" style={{ flex: 1 }} disabled={returningToGallery} onClick={finalizeWithoutAffectation}>
+                        Plus tard
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="form-footer">
-                  <button type="button" className="primary" disabled={returningToGallery} onClick={() => openAffectationFlow(createdBien)}>
-                    Oui, affecter maintenant
-                  </button>
-                  <button type="button" className="btn-export" disabled={returningToGallery} onClick={finalizeWithoutAffectation}>
-                    {returningToGallery ? "Retour galerie..." : "Non, affecter plus tard"}
-                  </button>
+
+                  {returningToGallery && (
+                    <div className="fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--primary)', fontWeight: 700 }}>
+                      <Loader2 className="animate-spin" /> Retour vers la galerie...
+                    </div>
+                  )}
                 </div>
               </div>
             ) : null}
@@ -1313,8 +1517,8 @@ function SpecificFields({
 }) {
   if (form.categoriePrincipale === "IMMOBILIER") {
     return (
-          <div className="specific-panel asset-immobilier">
-        <h4>Champs specifiques immobilier</h4>
+      <div className="specific-panel asset-immobilier">
+        <h4>Champs spécifiques immobilier</h4>
         <div className="grid-2">
           <Field label="Titre foncier" error={errors.titreFoncier}><input value={form.titreFoncier} onChange={(event) => updateField("titreFoncier", event.target.value)} /></Field>
           <Field label="Superficie m2" error={errors.superficie}><input value={form.superficie} onChange={(event) => updateField("superficie", event.target.value)} /></Field>
@@ -1335,14 +1539,14 @@ function SpecificFields({
   if (form.categoriePrincipale === "MATERIEL_ROULANT") {
     return (
       <div className="specific-panel asset-roulant">
-        <h4>Champs specifiques materiel roulant</h4>
+        <h4>Champs spécifiques matériel roulant</h4>
         <div className="grid-2">
           <Field label="Immatriculation" error={errors.immatriculation}><input value={form.immatriculation} onChange={(event) => updateField("immatriculation", event.target.value.toUpperCase())} /></Field>
-          <Field label="Numero chassis" error={errors.numChassis}><input value={form.numChassis} onChange={(event) => updateField("numChassis", event.target.value)} /></Field>
+          <Field label="Numéro châssis" error={errors.numChassis}><input value={form.numChassis} onChange={(event) => updateField("numChassis", event.target.value)} /></Field>
           <Field label="Marque" error={errors.marque}><input value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
-          <Field label="Modele" error={errors.modele}><input value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
+          <Field label="Modèle" error={errors.modele}><input value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
           <Field label="Puissance fiscale"><input value={form.puissanceFiscale} onChange={(event) => updateField("puissanceFiscale", event.target.value)} /></Field>
-          <Field label="Type boite"><input value={form.typeBoite} onChange={(event) => updateField("typeBoite", event.target.value)} /></Field>
+          <Field label="Type boîte"><input value={form.typeBoite} onChange={(event) => updateField("typeBoite", event.target.value)} /></Field>
           <Field label="Type carburant"><input value={form.typeCarburant} onChange={(event) => updateField("typeCarburant", event.target.value)} /></Field>
           <Field label="Charge utile"><input value={form.chargeUtile} onChange={(event) => updateField("chargeUtile", event.target.value)} /></Field>
           <Field label="Date prochaine visite technique" error={errors.dateProchaineVisiteTechnique}><input type="date" value={form.dateProchaineVisiteTechnique} onChange={(event) => updateField("dateProchaineVisiteTechnique", event.target.value)} /></Field>
@@ -1353,15 +1557,16 @@ function SpecificFields({
 
   return (
     <div className="specific-panel asset-mobilier">
-      <h4>Champs specifiques mobilier</h4>
+      <h4>Champs spécifiques mobilier</h4>
       <div className="grid-2">
-        <Field label="Numero serie"><input value={form.numSerie} onChange={(event) => updateField("numSerie", event.target.value)} /></Field>
+        <Field label="Numéro série"><input value={form.numSerie} onChange={(event) => updateField("numSerie", event.target.value)} /></Field>
         <Field label="Fabricant"><input value={form.fabricant} onChange={(event) => updateField("fabricant", event.target.value)} /></Field>
         <Field label="Marque"><input value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
-        <Field label="Modele"><input value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
+        <Field label="Modèle"><input value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
         <Field label="Date fin garantie" error={errors.finGarantie}><input type="date" value={form.finGarantie} onChange={(event) => updateField("finGarantie", event.target.value)} /></Field>
-        <Field label="Specifications techniques" span><textarea rows={3} value={form.specificationsTechniques} onChange={(event) => updateField("specificationsTechniques", event.target.value)} /></Field>
+        <Field label="Spécifications techniques" span><textarea rows={3} value={form.specificationsTechniques} onChange={(event) => updateField("specificationsTechniques", event.target.value)} /></Field>
       </div>
     </div>
   );
 }
+

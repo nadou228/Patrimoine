@@ -33,6 +33,21 @@ public class NomenclatureCompte {
     @Column(length = 150)
     private String categorie;
 
+    @Column(length = 20)
+    private String niveau; // ARTICLE, FAMILLE
+
+    @Column(name = "code_parent", length = 20)
+    private String codeParent;
+
+    @Column(length = 50)
+    private String section; // IMMOBILISATION, CONSOMMABLE
+
+    @Column(name = "categorie_principale", length = 150)
+    private String categoriePrincipale;
+
+    @Column(name = "categorie_metier", length = 150)
+    private String categorieMetier;
+
     @Column(length = 150)
     private String famille;
 

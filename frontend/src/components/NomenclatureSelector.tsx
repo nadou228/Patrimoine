@@ -16,6 +16,7 @@ export interface ArticleOption {
 
 interface NomenclatureSelectorProps {
   partie?: "A" | "B";
+  family?: string;
   onSelect: (article: ArticleOption) => void;
   disabled?: boolean;
   className?: string;
@@ -32,15 +33,40 @@ async function fetchNom<T>(endpoint: string, params: Record<string, string> = {}
   return ((await res.json()).data ?? []) as T[];
 }
 
-const LEVELS = [
+const DEFAULT_LEVELS = [
   { label: "Compte principal", color: "#7c3aed", bg: "rgba(124,58,237,0.08)" },
   { label: "Catégorie",        color: "#0284c7", bg: "rgba(2,132,199,0.08)" },
   { label: "Famille",          color: "#059669", bg: "rgba(5,150,105,0.08)" },
   { label: "Article",          color: "#d97706", bg: "rgba(217,119,6,0.08)" },
 ];
 
+const FAMILY_ROOTS: Record<string, string[]> = {
+  IMMOBILIER: ["22", "23"],
+  MOBILIER: ["244", "245"],
+  INFORMATIQUE: ["243"],
+  MATERIEL_ROULANT: ["242"],
+  MATERIEL_TECHNIQUE: ["241"],
+  INCORPORELS: ["20", "21"],
+  OEUVRES_COLLECTIONS: ["248"],
+  CHEPTELS: ["247"],
+};
+
+const FAMILY_LABELS: Record<string, string[]> = {
+  IMMOBILIER: ["Nature immobilière", "Usage du bâtiment", "Sous-type d'ouvrage", "Article"],
+  MOBILIER: ["Type de mobilier", "Sous-catégorie", "Modèle standard", "Article"],
+  INFORMATIQUE: ["Type de matériel", "Sous-système", "Gamme", "Article"],
+  MATERIEL_ROULANT: ["Type de véhicule", "Usage", "Modèle", "Article"],
+  MATERIEL_TECHNIQUE: ["Domaine technique", "Type d'outil", "Spécificité", "Article"],
+  INCORPORELS: ["Nature incorporelle", "Type de droit", "Catégorie", "Article"],
+  OEUVRES_COLLECTIONS: ["Type d'œuvre", "Collection", "Support", "Article"],
+  CHEPTELS: ["Espèce", "Race / Usage", "Variété", "Article"],
+};
+
 interface DropProps {
   step: number;
+  label: string;
+  color: string;
+  bg: string;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string; meta?: string }[];
@@ -48,10 +74,9 @@ interface DropProps {
   loading?: boolean;
 }
 
-function CascadeDropdown({ step, value, onChange, options, disabled, loading }: DropProps) {
+function CascadeDropdown({ step, label, color, bg, value, onChange, options, disabled, loading }: DropProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const lvl = LEVELS[step - 1];
   const selected = options.find((o) => o.value === value);
 
   useEffect(() => {
@@ -68,17 +93,17 @@ function CascadeDropdown({ step, value, onChange, options, disabled, loading }: 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{
           width: 22, height: 22, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 11, fontWeight: 800, background: value ? lvl.color : "var(--glass-border)", color: value ? "#fff" : "var(--text-dim)",
+          fontSize: 11, fontWeight: 800, background: value ? color : "var(--glass-border)", color: value ? "#fff" : "var(--text-dim)",
         }}>
           {value ? <CheckCircle2 size={12} /> : step}
         </span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 1 }}>
-          {lvl.label}
+          {label}
         </span>
-        {loading && <Loader2 size={12} className="animate-spin" style={{ color: lvl.color, marginLeft: "auto" }} />}
+        {loading && <Loader2 size={12} className="animate-spin" style={{ color: color, marginLeft: "auto" }} />}
         {value && !loading && (
-          <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: lvl.color,
-            background: lvl.bg, padding: "2px 10px", borderRadius: 20 }}>
+          <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: color,
+            background: bg, padding: "2px 10px", borderRadius: 20 }}>
             {selected?.label.split("—")[0]?.trim() ?? value}
           </span>
         )}
@@ -88,12 +113,12 @@ function CascadeDropdown({ step, value, onChange, options, disabled, loading }: 
         onClick={() => setOpen((o) => !o)}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "11px 16px", borderRadius: 12, border: `1.5px solid ${value ? lvl.color : "var(--glass-border)"}`,
-          background: value ? lvl.bg : "var(--card-bg)", color: value ? lvl.color : "var(--text-main)",
+          padding: "11px 16px", borderRadius: 12, border: `1.5px solid ${value ? color : "var(--glass-border)"}`,
+          background: value ? bg : "var(--card-bg)", color: value ? color : "var(--text-main)",
           fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", textAlign: "left",
         }}>
         <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {loading ? "Chargement…" : selected ? selected.label : `— ${lvl.label} —`}
+          {loading ? "Chargement…" : selected ? selected.label : `— ${label} —`}
         </span>
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.18 }}>
           <ChevronRight size={15} />
@@ -104,25 +129,35 @@ function CascadeDropdown({ step, value, onChange, options, disabled, loading }: 
         {open && options.length > 0 && (
           <motion.div initial={{ opacity: 0, y: -4, scaleY: 0.95 }} animate={{ opacity: 1, y: 0, scaleY: 1 }}
             exit={{ opacity: 0, scaleY: 0.95 }} style={{ transformOrigin: "top",
-              position: "absolute", zIndex: 999, width: "100%", marginTop: 6,
+              position: "absolute", zIndex: 9999, width: "100%", marginTop: 6,
               background: "var(--bg-surface)", border: "1px solid var(--glass-border)",
-              borderRadius: 14, boxShadow: "0 20px 40px rgba(0,0,0,0.18)", maxHeight: 220, overflowY: "auto" }}>
+              borderRadius: 14, boxShadow: "0 25px 50px rgba(0,0,0,0.22)", maxHeight: step === 4 ? 350 : 250, overflowY: "auto",
+              scrollbarWidth: "thin", scrollbarColor: `${color} transparent` }}>
             {options.map((opt, i) => (
               <motion.button key={opt.value} type="button"
                 initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.02 }}
                 onClick={() => { onChange(opt.value); setOpen(false); }}
                 style={{
-                  width: "100%", textAlign: "left", padding: "10px 16px", fontSize: 13,
+                  width: "100%", textAlign: "left", padding: "12px 16px", fontSize: 13,
                   borderBottom: "1px solid var(--glass-border)", cursor: "pointer",
-                  background: opt.value === value ? lvl.bg : "transparent",
-                  color: opt.value === value ? lvl.color : "var(--text-main)",
+                  background: opt.value === value ? bg : "transparent",
+                  color: opt.value === value ? color : "var(--text-main)",
                   fontWeight: opt.value === value ? 700 : 400, display: "flex",
-                  alignItems: "center", justifyContent: "space-between",
+                  alignItems: "center", gap: 12, transition: "all 0.15s"
                 }}>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opt.label}</span>
-                {opt.meta && <span style={{ fontSize: 10, marginLeft: 8, padding: "2px 7px", borderRadius: 10,
-                  background: "var(--glass-border)", color: "var(--text-dim)", flexShrink: 0 }}>{opt.meta}</span>}
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, fontFamily: "monospace", color: color, background: bg, padding: "1px 6px", borderRadius: 4 }}>
+                      {opt.value}
+                    </span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                      {opt.label.includes("—") ? opt.label.split("—")[1].trim() : opt.label}
+                    </span>
+                  </div>
+                  {opt.meta && <span style={{ fontSize: 10, color: "var(--text-dim)", opacity: 0.8 }}>{opt.meta} articles disponibles</span>}
+                </div>
+                {opt.value === value && <CheckCircle2 size={14} style={{ flexShrink: 0 }} />}
               </motion.button>
             ))}
           </motion.div>
@@ -132,7 +167,7 @@ function CascadeDropdown({ step, value, onChange, options, disabled, loading }: 
   );
 }
 
-export default function NomenclatureSelector({ partie, onSelect, disabled = false, className = "" }: NomenclatureSelectorProps) {
+export default function NomenclatureSelector({ partie, family, onSelect, disabled = false, className = "" }: NomenclatureSelectorProps) {
   const [comptes,    setComptes]    = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [familles,   setFamilles]   = useState<any[]>([]);
@@ -159,8 +194,28 @@ export default function NomenclatureSelector({ partie, onSelect, disabled = fals
   useEffect(() => {
     setLC(true);
     fetchNom<any>("comptes", partie ? { partie } : {})
-      .then(setComptes).catch(console.error).finally(() => setLC(false));
-  }, [partie]);
+      .then((data) => {
+        // Appliquer le filtrage par famille si fourni
+        if (family && FAMILY_ROOTS[family]) {
+          const roots = FAMILY_ROOTS[family];
+          setComptes(data.filter((c: any) => roots.some(r => c.compte_principal.startsWith(r))));
+        } else {
+          setComptes(data);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLC(false));
+  }, [partie, family]);
+
+  const getStepLabel = (stepIdx: number) => {
+    if (family && FAMILY_LABELS[family]) {
+      return FAMILY_LABELS[family][stepIdx];
+    }
+    return DEFAULT_LEVELS[stepIdx].label;
+  };
+
+  const getStepColor = (stepIdx: number) => DEFAULT_LEVELS[stepIdx].color;
+  const getStepBg = (stepIdx: number) => DEFAULT_LEVELS[stepIdx].bg;
 
   useEffect(() => {
     setCategorie(""); setFamille(""); setArticle(""); setCategories([]); setFamilles([]); setArticles([]);
@@ -236,8 +291,10 @@ export default function NomenclatureSelector({ partie, onSelect, disabled = fals
               animate={{ width: `${progress}%` }} transition={{ duration: 0.4 }} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-            {["Compte", "Catégorie", "Famille", "Article"].map((l, i) => (
-              <span key={l} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, opacity: progress > i * 25 ? 1 : 0.35 }}>{l}</span>
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, opacity: progress > i * 25 ? 1 : 0.35 }}>
+                {getStepLabel(i)}
+              </span>
             ))}
           </div>
         </div>
@@ -318,13 +375,13 @@ export default function NomenclatureSelector({ partie, onSelect, disabled = fals
         ) : (
           <motion.div key="c" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
             style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <CascadeDropdown step={1} value={compte} onChange={setCompte} loading={lC} disabled={disabled}
+            <CascadeDropdown step={1} label={getStepLabel(0)} color={getStepColor(0)} bg={getStepBg(0)} value={compte} onChange={setCompte} loading={lC} disabled={disabled}
               options={comptes.map((c) => ({ value: c.compte_principal, label: `${c.compte_principal} — ${c.libelle_compte}`, meta: String(c.nb_items) }))} />
-            <CascadeDropdown step={2} value={categorie} onChange={setCategorie} loading={lCat} disabled={disabled || !compte}
+            <CascadeDropdown step={2} label={getStepLabel(1)} color={getStepColor(1)} bg={getStepBg(1)} value={categorie} onChange={setCategorie} loading={lCat} disabled={disabled || !compte}
               options={categories.map((c) => ({ value: c.categorie, label: c.categorie }))} />
-            <CascadeDropdown step={3} value={famille} onChange={setFamille} loading={lF} disabled={disabled || !categorie}
+            <CascadeDropdown step={3} label={getStepLabel(2)} color={getStepColor(2)} bg={getStepBg(2)} value={famille} onChange={setFamille} loading={lF} disabled={disabled || !categorie}
               options={familles.map((f) => ({ value: f.famille, label: f.famille }))} />
-            <CascadeDropdown step={4} value={article} onChange={setArticle} loading={lA} disabled={disabled || !famille}
+            <CascadeDropdown step={4} label={getStepLabel(3)} color={getStepColor(3)} bg={getStepBg(3)} value={article} onChange={setArticle} loading={lA} disabled={disabled || !famille}
               options={articles.map((a) => ({ value: a.code, label: `${a.code} — ${a.intitule}` }))} />
           </motion.div>
         )}
