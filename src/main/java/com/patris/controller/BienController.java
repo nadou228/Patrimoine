@@ -240,14 +240,20 @@ public class BienController {
 
     @PostMapping("/generate-iup")
     public ResponseEntity<Map<String, Object>> generateIup(@RequestBody Map<String, Object> payload) {
-        String categorie = Optional.ofNullable(payload.get("categorie")).map(Object::toString).orElse("");
-        String iup = iupService.generateIup(categorie);
+        String nomenclatureCode = Optional.ofNullable(payload.get("nomenclatureCode"))
+                .or(() -> Optional.ofNullable(payload.get("categorie")))
+                .map(Object::toString).orElse("");
+        int annee = Optional.ofNullable(payload.get("annee"))
+                .map(o -> Integer.parseInt(o.toString()))
+                .orElse(LocalDateTime.now().getYear());
+        
+        String iup = iupService.generateIup(nomenclatureCode, annee);
         String[] parts = iup.split("-");
         Map<String, Object> response = new HashMap<>();
         response.put("iup", iup);
         response.put("prefixe", parts.length > 0 ? parts[0] : "");
-        response.put("categorie", parts.length > 1 ? parts[1] : categorie);
-        response.put("annee", parts.length > 2 ? parts[2] : "");
+        response.put("annee", parts.length > 1 ? parts[1] : String.valueOf(annee));
+        response.put("nomenclature", parts.length > 2 ? parts[2] : nomenclatureCode);
         response.put("sequence", parts.length > 3 ? parts[3] : "");
         return ResponseEntity.ok(response);
     }

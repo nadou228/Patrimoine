@@ -111,9 +111,8 @@ const MOCK_BIENS: Bien[] = [
 export type BienPayload = Omit<Bien, "id"> & { id?: number | null };
 
 export type GenerateIupPayload = {
-  categorie: string;
+  nomenclatureCode: string;
   annee: number;
-  prefixeMinistere: string;
 };
 
 export type GenerateIupResponse = {

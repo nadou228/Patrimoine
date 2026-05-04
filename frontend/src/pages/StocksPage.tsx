@@ -13,6 +13,7 @@ import {
 import BeneficiaireSelect from "../components/BeneficiaireSelect";
 import { useToast } from "../contexts/ToastContext";
 import { exportFicheStockExcel } from "../utils/exporters";
+import NomenclatureSelector from "../components/NomenclatureSelector";
 
 const StocksPage: React.FC = () => {
   const { showToast } = useToast();
@@ -33,6 +34,7 @@ const StocksPage: React.FC = () => {
     unite: "Unité",
     prixMoyenPondere: 0,
     serviceAffiche: "",
+    nomenclatureCode: "",
   });
 
   const [magasinForm, setMagasinForm] = useState({
@@ -117,6 +119,7 @@ const StocksPage: React.FC = () => {
     e.preventDefault();
     await createConsommable({
       ...articleForm,
+      nomenclature: articleForm.nomenclatureCode ? { code: articleForm.nomenclatureCode } : null,
       commune: null,
     });
     setArticleForm({ codeArticle: "", nomProduit: "", seuilAlerte: 10, unite: "Unité", prixMoyenPondere: 0, serviceAffiche: "" });
@@ -334,14 +337,28 @@ const StocksPage: React.FC = () => {
                     </div>
                   </div>
                   <form className="premium-dynamic-form" onSubmit={submitArticle}>
+                    <div className="full-span" style={{ gridColumn: "span 2", marginBottom: 20 }}>
+                      <NomenclatureSelector
+                        partie="B"
+                        onSelect={(article) => {
+                          setArticleForm((cur) => ({
+                            ...cur,
+                            nomenclatureCode: article.code,
+                            codeArticle: article.code,
+                            nomProduit: article.intitule,
+                            unite: article.unite_defaut || cur.unite
+                          }));
+                        }}
+                      />
+                    </div>
                     <div className="grid-2">
                       <div className="form-group-modern">
-                        <label>Code article</label>
-                        <input value={articleForm.codeArticle} onChange={e => setArticleForm({ ...articleForm, codeArticle: e.target.value })} required />
+                        <label>Code article (Rappel)</label>
+                        <input value={articleForm.codeArticle} readOnly className="monospace" />
                       </div>
                       <div className="form-group-modern">
-                        <label>Nom produit</label>
-                        <input value={articleForm.nomProduit} onChange={e => setArticleForm({ ...articleForm, nomProduit: e.target.value })} required />
+                        <label>Nom produit (Rappel)</label>
+                        <input value={articleForm.nomProduit} readOnly />
                       </div>
                       <div className="form-group-modern">
                         <label>Unité</label>

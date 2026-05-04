@@ -23,30 +23,17 @@ public class IupService {
 
     /**
      * Génère un Identifiant Unique de Patrimoine (IUP).
-     * Format : [PREFIXE_MINISTERE]-[CODE_CAT]-[ANNEE]-[000001]
+     * Format : IMM-[ANNEE]-[CODE_NOMENCLATURE]-[000001]
      */
-    public String generateIup(String codeCategorie) {
-        if (codeCategorie == null || codeCategorie.isBlank()) {
-            throw new IllegalArgumentException("Le code catégorie est obligatoire pour générer un IUP");
+    public String generateIup(String nomenclatureCode, int annee) {
+        if (nomenclatureCode == null || nomenclatureCode.isBlank()) {
+            throw new IllegalArgumentException("Le code nomenclature est obligatoire pour générer un IUP");
         }
-
-        // Validation : Seuls les types racines autorisés portent un IUP
-        if (!isRootImmobilisation(codeCategorie)) {
-            throw new com.patris.exception.BusinessException("Seuls les biens de type IMMOBILIER, MOBILIER ou MATERIEL_ROULANT peuvent porter un IUP.");
-        }
-
-        int annee = LocalDate.now().getYear();
-        
-        String prefixMinistere = configRepository.findByConfigKey(CONFIG_KEY_PREFIX)
-                .map(SystemConfiguration::getConfigValue)
-                .orElse(DEFAULT_PREFIX);
-
-        String prefixCat = mapToIupCategory(codeCategorie);
 
         // Récupération de l'incrément depuis la séquence DB
         Long nextVal = bienRepository.getNextIupSequenceValue();
         
-        return String.format("%s-%s-%d-%06d", prefixMinistere, prefixCat, annee, nextVal);
+        return String.format("IMM-%d-%s-%06d", annee, nomenclatureCode, nextVal);
     }
 
     private boolean isRootImmobilisation(String code) {

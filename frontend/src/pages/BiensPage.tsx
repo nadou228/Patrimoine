@@ -22,6 +22,7 @@ import ImageUpload from "../components/ImageUpload";
 import { useToast } from "../contexts/ToastContext";
 import { useApi } from "../hooks/useApi";
 import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
+import NomenclatureSelector from "../components/NomenclatureSelector";
 
 type MainCategory = "IMMOBILIER" | "MOBILIER" | "MATERIEL_ROULANT";
 type StepKey = 1 | 2 | 3;
@@ -88,6 +89,7 @@ type BienForm = {
   numInventaire: string;
   statutOperationnel: string;
   archived: boolean;
+  nomenclatureCode?: string;
 };
 
 type ConfirmationState = {
@@ -153,6 +155,7 @@ const EMPTY_FORM: BienForm = {
   numInventaire: "",
   statutOperationnel: "ACTIF",
   archived: false,
+  nomenclatureCode: "",
 };
 
 const CATEGORY_META: Record<MainCategory, { label: string; short: string; color: string; icon: React.ReactNode }> = {
@@ -226,6 +229,7 @@ const computeAccounting = (valeur: number, dateAcquisition: string, dureeAmortis
 const toPayload = (form: BienForm): BienPayload => ({
   ...form,
   categorie: form.categoriePrincipale || form.categorie,
+  nomenclature: form.nomenclatureCode ? { code: form.nomenclatureCode } : undefined,
   type:
     form.categoriePrincipale === "IMMOBILIER"
       ? "immobilier"
@@ -571,13 +575,16 @@ export default function BiensPage() {
   };
 
   const handleGenerateIup = async () => {
-    if (!form.categoriePrincipale) return;
+    const code = form.nomenclatureCode || form.codeSousCategorie || form.codeFamille;
+    if (!code) {
+      showToast({ type: "warning", title: "Codification manquante", message: "Veuillez selectionner un article dans la nomenclature." });
+      return;
+    }
     try {
       setGeneratingIup(true);
       const result = await generateIup({
-        categorie: form.categoriePrincipale,
+        nomenclatureCode: code,
         annee: new Date(form.dateAcquisition || today).getFullYear(),
-        prefixeMinistere: "MIN",
       }).catch(() => null);
 
       if (!result?.iup) {
@@ -586,8 +593,8 @@ export default function BiensPage() {
       }
       updateField("iup", result.iup);
       setIupMeta({
-        prefixe: result.prefixe || result.iup.split("-")[0] || "MIN",
-        categorie: result.categorie || result.iup.split("-")[1] || CATEGORY_META[form.categoriePrincipale].short,
+        prefixe: result.prefixe || "IMM",
+        categorie: result.categorie || result.nomenclature || code,
         annee: result.annee || new Date(form.dateAcquisition || today).getFullYear(),
         sequence: result.sequence || result.iup.split("-")[3] || "000001",
       });
@@ -937,84 +944,22 @@ export default function BiensPage() {
 
 
 
-                <div className="grid-2 form-group-modern full-span">
-                  <Field label="Famille de bien">
-                    <select
-                      value={form.codeFamille}
-                      onChange={(e) => {
-                        const code = e.target.value;
-                        const label = catalogueLabelMap.get(code) || "";
-                        setForm((cur) => ({
-                          ...cur,
-                          codeFamille: code,
-                          familleCatalogue: label,
-                          codeSousCategorie: "",
-                          sousCategorie: "",
-                        }));
-                      }}
-                    >
-                      <option value="">-- Sélectionner une famille --</option>
-                      {famillesDisponibles.map((n) => (
-                        <option key={n.code} value={n.code}>
-                          {n.libelle}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Sous-catégorie" error={errors.codeSousCategorie}>
-                    <select
-                      value={form.codeSousCategorie}
-                      disabled={!form.codeFamille}
-                      onChange={(e) => {
-                        const code = e.target.value;
-                        const label = catalogueLabelMap.get(code) || "";
-                        setForm((cur) => ({
-                          ...cur,
-                          codeSousCategorie: code,
-                          sousCategorie: label,
-                          designation: cur.designation || label,
-                        }));
-                        setErrors((cur) => ({ ...cur, codeSousCategorie: undefined, designation: undefined }));
-                      }}
-                    >
-                      <option value="">-- Sélectionner une sous-catégorie --</option>
-                      {sousCategoriesDisponibles.map((n) => (
-                        <option key={n.code} value={n.code}>
-                          {n.libelle}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-
-                <div className="grid-2">
-                  <Field label="Code categorie">
-                    <input
-                      className="monospace"
-                      readOnly
-                      value={form.categoriePrincipale || ""}
-                      placeholder="IMMOBILIER / MOBILIER / MATERIEL_ROULANT"
-                    />
-                  </Field>
-                  <Field label="Libelle categorie">
-                    <input
-                      readOnly
-                      value={form.categoriePrincipale ? CATEGORY_META[form.categoriePrincipale as MainCategory]?.label || "" : ""}
-                      placeholder="Categorie principale"
-                    />
-                  </Field>
-                  <Field label="Code famille">
-                    <input className="monospace" readOnly value={form.codeFamille} placeholder="Code famille" />
-                  </Field>
-                  <Field label="Libelle famille">
-                    <input readOnly value={form.familleCatalogue} placeholder="Libelle famille" />
-                  </Field>
-                  <Field label="Code sous-categorie">
-                    <input className="monospace" readOnly value={form.codeSousCategorie} placeholder="Code sous-categorie" />
-                  </Field>
-                  <Field label="Libelle sous-categorie">
-                    <input readOnly value={form.sousCategorie} placeholder="Libelle sous-categorie" />
-                  </Field>
+                <div className="full-span" style={{ marginBottom: 24 }}>
+                  <NomenclatureSelector
+                    partie="A"
+                    onSelect={(article) => {
+                      setForm((cur) => ({
+                        ...cur,
+                        nomenclatureCode: article.code,
+                        codeSousCategorie: article.code,
+                        sousCategorie: article.intitule,
+                        codeFamille: article.famille,
+                        familleCatalogue: article.famille,
+                        designation: cur.designation || article.intitule,
+                      }));
+                      setErrors((cur) => ({ ...cur, codeSousCategorie: undefined, designation: undefined }));
+                    }}
+                  />
                 </div>
 
                 <div className="grid-2">

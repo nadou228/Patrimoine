@@ -41,6 +41,7 @@ public class BienService {
     private final AuditLogRepository auditLogRepository;
     private final StockRepository stockRepository;
     private final BeneficiaireRepository beneficiaireRepository;
+    private final NomenclatureCompteRepository nomenclatureCompteRepository;
 
     public List<Bien> findAll() {
         return bienRepository.findAllByArchivedFalse();
@@ -122,8 +123,10 @@ public class BienService {
     @Transactional
     public Bien saveBien(Bien bien, Long sourceStockId, Integer quantite, Long sourceBeneficiaireId) {
         if (bien.getIup() == null || bien.getIup().isBlank()) {
-            String codeCat = bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie();
-            String iup = iupService.generateIup(codeCat);
+            String nomCode = bien.getNomenclature() != null ? bien.getNomenclature().getCode() : null;
+            if (nomCode == null) nomCode = bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie();
+            int annee = bien.getDateAcquisition() != null ? bien.getDateAcquisition().getYear() : LocalDate.now().getYear();
+            String iup = iupService.generateIup(nomCode, annee);
             bien.setIup(iup);
             if (bien.getCodeBien() == null || bien.getCodeBien().isBlank()) {
                 bien.setCodeBien(iup);
@@ -219,6 +222,11 @@ public class BienService {
             }
         }
         
+        if (dto.getNomenclature() != null && dto.getNomenclature().getCode() != null) {
+            nomenclatureCompteRepository.findById(dto.getNomenclature().getCode())
+                    .ifPresent(bien::setNomenclature);
+        }
+
         bien.setArchived(dto.getArchived() != null ? dto.getArchived() : false);
 
         return bien;
@@ -511,8 +519,10 @@ public class BienService {
         
         // Auto-génération de l'IUP si non fourni
         if (bien.getIup() == null || bien.getIup().isBlank()) {
-            String codeCat = bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie();
-            bien.setIup(iupService.generateIup(codeCat));
+            String nomCode = bien.getNomenclature() != null ? bien.getNomenclature().getCode() : null;
+            if (nomCode == null) nomCode = bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie();
+            int annee = bien.getDateAcquisition() != null ? bien.getDateAcquisition().getYear() : LocalDate.now().getYear();
+            bien.setIup(iupService.generateIup(nomCode, annee));
         }
 
         Bien savedBien = bienRepository.save(bien);

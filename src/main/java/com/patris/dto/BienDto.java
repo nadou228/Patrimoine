@@ -25,6 +25,7 @@ public abstract class BienDto {
     private String codeFamille;
     private String codeSousCategorie;
     private String codeArticle;
+    private NomenclatureRefDto nomenclature;
     
     // Champs communs
     private String dateAcquisition;

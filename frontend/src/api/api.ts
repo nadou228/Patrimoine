@@ -205,4 +205,11 @@ export const deleteAuditLog = (id: number) => api.delete(`/audit/${id}`);
 // ====== DASHBOARD — /api/dashboard ======
 export const getDashboardStats = () => api.get('/dashboard/stats').then(r => r.data as DashboardStatsResponse);
 
+// ====== NOMENCLATURE — /api/v1/nomenclature ======
+export const getNomenclatureComptes = (params?: any) => api.get('/v1/nomenclature/comptes', { params }).then(r => r.data);
+export const getNomenclatureCategories = (params?: any) => api.get('/v1/nomenclature/categories', { params }).then(r => r.data);
+export const getNomenclatureFamilles = (params?: any) => api.get('/v1/nomenclature/familles', { params }).then(r => r.data);
+export const getNomenclatureArticles = (params?: any) => api.get('/v1/nomenclature/articles', { params }).then(r => r.data);
+export const searchNomenclature = (q: string, params?: any) => api.get('/v1/nomenclature/search', { params: { q, ...params } }).then(r => r.data);
+
 export default api;

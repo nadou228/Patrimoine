@@ -54,6 +54,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/biens/scan/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                // NOMENCLATURE SYSCOHADA — lecture publique (GET) sans authentification
+                .requestMatchers(HttpMethod.GET, "/api/v1/nomenclature/**").permitAll()
+
                 // PERMISSIONS ENDPOINT (Authentifié seulement)
                 .requestMatchers("/api/permissions/**").authenticated()
 
@@ -121,6 +124,7 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.DELETE, "/api/reformes/**")
                     .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE")
+
 
                 // AUTRES ENDPOINTS API
                 .requestMatchers("/api/**")

@@ -11,6 +11,10 @@ public class Consommable {
 
     private String codeArticle;
     private String nomProduit;
+
+    @ManyToOne
+    @JoinColumn(name = "nomenclature_code")
+    private NomenclatureCompte nomenclature;
     private int seuilAlerte;
     private String unite;
     private Double prixMoyenPondere = 0.0;

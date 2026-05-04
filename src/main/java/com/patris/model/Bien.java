@@ -35,6 +35,10 @@ public abstract class Bien {
     private String codeSousCategorie;
     private String codeArticle;
 
+    @ManyToOne
+    @JoinColumn(name = "nomenclature_code")
+    private NomenclatureCompte nomenclature;
+
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateAcquisition;
     
