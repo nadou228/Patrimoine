@@ -34,6 +34,7 @@ public abstract class BienDto {
     private String localisation;
     private String service;
     private String photoUrl;
+    private java.util.List<String> documentsUrls;
     private String observation;
     private String modeAcquisition;
 

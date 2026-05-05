@@ -273,7 +273,7 @@ export default function AffectationsPage() {
     if (!form.bien?.id) return;
 
     const payload: AffectationPayload = {
-      bien: { id: form.bien.id },
+      bien: String(form.bien.id),
       bienId: form.bien.id,
       detenteur: beneficiaryLabel(),
       detenteurA: form.detenteurA,

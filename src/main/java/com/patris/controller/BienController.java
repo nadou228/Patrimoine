@@ -128,8 +128,8 @@ public class BienController {
 
     @GetMapping("/qrcode")
     public ResponseEntity<Map<String, String>> getQrCodeByIup(@RequestParam String iup) {
-        Bien bien = bienService.findByIup(iup);
-        String qrCode = qrCodeService.generateQrCodeBase64(bien.getIup(), appDomain);
+        // Generate QR code directly from IUP, allowing generation before the item is saved
+        String qrCode = qrCodeService.generateQrCodeBase64(iup, appDomain);
         Map<String, String> response = new HashMap<>();
         response.put("qrcode", qrCode);
         response.put("qrCodeBase64", qrCode);
@@ -230,11 +230,13 @@ public class BienController {
     @PutMapping("/{id}/statut")
     public ResponseEntity<Bien> updateStatut(
         @PathVariable Long id,
-        @RequestBody Map<String, String> payload,
+        @RequestBody Map<String, Object> payload,
         Authentication authentication
     ) {
         String acteur = authentication != null ? authentication.getName() : "systeme";
-        Bien updated = bienService.changerStatut(id, payload.get("statutOperationnel"), payload.get("service"), acteur);
+        String statut = payload.get("statutOperationnel") != null ? String.valueOf(payload.get("statutOperationnel")) : null;
+        String service = payload.get("service") != null ? String.valueOf(payload.get("service")) : null;
+        Bien updated = bienService.changerStatut(id, statut, service, acteur);
         return ResponseEntity.ok(updated);
     }
 

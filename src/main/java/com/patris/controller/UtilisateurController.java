@@ -49,7 +49,11 @@ public class UtilisateurController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> getAllUsers(@RequestParam(required = false) String matricule) {
         if (matricule != null && !matricule.isBlank()) {
-            return ResponseEntity.ok(utilisateurService.findByMatricule(matricule));
+            try {
+                return ResponseEntity.ok(utilisateurService.findByMatricule(matricule));
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
+            }
         }
         return ResponseEntity.ok(utilisateurService.getAllUsers());
     }

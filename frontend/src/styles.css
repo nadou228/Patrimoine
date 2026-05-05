@@ -1,5 +1,105 @@
 @import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@500&display=swap");
 
+/* --- Premium Media Viewer & Documents --- */
+.card-media-premium {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
+  border-radius: 12px;
+  margin: 12px 0 16px;
+  cursor: zoom-in;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  transition: all 0.3s ease;
+}
+
+.card-media-premium img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.media-badge-premium {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(8px);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 2;
+}
+
+.card-media-premium:hover img {
+  transform: scale(1.1);
+}
+
+.card-media-premium::after {
+  content: 'VOIR PHOTO';
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 21, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  backdrop-filter: blur(2px);
+}
+
+.card-media-premium:hover::after {
+  opacity: 1;
+}
+
+.doc-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--glass-border);
+  border-radius: 50px;
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  backdrop-filter: blur(8px);
+}
+
+.doc-pill:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px var(--primary-glow);
+}
+
+.doc-pill svg {
+  color: var(--primary);
+  transition: color 0.2s;
+}
+
+.doc-pill:hover svg {
+  color: white;
+}
+
+
 :root {
   /* PATRIS 2024 PREMIUM DESIGN TOKENS */
   --primary: #0596de;

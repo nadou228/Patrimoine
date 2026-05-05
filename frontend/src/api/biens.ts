@@ -6,13 +6,14 @@ export interface Bien {
   iup: string;
   designation: string;
   categorie: string;
-  type?: "immobilier" | "mobilier" | "roulant";
+  type?: "IMMOBILIER" | "MOBILIER" | "MATERIEL_ROULANT";
   categoriePrincipale?: string;
   codeFamille?: string;
   familleCatalogue?: string;
   codeSousCategorie?: string;
   sousCategorie?: string;
   sectionCatalogue?: string;
+  codeCategorie?: string;
   profilFormulaire?: string;
   dateAcquisition: string;
   valeur: number;

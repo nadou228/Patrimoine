@@ -39,16 +39,21 @@ public class FileUploadController {
 
     private final FileStorageService fileStorageService;
 
-    private boolean isDocumentAllowed(MultipartFile file) {
+    private boolean isFileAllowed(MultipartFile file, List<String> allowedTypes) {
         String ct = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
         String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
         
-        boolean validMime = DOCUMENT_TYPES.contains(ct);
-        boolean validExt = name.endsWith(".pdf") || name.endsWith(".doc") || name.endsWith(".docx")
-                        || name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".ppt")
-                        || name.endsWith(".pptx") || name.endsWith(".txt") || name.endsWith(".csv");
+        boolean validMime = allowedTypes.contains(ct);
         
-        return validMime || validExt;
+        if (IMAGE_TYPES.equals(allowedTypes)) {
+            boolean validExt = name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".webp");
+            return validMime || validExt;
+        } else {
+            boolean validExt = name.endsWith(".pdf") || name.endsWith(".doc") || name.endsWith(".docx")
+                            || name.endsWith(".xls") || name.endsWith(".xlsx") || name.endsWith(".ppt")
+                            || name.endsWith(".pptx") || name.endsWith(".txt") || name.endsWith(".csv");
+            return validMime || validExt;
+        }
     }
 
     @PostMapping("/image")
@@ -68,12 +73,16 @@ public class FileUploadController {
             return ResponseEntity.badRequest().body(response);
         }
         
-        // Utiliser la validation par extension en priorité
-        if (!isDocumentAllowed(file)) {
+        // Validation selon le type attendu
+        if (!isFileAllowed(file, allowedTypes)) {
             response.put("error", "Type de fichier non autorisé.");
             response.put("contentType", file.getContentType());
             response.put("filename", file.getOriginalFilename());
-            response.put("conseil", "Types acceptés : PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX");
+            if (allowedTypes == IMAGE_TYPES) {
+                response.put("conseil", "Types acceptés : JPG, JPEG, PNG, WEBP");
+            } else {
+                response.put("conseil", "Types acceptés : PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX");
+            }
             return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(response);
         }
 

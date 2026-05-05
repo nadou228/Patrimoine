@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.patris.enums.statutOperationnel;
 import com.patris.enums.statutValidation;
 import jakarta.persistence.*;
+import jakarta.persistence.FetchType;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -49,6 +50,11 @@ public abstract class Bien {
     private String modeAcquisition;
     private String observation;
     private String photoUrl;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "bien_documents", joinColumns = @JoinColumn(name = "bien_id"))
+    @Column(name = "document_url")
+    private java.util.List<String> documentsUrls = new java.util.ArrayList<>();
 
     private Integer dureeAmortissement;
     private Double tauxAmortissement;

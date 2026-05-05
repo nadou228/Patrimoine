@@ -23,6 +23,7 @@ import { useToast } from "../contexts/ToastContext";
 import { useApi } from "../hooks/useApi";
 import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
 import NomenclatureSelector from "../components/NomenclatureSelector";
+import MediaViewer, { MediaType } from "../components/MediaViewer";
 import { 
   Sparkles, Search, CheckCircle2, ChevronRight, X, Loader2, 
   Building2, Armchair, Monitor, Car, Wrench, FileText, Palette, Dog, LayoutGrid, Check, ArrowRight, ArrowLeft, PlusCircle
@@ -261,6 +262,7 @@ const computeAccounting = (valeur: number, dateAcquisition: string, dureeAmortis
 
 const toPayload = (form: BienForm): BienPayload => ({
   ...form,
+  codeCategorie: form.categoriePrincipale || form.categorie,
   categorie: form.categoriePrincipale || form.categorie,
   nomenclature: form.nomenclatureCode ? { code: form.nomenclatureCode } : undefined,
   type:
@@ -269,7 +271,7 @@ const toPayload = (form: BienForm): BienPayload => ({
       : form.categoriePrincipale === "MATERIEL_ROULANT"
       ? "MATERIEL_ROULANT"
       : "MOBILIER",
-  coordonneeGps: form.coordonneesGps,
+  coordonneesGps: form.coordonneesGps,
 });
 
 const toExportRows = (biens: Bien[]): ExportRecord[] =>
@@ -383,6 +385,25 @@ export default function BiensPage() {
 
   const [individualUnits, setIndividualUnits] = useState<IndividualUnitData[]>([]);
   const [currentUnitIndex, setCurrentUnitIndex] = useState(0);
+
+  const [viewerMedia, setViewerMedia] = useState<{ url: string; type: MediaType; filename?: string } | null>(null);
+
+  const handleDeleteDocument = async (urlToDelete: string) => {
+    const targetBien = biens.find(b => b.documentsUrls?.some(u => normalizeUrl(u) === urlToDelete));
+    if (!targetBien || !targetBien.id) return;
+
+    if (window.confirm("Voulez-vous supprimer définitivement ce document joint ?")) {
+      try {
+        const updatedDocs = (targetBien.documentsUrls || []).filter(u => u !== urlToDelete);
+        await updateBien(targetBien.id, { documentsUrls: updatedDocs });
+        showToast({ title: "Document détaché avec succès", type: "success" });
+        setViewerMedia(null);
+        void refresh();
+      } catch (err) {
+        showToast({ title: "Erreur lors de la suppression", type: "error" });
+      }
+    }
+  };
 
   const resetFlow = () => {
     setForm(EMPTY_FORM);
@@ -620,11 +641,11 @@ export default function BiensPage() {
     // Initialiser les données individuelles pour chaque unité
     const count = form.quantite || 1;
     const initialUnits: IndividualUnitData[] = Array.from({ length: count }, (_, i) => ({
-      iup: "",
+      iup: (count === 1 && form.iup) ? form.iup : "",
       numSerie: form.numSerie,
       immatriculation: form.immatriculation,
       numChassis: form.numChassis,
-      numInventaire: form.numInventaire ? `${form.numInventaire}-${i + 1}` : "",
+      numInventaire: form.numInventaire ? (count > 1 ? `${form.numInventaire}-${i + 1}` : form.numInventaire) : "",
       localisation: form.localisation,
       etat: form.etat,
     }));
@@ -716,7 +737,6 @@ export default function BiensPage() {
   };
 
   const saveAllUnits = async () => {
-    // Vérifier que toutes les unités ont un IUP
     const missingIup = individualUnits.some(u => !u.iup);
     if (missingIup) {
       showToast({ type: 'error', title: 'IUP Manquants', message: 'Toutes les unités doivent avoir un IUP généré ou saisi.' });
@@ -725,13 +745,12 @@ export default function BiensPage() {
 
     try {
       setSaving(true);
-      
-      // On boucle pour créer chaque unité. 
-      // Note: Pour une meilleure UX, on pourrait faire un Promise.all, 
-      // mais pour respecter la logique et éviter de surcharger le serveur si quantite est grande:
       const savedBiens: Bien[] = [];
-      for (const unit of individualUnits) {
-        const unitPayload: BienPayload = {
+
+      // CAS 1 : MODIFICATION d'un bien existant
+      if (form.id) {
+        const unit = individualUnits[0];
+        const payload: BienPayload = {
           ...toPayload(form),
           iup: unit.iup,
           numSerie: unit.numSerie,
@@ -740,20 +759,42 @@ export default function BiensPage() {
           numInventaire: unit.numInventaire,
           localisation: unit.localisation,
           etat: unit.etat,
-          quantite: 1, // Chaque fiche individuelle a une quantité de 1
+          quantite: 1
         };
-        const saved = await createBien(unitPayload);
-        savedBiens.push(saved);
+        const updated = await updateBien(form.id, payload);
+        savedBiens.push(updated);
+      } 
+      // CAS 2 : CRÉATION de nouvelles unités
+      else {
+        for (const unit of individualUnits) {
+          const payload: BienPayload = {
+            ...toPayload(form),
+            id: undefined, // CRITIQUE : Supprimer l'ID pour forcer la création
+            iup: unit.iup,
+            numSerie: unit.numSerie,
+            immatriculation: unit.immatriculation,
+            numChassis: unit.numChassis,
+            numInventaire: unit.numInventaire,
+            localisation: unit.localisation,
+            etat: unit.etat,
+            quantite: 1
+          };
+          const saved = await createBien(payload);
+          savedBiens.push(saved);
+        }
       }
 
-      setCreatedBien(savedBiens[0]); // Pour l'affichage du succès, on prend le premier
+      setCreatedBien(savedBiens[0]);
       await refresh();
-      showToast({ type: "success", title: `${savedBiens.length} actif(s) enregistré(s) avec succès` });
+      showToast({ type: "success", title: form.id ? "Modification enregistrée" : `${savedBiens.length} actif(s) enregistré(s)` });
       setMaxStep(3);
       setActiveStep(3);
       setShowAffectationPrompt(true);
-    } catch (err) {
-      showToast({ type: "error", title: "Erreur d'enregistrement", message: "Une ou plusieurs unités n'ont pas pu être enregistrées." });
+    } catch (err: any) {
+      const serverError = err.response?.data;
+      const errorMsg = serverError?.message || serverError?.error || "Erreur lors de l'enregistrement.";
+      console.error("ÉCHEC ENREGISTREMENT:", serverError || err);
+      showToast({ type: "error", title: "Erreur", message: errorMsg });
     } finally {
       setSaving(false);
     }
@@ -964,9 +1005,22 @@ export default function BiensPage() {
                       </span>
                     </div>
                     {bien.photoUrl ? (
-                      <img src={normalizeUrl(bien.photoUrl)} alt={bien.designation} className="asset-photo" />
+                      <div 
+                        className="card-media-premium" 
+                        onClick={() => setViewerMedia({ url: normalizeUrl(bien.photoUrl!), type: "image", filename: bien.designation })}
+                      >
+                        <img src={normalizeUrl(bien.photoUrl)} alt={bien.designation} />
+                        {bien.documentsUrls && bien.documentsUrls.length > 0 && (
+                          <div className="media-badge-premium" title={`${bien.documentsUrls.length} document(s) attaché(s)`}>
+                            <FileText size={12} />
+                            <span>{bien.documentsUrls.length}</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <div className="asset-photo asset-placeholder">{CATEGORY_META[category]?.icon}</div>
+                      <div className="card-media-premium" style={{ display: 'grid', placeItems: 'center', background: 'var(--bg-input)', cursor: 'default' }}>
+                        {CATEGORY_META[category]?.icon}
+                      </div>
                     )}
                     <h3>{bien.designation}</h3>
                     <p className="asset-breadcrumb">
@@ -996,6 +1050,43 @@ export default function BiensPage() {
                         </>
                       )}
                     </div>
+                    {(() => {
+                      const docs = (bien as any).documentsUrls || (bien as any).documentUrls || [];
+                      if (docs.length === 0) return null;
+                      
+                      return (
+                        <div className="card-documents-panel" style={{ padding: '0 16px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--text-dim)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                            <FileText size={12} />
+                            <span>Pièces jointes ({docs.length})</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {docs.map((docUrl: string, idx: number) => {
+                              const isPdf = docUrl.toLowerCase().endsWith(".pdf");
+                              return (
+                                <button 
+                                  key={idx}
+                                  type="button" 
+                                  className="doc-pill"
+                                  title={isPdf ? "Ouvrir le PDF" : "Ouvrir le document"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewerMedia({ 
+                                      url: normalizeUrl(docUrl), 
+                                      type: isPdf ? "pdf" : "image", 
+                                      filename: `Document ${idx + 1}` 
+                                    });
+                                  }}
+                                >
+                                  <FileText size={10} />
+                                  <span>Doc {idx + 1}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="card-actions icon-actions">
                       <button type="button" title="Modifier" onClick={() => editBien(bien)}>Modifier</button>
                       <button type="button" title="Historique" onClick={() => void openHistory(bien)}>Historique</button>
@@ -1492,6 +1583,16 @@ export default function BiensPage() {
           </aside>
         </>
       ) : null}
+
+      {viewerMedia && (
+        <MediaViewer 
+          url={viewerMedia.url} 
+          type={viewerMedia.type} 
+          filename={viewerMedia.filename} 
+          onClose={() => setViewerMedia(null)} 
+          onDelete={biens.some(b => b.documentsUrls?.some(u => normalizeUrl(u) === viewerMedia.url)) ? () => handleDeleteDocument(viewerMedia.url) : undefined}
+        />
+      )}
     </div>
   );
 }

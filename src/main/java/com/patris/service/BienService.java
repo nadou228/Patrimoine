@@ -44,7 +44,14 @@ public class BienService {
     private final NomenclatureCompteRepository nomenclatureCompteRepository;
 
     public List<Bien> findAll() {
-        return bienRepository.findAllByArchivedFalse();
+        List<Bien> list = bienRepository.findAllByArchivedFalse();
+        // Forcer le chargement des collections ElementCollection pour éviter le LazyLoading inopiné
+        list.forEach(b -> {
+            if (b.getDocumentsUrls() != null) {
+                b.getDocumentsUrls().size(); 
+            }
+        });
+        return list;
     }
 
     public Bien findById(Long id) {
@@ -201,6 +208,9 @@ public class BienService {
         bien.setLocalisation(dto.getLocalisation() != null ? dto.getLocalisation() : "");
         bien.setService(dto.getService() != null ? dto.getService() : "");
         bien.setPhotoUrl(dto.getPhotoUrl());
+        if (dto.getDocumentsUrls() != null) {
+            bien.setDocumentsUrls(new java.util.ArrayList<>(dto.getDocumentsUrls()));
+        }
         bien.setObservation(dto.getObservation());
         bien.setModeAcquisition(dto.getModeAcquisition() != null ? dto.getModeAcquisition() : "");
 
@@ -286,6 +296,10 @@ public class BienService {
         existing.setLocalisation(b.getLocalisation());
         existing.setService(b.getService());
         existing.setPhotoUrl(b.getPhotoUrl());
+        if (b.getDocumentsUrls() != null) {
+            existing.getDocumentsUrls().clear();
+            existing.getDocumentsUrls().addAll(b.getDocumentsUrls());
+        }
         existing.setObservation(b.getObservation());
         existing.setDureeAmortissement(b.getDureeAmortissement());
         existing.setStatutValidation(b.getStatutValidation());
