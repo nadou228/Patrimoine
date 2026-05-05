@@ -33,7 +33,10 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
 
             .headers(headers -> headers
-                .frameOptions(frame -> frame.sameOrigin())
+                .frameOptions(frame -> frame.disable())
+                .contentSecurityPolicy(csp -> csp
+                    .policyDirectives("frame-ancestors 'self' http://localhost:5173")
+                )
             )
 
             .sessionManagement(session ->

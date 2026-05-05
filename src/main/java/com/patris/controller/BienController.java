@@ -24,6 +24,9 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.patris.dto.BienDto;
 import com.patris.model.Bien;
+import com.patris.model.BienImmobilier;
+import com.patris.model.BienMaterielRoulant;
+import com.patris.model.BienMobilier;
 import com.patris.model.Document;
 import com.patris.service.BienService;
 import com.patris.service.DocumentService;
@@ -213,6 +216,14 @@ public class BienController {
                 }
             });
 
+            // Si le type est manquant (mise à jour partielle), on le récupère depuis l'existant
+            if (!cleanedPayload.containsKey("type") || cleanedPayload.get("type") == null) {
+                Bien existing = bienService.findById(id);
+                if (existing instanceof BienImmobilier) cleanedPayload.put("type", "IMMOBILIER");
+                else if (existing instanceof BienMaterielRoulant) cleanedPayload.put("type", "MATERIEL_ROULANT");
+                else cleanedPayload.put("type", "MOBILIER");
+            }
+
             BienDto dto = objectMapper.convertValue(cleanedPayload, BienDto.class);
             Bien bien = bienService.fromDto(dto);
             Bien updated = bienService.update(id, bien);
@@ -347,7 +358,9 @@ public class BienController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Bien> delete(@PathVariable Long id){
+        log.info("Requête DELETE reçue pour le bien id: {}", id);
         bienService.deleteBien(id);
+        log.info("Suppression réussie pour le bien id: {}", id);
         return ResponseEntity.noContent().build();
     }
 

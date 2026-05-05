@@ -1,0 +1,47 @@
+/* Modal System */
+.modal-overlay-premium {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(2, 6, 23, 0.8) !important;
+  backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+}
+
+.modal-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 24px !important;
+  padding: 32px !important;
+  width: min(500px, 90vw) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.compact-modal {
+  padding: 24px !important;
+  width: min(400px, 90vw) !important;
+  text-align: center !important;
+}
+
+.modal-actions {
+  display: flex !important;
+  gap: 12px !important;
+  justify-content: center !important;
+  margin-top: 24px !important;
+}
+
+.danger-text {
+  color: #ef4444 !important;
+  font-weight: 700 !important;
+}
+
+.btn-danger {
+  background: #ef4444 !important;
+  color: white !important;
+}
+
+.btn-danger:hover {
+  background: #dc2626 !important;
+}

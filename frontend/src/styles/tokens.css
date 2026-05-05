@@ -1,0 +1,62 @@
+:root {
+  /* PATRIS 2024 PREMIUM DESIGN TOKENS */
+  --primary: #0596de;
+  --primary-glow: rgba(5, 150, 222, 0.25);
+  --accent: #0ea5e9;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.3);
+  
+  --sidebar-width: 280px;
+  
+  /* Mode Sombre (Défaut Premium) */
+  --bg-main: #020617;
+  --bg-sidebar: #0f172a;
+  --bg-base: #020617;
+  --bg-surface: #0f172a;
+  --card-bg: rgba(15, 23, 42, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text-main: #f8fafc;
+  --text-dim: #94a3b8;
+  --input-bg: #1e293b;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --shadow-premium: 0 20px 50px rgba(0, 0, 0, 0.3);
+  --content-gradient: radial-gradient(circle at top right, rgba(79, 70, 229, 0.1), transparent 40%);
+}
+
+[data-theme="light"] {
+  --bg-main: #f5f9fb;
+  --bg-sidebar: #ffffff;
+  --bg-base: #f5f9fb;
+  --bg-surface: #ffffff;
+  --card-bg: #ffffff;
+  --bg-card: #ffffff;
+  --glass-border: #e2e8f0;
+  --text-main: #0c192a;
+  --text-primary: #0c192a;
+  --text-secondary: #4b5563;
+  --text-dim: #5c6c7f;
+  --input-bg: #ffffff;
+  --bg-input: #ffffff;
+  --border-color: #e2e8f0;
+  --shadow-premium: 0 4px 12px rgba(12, 25, 42, 0.05);
+  --shadow: 0 4px 12px rgba(12, 25, 42, 0.05);
+  --content-gradient: none;
+  --primary: #0596de;
+  --primary-glow: rgba(5, 150, 222, 0.25);
+  --accent: #ff756b;
+  --accent-hover: #e5655c;
+  --success: #179354;
+  --warning: #fca000;
+  --danger: #e22b31;
+  --bg-hover: #f0f7fb;
+  --decision-bg: #f5f9fb;
+  --decision-text: #0c192a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}

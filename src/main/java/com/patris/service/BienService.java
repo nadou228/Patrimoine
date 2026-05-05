@@ -374,10 +374,13 @@ public class BienService {
         return bienRepository.save(bien);
     }
 
+    @Transactional
     public void deleteBien(Long id) {
+        log.info("Archivage du bien id: {}", id);
         Bien bien = findById(id);
         bien.setArchived(true);
         bienRepository.save(bien);
+        log.info("Bien id: {} archivé avec succès", id);
 
         AuditLog logEntry = new AuditLog();
         logEntry.setAction("BIEN_ARCHIVE");

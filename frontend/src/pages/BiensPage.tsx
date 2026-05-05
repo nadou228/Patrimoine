@@ -395,7 +395,8 @@ export default function BiensPage() {
     if (window.confirm("Voulez-vous supprimer définitivement ce document joint ?")) {
       try {
         const updatedDocs = (targetBien.documentsUrls || []).filter(u => u !== urlToDelete);
-        await updateBien(targetBien.id, { documentsUrls: updatedDocs });
+        const type = targetBien.type || (targetBien.categoriePrincipale === "IMMOBILIER" ? "IMMOBILIER" : targetBien.categoriePrincipale === "MATERIEL_ROULANT" ? "MATERIEL_ROULANT" : "MOBILIER");
+        await updateBien(targetBien.id, { documentsUrls: updatedDocs, type });
         showToast({ title: "Document détaché avec succès", type: "success" });
         setViewerMedia(null);
         void refresh();
@@ -817,14 +818,22 @@ export default function BiensPage() {
   };
 
   const askDelete = (bien: Bien) => {
-    if (!bien.id) return;
+    if (!bien.id) {
+      showToast({ type: "error", title: "Erreur", message: "ID du bien manquant, impossible de supprimer." });
+      return;
+    }
     setConfirmation({
       title: "Supprimer le bien",
-      message: `Confirmer la suppression de ${bien.designation} ?`,
+      message: `Confirmer la suppression de ${bien.designation} ? Cette action est irreversible.`,
       onConfirm: async () => {
-        await deleteBien(bien.id as number);
-        await refresh();
-        showToast({ type: "success", title: "Bien supprime" });
+        try {
+          await deleteBien(bien.id as number);
+          await refresh();
+          showToast({ type: "success", title: "Bien supprime avec succes" });
+        } catch (err: any) {
+          console.error("Erreur suppression:", err);
+          showToast({ type: "error", title: "Erreur", message: "Echec de la suppression : " + (err.response?.data?.message || err.message) });
+        }
       },
     });
   };
@@ -1522,10 +1531,16 @@ export default function BiensPage() {
             <div className="modal-actions">
               <button
                 type="button"
-                className="primary danger-bg"
-                onClick={async () => {
-                  await confirmation.onConfirm();
-                  setConfirmation(null);
+                className="primary btn-danger"
+                onClick={async (e) => {
+                  const btn = e.currentTarget as HTMLButtonElement;
+                  btn.disabled = true;
+                  try {
+                    await confirmation.onConfirm();
+                    setConfirmation(null);
+                  } finally {
+                    btn.disabled = false;
+                  }
                 }}
               >
                 Confirmer
