@@ -24,9 +24,9 @@
   background: var(--premium-glass-bg);
   backdrop-filter: var(--premium-blur);
   -webkit-backdrop-filter: var(--premium-blur);
-  border: 1px solid var(--premium-glass-border);
+  border: 1.5px solid var(--premium-glass-border);
   border-radius: 20px;
-  box-shadow: var(--premium-shadow);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   padding: 24px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }

@@ -14,6 +14,11 @@ import BeneficiaireSelect from "../components/BeneficiaireSelect";
 import { useToast } from "../contexts/ToastContext";
 import { exportFicheStockExcel } from "../utils/exporters";
 import NomenclatureSelector from "../components/NomenclatureSelector";
+import AnimatedNumber from "../components/AnimatedNumber";
+import { 
+  Package, Warehouse, ArrowLeftRight, ClipboardList, Search, PlusCircle, 
+  AlertTriangle, CheckCircle2, History, TrendingUp, DollarSign, Activity, ChevronRight, X, FileText
+} from "lucide-react";
 
 const StocksPage: React.FC = () => {
   const { showToast } = useToast();
@@ -122,7 +127,7 @@ const StocksPage: React.FC = () => {
       nomenclature: articleForm.nomenclatureCode ? { code: articleForm.nomenclatureCode } : null,
       commune: null,
     });
-    setArticleForm({ codeArticle: "", nomProduit: "", seuilAlerte: 10, unite: "Unité", prixMoyenPondere: 0, serviceAffiche: "" });
+    setArticleForm({ codeArticle: "", nomProduit: "", seuilAlerte: 10, unite: "Unité", prixMoyenPondere: 0, serviceAffiche: "", nomenclatureCode: "" });
     await loadData();
     setView("CATALOGUE");
   };
@@ -181,18 +186,28 @@ const StocksPage: React.FC = () => {
   };
 
   return (
-    <div className="stocks-module fade-in module-container-premium">
-      <header className="page-header-premium">
+    <div className="dashboard-container stocks-page-shell fade-in">
+      <header className="page-header-modern">
         <div className="header-meta">
-          <span className="badge-pill-glow">Logistique, stock & consommation</span>
+          <span className="badge-pill-glow">Logistique & Consommables</span>
           <h1>Gestion des stocks</h1>
-          <p className="header-subtitle">Catalogue, mouvements, alertes de seuil et pilotage magasin dans le même langage visuel que le reste de la plateforme.</p>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className={view === "DASHBOARD" ? "smart-filter active" : "smart-filter"} onClick={() => setView("DASHBOARD")}>Dashboard</button>
-          <button className={view === "CATALOGUE" ? "smart-filter active" : "smart-filter"} onClick={() => setView("CATALOGUE")}>Articles</button>
-          <button className={view === "MOUVEMENTS" ? "smart-filter active" : "smart-filter"} onClick={() => setView("MOUVEMENTS")}>Mouvements</button>
-          <button className={view === "MAGASINS" ? "smart-filter active" : "smart-filter"} onClick={() => setView("MAGASINS")}>Magasins</button>
+        <div className="toolbar-filters">
+          {[
+            { id: "DASHBOARD", label: "Tableau de bord", icon: <Activity size={16} /> },
+            { id: "CATALOGUE", label: "Articles", icon: <Package size={16} /> },
+            { id: "MOUVEMENTS", label: "Flux & Mouvements", icon: <ArrowLeftRight size={16} /> },
+            { id: "MAGASINS", label: "Points de stockage", icon: <Warehouse size={16} /> },
+          ].map((item) => (
+            <button
+              key={item.id}
+              className={`pill-filter ${view === item.id ? "active" : ""}`}
+              onClick={() => setView(item.id as any)}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -200,65 +215,74 @@ const StocksPage: React.FC = () => {
         <div className="empty-state-modern">Chargement du module stock...</div>
       ) : (
         <>
-          <div className="biens-insight-grid">
-            <div className="insight-card primary-tone">
-              <span className="insight-label">Quantité en stock</span>
-              <strong>{totals.totalStock}</strong>
-              <p>Total de toutes les quantités actuellement disponibles.</p>
+          <div className="stats-dashboard">
+            <div className="stat-card-premium">
+              <span className="stat-label">Stock total</span>
+              <span className="stat-value"><AnimatedNumber value={totals.totalStock} /></span>
+              <p className="stat-hint">Unités disponibles</p>
             </div>
-            <div className="insight-card">
-              <span className="insight-label">Valeur estimée</span>
-              <strong>{Math.round(totals.totalValue).toLocaleString("fr-FR")}</strong>
-              <p>Valorisation des stocks au prix moyen pondéré.</p>
+            <div className="stat-card-premium">
+              <span className="stat-label">Valeur stockée</span>
+              <span className="stat-value"><AnimatedNumber value={totals.totalValue} isMoney /></span>
+              <p className="stat-hint">Valorisation PMP</p>
             </div>
-            <div className="insight-card">
-              <span className="insight-label">Alertes de seuil</span>
-              <strong>{totals.lowCount}</strong>
-              <p>Articles dont la quantité est au-dessous du seuil d'alerte.</p>
+            <div className="stat-card-premium">
+              <span className="stat-label">Alertes seuil</span>
+              <span className="stat-value text-danger"><AnimatedNumber value={totals.lowCount} /></span>
+              <p className="stat-hint">Ruptures probables</p>
             </div>
-            <div className="insight-card">
-              <span className="insight-label">Validation en attente</span>
-              <strong>{totals.pending}</strong>
-              <p>Mouvements non encore validés dans le circuit de stock.</p>
+            <div className="stat-card-premium">
+              <span className="stat-label">En attente</span>
+              <span className="stat-value text-warning"><AnimatedNumber value={totals.pending} /></span>
+              <p className="stat-hint">Flux à valider</p>
             </div>
           </div>
 
           {view === "DASHBOARD" && (
             <div className="dashboard-shell-grid">
-              <section className="asset-card">
-                <div className="section-header-inline">
+              <section className="glass-card premium-card">
+                <div className="card-header-premium">
+                  <div className="icon-box-premium">
+                    <AlertTriangle size={20} />
+                  </div>
                   <div>
                     <h3>Articles en tension</h3>
-                    <p className="muted-paragraph">Focus sur les références qui nécessitent un réapprovisionnement ou un arbitrage rapide.</p>
+                    <p className="card-subtitle">Réapprovisionnement nécessaire</p>
                   </div>
                 </div>
                 <div className="dashboard-mini-list">
                   {articleCards.filter(article => article.low).slice(0, 10).map(article => (
-                    <div key={article.id} className="dashboard-mini-row">
-                      <div>
+                    <div key={article.id} className="dashboard-mini-row-premium">
+                      <div className="row-main">
                         <strong>{article.nomProduit}</strong>
-                        <span>{article.codeArticle || "Sans code"} • {article.serviceAffiche || "Service non défini"}</span>
+                        <span className="row-sub">{article.codeArticle || "Sans code"} • {article.serviceAffiche || "Service non défini"}</span>
                       </div>
-                      <div>
-                        <strong>{article.quantite} {article.unite}</strong>
-                        <span>Seuil {article.seuil}</span>
+                      <div className="row-side">
+                        <strong className="text-danger">{article.quantite} {article.unite}</strong>
+                        <span className="row-sub">Seuil {article.seuil}</span>
                       </div>
                     </div>
                   ))}
+                  {articleCards.filter(article => article.low).length === 0 && (
+                    <div className="empty-state-mini">Aucune alerte de stock actuelle.</div>
+                  )}
                 </div>
               </section>
 
-              <section className="asset-card">
-                <div className="section-header-inline">
+              <section className="glass-card premium-card">
+                <div className="card-header-premium">
+                  <div className="icon-box-premium">
+                    <ArrowLeftRight size={20} />
+                  </div>
                   <div>
-                    <h3>Créer un mouvement</h3>
-                    <p className="muted-paragraph">Entrées et sorties validées par article et magasin.</p>
+                    <h3>Nouveau mouvement</h3>
+                    <p className="card-subtitle">Flux entrants et sortants</p>
                   </div>
                 </div>
-                <form className="premium-dynamic-form" onSubmit={submitMouvement}>
-                  <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-                    <button type="button" className={mouvType === "ENTREE" ? "smart-filter active" : "smart-filter"} onClick={() => setMouvType("ENTREE")}>Entrée</button>
-                    <button type="button" className={mouvType === "SORTIE" ? "smart-filter active" : "smart-filter"} onClick={() => setMouvType("SORTIE")}>Sortie</button>
+                <form className="form-content-premium" onSubmit={submitMouvement}>
+                  <div className="toggle-toolbar" style={{ marginBottom: 20 }}>
+                    <button type="button" className={`pill-filter ${mouvType === "ENTREE" ? "active" : ""}`} onClick={() => setMouvType("ENTREE")}>Entrée</button>
+                    <button type="button" className={`pill-filter ${mouvType === "SORTIE" ? "active" : ""}`} onClick={() => setMouvType("SORTIE")}>Sortie</button>
                   </div>
                   <div className="grid-2">
                     <div className="form-group-modern">
@@ -312,7 +336,10 @@ const StocksPage: React.FC = () => {
                       </>
                     )}
                   </div>
-                  <button className="primary" type="submit" style={{ width: "100%", marginTop: 14 }}>Enregistrer le mouvement</button>
+                  <button className="primary-premium" type="submit" style={{ width: "100%", marginTop: 14 }}>
+                    <PlusCircle size={18} />
+                    Enregistrer le mouvement
+                  </button>
                 </form>
               </section>
             </div>
@@ -320,23 +347,28 @@ const StocksPage: React.FC = () => {
 
           {view === "CATALOGUE" && (
             <>
-              <div className="smart-filter-bar">
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Rechercher un article..."
-                  style={{ minWidth: 280, padding: "10px 14px", borderRadius: 14, border: "1px solid var(--glass-border)", background: "var(--card-bg)", color: "var(--text-main)" }}
-                />
+              <div className="gallery-toolbar glass-card" style={{ marginBottom: 24 }}>
+                <div className="search-box-premium">
+                  <Search size={18} />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Rechercher une référence, un nom, un service..."
+                  />
+                </div>
               </div>
               <div className="dashboard-shell-grid">
-                <section className="asset-card">
-                  <div className="section-header-inline">
+                <section className="glass-card premium-card">
+                  <div className="card-header-premium">
+                    <div className="icon-box-premium">
+                      <PlusCircle size={20} />
+                    </div>
                     <div>
                       <h3>Nouveau consommable</h3>
-                      <p className="muted-paragraph">Création rapide avec seuil, unité et service d'affectation.</p>
+                      <p className="card-subtitle">Référencer un article</p>
                     </div>
                   </div>
-                  <form className="premium-dynamic-form" onSubmit={submitArticle}>
+                  <form className="form-content-premium" onSubmit={submitArticle}>
                     <div className="full-span" style={{ gridColumn: "span 2", marginBottom: 20 }}>
                       <NomenclatureSelector
                         partie="B"
@@ -380,29 +412,40 @@ const StocksPage: React.FC = () => {
                         </datalist>
                       </div>
                     </div>
-                    <button className="primary" type="submit" style={{ width: "100%", marginTop: 14 }}>Créer l'article</button>
+                    <button className="primary-premium" type="submit" style={{ width: "100%", marginTop: 14 }}>
+                      <PlusCircle size={18} />
+                      Créer l'article
+                    </button>
                   </form>
                 </section>
 
-                <section className="asset-card">
-                  <div className="section-header-inline">
+                <section className="glass-card premium-card">
+                  <div className="card-header-premium">
+                    <div className="icon-box-premium">
+                      <ClipboardList size={20} />
+                    </div>
                     <div>
                       <h3>Catalogue stock</h3>
-                      <p className="muted-paragraph">Articles, quantités réelles, seuils et accès à la fiche de stock.</p>
+                      <p className="card-subtitle">Articles & quantités</p>
                     </div>
                   </div>
                   <div className="dashboard-mini-list">
                     {articleCards.map(article => (
-                      <div key={article.id} className="dashboard-mini-row">
-                        <div>
+                      <div key={article.id} className="dashboard-mini-row-premium">
+                        <div className="row-main">
                           <strong>{article.nomProduit}</strong>
-                          <span>{article.codeArticle} • {article.unite} • {article.serviceAffiche || "Service non défini"}</span>
+                          <span className="row-sub">{article.codeArticle} • {article.unite} • {article.serviceAffiche || "Sans service"}</span>
                         </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span className={article.low ? "asset-alert-chip danger" : "asset-alert-chip success"}>
-                            {article.quantite} / seuil {article.seuil}
-                          </span>
-                          <button className="btn-export" onClick={() => exportArticleLedger(article)}>Fiche</button>
+                        <div className="row-side" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                          <div className="text-right">
+                            <strong className={article.low ? "text-danger" : "text-primary"}>
+                              {article.quantite} / {article.seuil}
+                            </strong>
+                            <span className="row-sub">Stock / Seuil</span>
+                          </div>
+                          <button className="action-btn-mini" title="Fiche de stock" onClick={() => exportArticleLedger(article)}>
+                            <FileText size={14} />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -413,26 +456,42 @@ const StocksPage: React.FC = () => {
           )}
 
           {view === "MOUVEMENTS" && (
-            <section className="asset-card">
-              <div className="section-header-inline">
+            <section className="glass-card premium-card">
+              <div className="card-header-premium">
+                <div className="icon-box-premium">
+                  <History size={20} />
+                </div>
                 <div>
                   <h3>Registre des mouvements</h3>
-                  <p className="muted-paragraph">Validation des flux et suivi complet des entrées/sorties.</p>
+                  <p className="card-subtitle">Traçabilité des flux</p>
                 </div>
               </div>
               <div className="dashboard-mini-list">
                 {mouvements.map(mouvement => (
-                  <div key={mouvement.id} className="dashboard-mini-row">
-                    <div>
-                      <strong>{mouvement.typeMouvement} • {mouvement.stock?.consommable?.nomProduit || "Article"}</strong>
-                      <span>{mouvement.referencePiece || "Sans pièce"} • {mouvement.dateMouvement ? new Date(mouvement.dateMouvement).toLocaleString("fr-FR") : "Date inconnue"}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span className={mouvement.estValide ? "asset-alert-chip success" : "asset-alert-chip warning"}>
-                        {mouvement.quantite} • {mouvement.estValide ? "Validé" : "En attente"}
+                  <div key={mouvement.id} className="dashboard-mini-row-premium">
+                    <div className="row-main">
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <strong className={mouvement.typeOperation === "ENTREE" ? "text-success" : "text-danger"}>
+                          {mouvement.typeOperation}
+                        </strong>
+                        <ChevronRight size={14} className="muted-icon" />
+                        <strong>{mouvement.stock?.consommable?.nomProduit || "Article inconnu"}</strong>
+                      </div>
+                      <span className="row-sub">
+                        {mouvement.pieceJustificative || "Sans pièce"} • {mouvement.dateOperation ? new Date(mouvement.dateOperation).toLocaleString("fr-FR") : "Date inconnue"}
                       </span>
+                    </div>
+                    <div className="row-side" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <div className="text-right">
+                        <strong className={mouvement.estValide ? "text-success" : "text-warning"}>
+                          {mouvement.quantite} unités
+                        </strong>
+                        <span className="row-sub">{mouvement.estValide ? "Validé" : "En attente"}</span>
+                      </div>
                       {!mouvement.estValide && (
-                        <button className="btn-export" onClick={() => validerMouvementStock(mouvement.id).then(loadData)}>Valider</button>
+                        <button className="action-btn-mini" title="Valider le mouvement" onClick={() => validerMouvementStock(mouvement.id).then(loadData)}>
+                          <CheckCircle2 size={14} />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -443,14 +502,17 @@ const StocksPage: React.FC = () => {
 
           {view === "MAGASINS" && (
             <div className="dashboard-shell-grid">
-              <section className="asset-card">
-                <div className="section-header-inline">
+              <section className="glass-card premium-card">
+                <div className="card-header-premium">
+                  <div className="icon-box-premium">
+                    <PlusCircle size={20} />
+                  </div>
                   <div>
                     <h3>Nouveau magasin</h3>
-                    <p className="muted-paragraph">Structure de stockage et responsabilité associée.</p>
+                    <p className="card-subtitle">Configuration logistique</p>
                   </div>
                 </div>
-                <form className="premium-dynamic-form" onSubmit={submitMagasin}>
+                <form className="form-content-premium" onSubmit={submitMagasin}>
                   <div className="grid-2">
                     <div className="form-group-modern">
                       <label>Nom</label>
@@ -469,26 +531,33 @@ const StocksPage: React.FC = () => {
                       <input value={magasinForm.responsable} onChange={e => setMagasinForm({ ...magasinForm, responsable: e.target.value })} />
                     </div>
                   </div>
-                  <button className="primary" type="submit" style={{ width: "100%", marginTop: 14 }}>Créer le magasin</button>
+                  <button className="primary-premium" type="submit" style={{ width: "100%", marginTop: 14 }}>
+                    <PlusCircle size={18} />
+                    Créer le magasin
+                  </button>
                 </form>
               </section>
 
-              <section className="asset-card">
-                <div className="section-header-inline">
+              <section className="glass-card premium-card">
+                <div className="card-header-premium">
+                  <div className="icon-box-premium">
+                    <Warehouse size={20} />
+                  </div>
                   <div>
-                    <h3>Réseau des magasins</h3>
-                    <p className="muted-paragraph">Visualisation rapide des emplacements de stockage.</p>
+                    <h3>Points de stockage</h3>
+                    <p className="card-subtitle">Réseau logistique</p>
                   </div>
                 </div>
                 <div className="dashboard-mini-list">
                   {magasins.map(magasin => (
-                    <div key={magasin.id} className="dashboard-mini-row">
-                      <div>
+                    <div key={magasin.id} className="dashboard-mini-row-premium">
+                      <div className="row-main">
                         <strong>{magasin.nom}</strong>
-                        <span>{magasin.code || "Sans code"} • {magasin.localisation || "Localisation non précisée"}</span>
+                        <span className="row-sub">{magasin.code || "Sans code"} • {magasin.localisation || "Localisation non précisée"}</span>
                       </div>
-                      <div>
-                        <strong>{magasin.responsable || "Responsable non défini"}</strong>
+                      <div className="row-side text-right">
+                        <strong>{magasin.responsable || "Sans responsable"}</strong>
+                        <span className="row-sub">Responsable</span>
                       </div>
                     </div>
                   ))}

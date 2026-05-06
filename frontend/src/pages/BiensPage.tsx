@@ -24,9 +24,11 @@ import { useApi } from "../hooks/useApi";
 import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf } from "../utils/exporters";
 import NomenclatureSelector from "../components/NomenclatureSelector";
 import MediaViewer, { MediaType } from "../components/MediaViewer";
+import AnimatedNumber from "../components/AnimatedNumber";
 import { 
   Sparkles, Search, CheckCircle2, ChevronRight, X, Loader2, 
-  Building2, Armchair, Monitor, Car, Wrench, FileText, Palette, Dog, LayoutGrid, Check, ArrowRight, ArrowLeft, PlusCircle
+  Building2, Armchair, Monitor, Car, Wrench, FileText, Palette, Dog, LayoutGrid, Check, ArrowRight, ArrowLeft, PlusCircle,
+  DollarSign, UserCheck
 } from "lucide-react";
 
 type MainCategory = 
@@ -108,6 +110,7 @@ type BienForm = {
 type ConfirmationState = {
   title: string;
   message: string;
+  bienId: number | null;
   onConfirm: () => Promise<void>;
 } | null;
 
@@ -289,29 +292,7 @@ const toExportRows = (biens: Bien[]): ExportRecord[] =>
     statutOperationnel: bien.statutOperationnel,
   }));
 
-const AnimatedNumber = ({ value, isMoney = false }: { value: number; isMoney?: boolean }) => {
-  const [displayValue, setDisplayValue] = useState(0);
 
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setDisplayValue(value);
-      return;
-    }
-    let frame = 0;
-    const startedAt = performance.now();
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - startedAt) / 1200);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(value * eased);
-      if (progress < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [value]);
-
-  if (isMoney) return <>{Math.round(displayValue).toLocaleString("fr-FR")} FCFA</>;
-  return <>{Math.round(displayValue)}</>;
-};
 
 function ErrorText({ message }: { message?: string }) {
   return message ? <span className="field-error">{message}</span> : null;
@@ -790,7 +771,7 @@ export default function BiensPage() {
       showToast({ type: "success", title: form.id ? "Modification enregistrée" : `${savedBiens.length} actif(s) enregistré(s)` });
       setMaxStep(3);
       setActiveStep(3);
-      setShowAffectationPrompt(true);
+      setShowAffectationPrompt(false); // On utilise Step 3 à la place du modal pour le flux d'enregistrement
     } catch (err: any) {
       const serverError = err.response?.data;
       const errorMsg = serverError?.message || serverError?.error || "Erreur lors de l'enregistrement.";
@@ -824,12 +805,13 @@ export default function BiensPage() {
     }
     setConfirmation({
       title: "Supprimer le bien",
-      message: `Confirmer la suppression de ${bien.designation} ? Cette action est irreversible.`,
+      message: `Supprimer ${bien.designation} ?`,
+      bienId: bien.id,
       onConfirm: async () => {
         try {
           await deleteBien(bien.id as number);
           await refresh();
-          showToast({ type: "success", title: "Bien supprime avec succes" });
+          showToast({ type: "success", title: "Bien supprimé avec succès" });
         } catch (err: any) {
           console.error("Erreur suppression:", err);
           showToast({ type: "error", title: "Erreur", message: "Echec de la suppression : " + (err.response?.data?.message || err.message) });
@@ -909,83 +891,85 @@ export default function BiensPage() {
 
   return (
     <div className="dashboard-container biens-page-shell fade-in">
-      <header className="page-header-premium">
+      <header className="page-header-modern">
         <div className="header-meta">
           <span className="badge-pill-glow">Registre patrimonial</span>
           <h1>Gestion des biens</h1>
-          <p className="header-subtitle">Recensement, identification IUP, galerie operationnelle et actions rapides.</p>
         </div>
         <div className="export-bar">
-          <button type="button" className="btn-export" onClick={() => exportLivreJournalPremiumExcel(exportRows, "Livre_Journal.xlsx")}>
-            Livre journal
-          </button>
-          <button type="button" className="btn-export" onClick={() => void exportGrandLivrePremiumExcel(exportRows, "Grand_Livre.xlsx")}>
-            Grand livre
-          </button>
-          <button type="button" className="btn-export" onClick={() => exportPdf(exportRows, "Registre patrimonial", "registre.pdf")}>
-            Rapport PDF
-          </button>
-          <button type="button" className="primary" onClick={openNewForm}>
-            Nouveau bien
+          <div className="dropdown-export">
+            <button type="button" className="btn-export">Exporter ▼</button>
+            <div className="dropdown-content">
+              <button onClick={() => exportLivreJournalPremiumExcel(exportRows, "Livre_Journal.xlsx")}>Livre journal</button>
+              <button onClick={() => void exportGrandLivrePremiumExcel(exportRows, "Grand_Livre.xlsx")}>Grand livre</button>
+              <button onClick={() => exportPdf(exportRows, "Registre", "registre.pdf")}>Rapport PDF</button>
+            </div>
+          </div>
+          <button type="button" className="primary-premium" onClick={openNewForm}>
+            <PlusCircle size={18} /> Nouveau bien
           </button>
         </div>
       </header>
 
       {view === "gallery" ? (
-        <section className="patris-gallery">
-          <div className="gallery-counter">
-            <strong><AnimatedNumber value={totals.count} /> biens</strong>
-            <span>Valeur totale : <AnimatedNumber value={totals.value} isMoney /></span>
-            <span><AnimatedNumber value={totals.affected} /> affectés</span>
-            <span><AnimatedNumber value={totals.free} /> à affecter</span>
+        <section className="patris-gallery fade-in">
+          <div className="stats-dashboard">
+            <div className="stat-card-premium">
+              <span className="stat-label">Total biens</span>
+              <span className="stat-value"><AnimatedNumber value={totals.count} /></span>
+            </div>
+            <div className="stat-card-premium">
+              <span className="stat-label">Valeur active</span>
+              <span className="stat-value"><AnimatedNumber value={totals.value} isMoney /></span>
+            </div>
+            <div className="stat-card-premium">
+              <span className="stat-label">Affectés</span>
+              <span className="stat-value"><AnimatedNumber value={totals.affected} /></span>
+            </div>
+            <div className="stat-card-premium">
+              <span className="stat-label">Libres</span>
+              <span className="stat-value"><AnimatedNumber value={totals.free} /></span>
+            </div>
           </div>
 
-          <div className="gallery-filters sticky-filters">
-            <input
-              value={filters.query}
-              onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-              placeholder="Rechercher IUP, designation, service"
-            />
-            <div className="filter-pills">
+          <div className="gallery-toolbar">
+            <div className="toolbar-search">
+              <Search size={18} />
+              <input
+                value={filters.query}
+                onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+                placeholder="Rechercher IUP, designation, service..."
+              />
+            </div>
+            <div className="toolbar-filters">
               {["TOUS", "IMMOBILIER", "MOBILIER", "MATERIEL_ROULANT"].map((category) => (
                 <button
                   key={category}
                   type="button"
-                  className={filters.category === category ? "active" : ""}
+                  className={`pill-filter ${filters.category === category ? "active" : ""}`}
                   onClick={() => setFilters((current) => ({ ...current, category }))}
                 >
-                  {category === "TOUS" ? "Tous" : CATEGORY_META[category as MainCategory].label}
+                  {category === "TOUS" ? "Tout" : CATEGORY_META[category as MainCategory]?.label || category}
                 </button>
               ))}
             </div>
-            <select value={filters.etat} onChange={(event) => setFilters((current) => ({ ...current, etat: event.target.value }))}>
-              {["TOUS", "NEUF", "BON", "MOYEN", "DEGRADE", "HORS_SERVICE"].map((etat) => (
-                <option key={etat} value={etat}>
-                  {etat === "TOUS" ? "Tous etats" : etat}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filters.affectation}
-              onChange={(event) => setFilters((current) => ({ ...current, affectation: event.target.value }))}
-            >
-              <option value="TOUS">Tous statuts</option>
-              <option value="AFFECTE">Affecte</option>
-              <option value="NON_AFFECTE">Non affecte</option>
-              <option value="REFORME">Reforme</option>
-            </select>
-            <select value={filters.sort} onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as SortMode }))}>
-              <option value="date">Date acquisition</option>
-              <option value="valeur">Valeur</option>
-              <option value="designation">Designation A-Z</option>
-            </select>
-            <div className="view-toggle">
-              <button type="button" className={filters.view === "grid" ? "active" : ""} onClick={() => setFilters((current) => ({ ...current, view: "grid" }))}>
-                Grille
-              </button>
-              <button type="button" className={filters.view === "list" ? "active" : ""} onClick={() => setFilters((current) => ({ ...current, view: "list" }))}>
-                Liste
-              </button>
+            <div className="toolbar-selects">
+              <select value={filters.etat} onChange={(e) => setFilters((c) => ({ ...c, etat: e.target.value }))}>
+                {["TOUS", "NEUF", "BON", "MOYEN", "DEGRADE", "HORS_SERVICE"].map((etat) => (
+                  <option key={etat} value={etat}>{etat === "TOUS" ? "Tous états" : etat}</option>
+                ))}
+              </select>
+              <select value={filters.affectation} onChange={(e) => setFilters((c) => ({ ...c, affectation: e.target.value }))}>
+                <option value="TOUS">Tous statuts</option>
+                <option value="AFFECTE">Affecté</option>
+                <option value="NON_AFFECTE">Non affecté</option>
+                <option value="REFORME">Réformé</option>
+              </select>
+              <select value={filters.sort} onChange={(e) => setFilters((c) => ({ ...c, sort: e.target.value as SortMode }))}>
+                <option value="date">Date</option>
+                <option value="valeur">Valeur</option>
+                <option value="designation">A→Z</option>
+              </select>
             </div>
           </div>
 
@@ -996,119 +980,133 @@ export default function BiensPage() {
               ))}
             </div>
           ) : (
-            <div className={filters.view === "grid" ? "asset-grid patris-asset-grid" : "asset-list"}>
+            <div className="asset-grid-premium">
               {filteredBiens.map((bien) => {
                 const category = (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory;
+                const catIcon = CATEGORY_META[category]?.icon || <LayoutGrid size={48} strokeWidth={1} style={{ opacity: 0.2 }} />;
+                const catIconSmall = CATEGORY_META[category]?.icon || <LayoutGrid size={14} />;
+                const affected = !!bien.service;
+                const mainImage = (bien.photoUrl || bien.photo) ? normalizeUrl(bien.photoUrl || bien.photo) : null;
                 const vnc = bien.valeurNetteComptable ?? bien.valeur;
-                const amortPercent = bien.valeur ? Math.min(100, Math.round(((bien.valeur - vnc) / bien.valeur) * 100)) : 0;
-                const affected = Boolean(bien.service) || bien.statutOperationnel === "AFFECTE";
+                const isConfirmingDelete = confirmation?.bienId === bien.id;
+
                 return (
-                  <article key={bien.id || bien.iup} className={`asset-card patrimony-card ${CATEGORY_META[category]?.color || ""}`}>
-                    <div className="asset-band" />
-                    <div className="card-badge-row">
-                      <button type="button" className="badge-premium monospace" onClick={() => bien.iup && void copyIup(bien.iup)}>
-                        {bien.iup || "Sans IUP"}
-                      </button>
-                      <span className={`operation-badge operation-${String(bien.statutOperationnel || "ACTIF").toLowerCase()}`}>
-                        {bien.statutOperationnel || "ACTIF"}
-                      </span>
-                    </div>
-                    {bien.photoUrl ? (
-                      <div 
-                        className="card-media-premium" 
-                        onClick={() => setViewerMedia({ url: normalizeUrl(bien.photoUrl!), type: "image", filename: bien.designation })}
-                      >
-                        <img src={normalizeUrl(bien.photoUrl)} alt={bien.designation} />
-                        {bien.documentsUrls && bien.documentsUrls.length > 0 && (
-                          <div className="media-badge-premium" title={`${bien.documentsUrls.length} document(s) attaché(s)`}>
-                            <FileText size={12} />
-                            <span>{bien.documentsUrls.length}</span>
-                          </div>
-                        )}
+                  <article key={bien.id || bien.iup} className="asset-card-premium" style={{ position: 'relative' }}>
+                    <div className="asset-media-container" onClick={() => mainImage && setViewerMedia({ url: mainImage, type: "image", filename: bien.designation })}>
+                      {mainImage ? (
+                        <img 
+                          src={mainImage} 
+                          alt={bien.designation} 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = ""; // Clear src to show placeholder
+                            (e.target as HTMLImageElement).className = "hidden";
+                          }}
+                        />
+                      ) : (
+                        <div className="no-image-placeholder">
+                          {catIcon}
+                        </div>
+                      )}
+                      
+                      {bien.documentsUrls && bien.documentsUrls.length > 0 && (
+                        <div 
+                          className="asset-docs-badge" 
+                          title={`${bien.documentsUrls.length} document(s) joint(s)`} 
+                          style={{ top: 16, left: 16, cursor: 'pointer', zIndex: 20 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const docUrl = bien.documentsUrls![0];
+                            const isImage = docUrl.match(/\.(jpg|jpeg|png|webp)$/i);
+                            setViewerMedia({ 
+                              url: normalizeUrl(docUrl), 
+                              type: isImage ? "image" : "document", 
+                              filename: `Document - ${bien.designation}` 
+                            });
+                          }}
+                        >
+                          <FileText size={16} />
+                        </div>
+                      )}
+
+                      <div className="asset-status-overlay">
+                        <span className={`status-pill ${bien.etat?.toLowerCase() || ""}`}>
+                          {bien.etat || "ACTIF"}
+                        </span>
                       </div>
-                    ) : (
-                      <div className="card-media-premium" style={{ display: 'grid', placeItems: 'center', background: 'var(--bg-input)', cursor: 'default' }}>
-                        {CATEGORY_META[category]?.icon}
+                    </div>
+
+                    <div className="asset-content-premium">
+                      <div className="asset-header-meta">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <span className="asset-iup-premium">{bien.iup || "SANS IUP"}</span>
+                          <span className="field-hint" style={{ fontSize: 10 }}>{bien.sousCategorie || bien.categorie}</span>
+                        </div>
+                        <h3 className="asset-title-premium">{bien.designation}</h3>
+                      </div>
+
+                      <div className="asset-details-grid">
+                        <div className="detail-item">
+                          <span className="detail-label">Localisation</span>
+                          <span className="detail-value">{bien.localisation || "Non définie"}</span>
+                        </div>
+                        <div className="detail-item">
+                          <span className="detail-label">Statut</span>
+                          <span className="detail-value">
+                            {affected ? `Affecté : ${typeof bien.service === 'object' ? (bien.service.nomService || bien.service.nom || bien.service.code) : bien.service}` : "Libre"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="asset-footer-premium">
+                      <span className="asset-value-premium">
+                        {new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XOF" }).format(bien.valeur || 0)}
+                      </span>
+                      <div className="asset-actions-premium">
+                        <button type="button" className="action-btn-mini" title="Modifier" onClick={() => editBien(bien)}>
+                          <Sparkles size={14} />
+                        </button>
+                        <button type="button" className="action-btn-mini" title="Historique" onClick={() => void openHistory(bien)}>
+                          <Search size={14} />
+                        </button>
+                        <button type="button" className="action-btn-mini danger" title="Supprimer" onClick={() => askDelete(bien)}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {isConfirmingDelete && (
+                      <div className="delete-popover">
+                        <p className="delete-popover-msg">{confirmation!.message}</p>
+                        <p className="delete-popover-warning">Cette action est irréversible.</p>
+                        <div className="delete-popover-actions">
+                          <button
+                            type="button"
+                            className="btn-confirm-delete"
+                            onClick={async (e) => {
+                              const btn = e.currentTarget as HTMLButtonElement;
+                              btn.disabled = true;
+                              try {
+                                await confirmation!.onConfirm();
+                                setConfirmation(null);
+                              } catch (err) {
+                                btn.disabled = false;
+                              }
+                            }}
+                          >
+                            Supprimer
+                          </button>
+                          <button type="button" className="btn-cancel-delete" onClick={() => setConfirmation(null)}>
+                            Annuler
+                          </button>
+                        </div>
                       </div>
                     )}
-                    <h3>{bien.designation}</h3>
-                    <p className="asset-breadcrumb">
-                      {renderCataloguePath(
-                        bien.categoriePrincipale || bien.categorie,
-                        bien.codeFamille,
-                        bien.familleCatalogue,
-                        bien.codeSousCategorie,
-                        bien.sousCategorie
-                      )}
-                    </p>
-                    <div className="asset-values">
-                      <span>Acquisition : {formatMoney(bien.valeur)}</span>
-                      <span>VNC : {formatMoney(vnc)}</span>
-                      <i><b style={{ width: `${amortPercent}%` }} /></i>
-                    </div>
-                    <div className={affected ? "assignment-box affected" : "assignment-box"}>
-                      {affected ? (
-                        <>
-                          <strong>Affecte a : {bien.service}</strong>
-                          <span>{bien.dateAffectation || "Date non renseignee"}</span>
-                        </>
-                      ) : (
-                        <>
-                          <strong>Non affecte</strong>
-                          <button type="button" onClick={() => openAffectationFlow(bien)}>Affecter &gt;</button>
-                        </>
-                      )}
-                    </div>
-                    {(() => {
-                      const docs = (bien as any).documentsUrls || (bien as any).documentUrls || [];
-                      if (docs.length === 0) return null;
-                      
-                      return (
-                        <div className="card-documents-panel" style={{ padding: '0 16px 12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--text-dim)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                            <FileText size={12} />
-                            <span>Pièces jointes ({docs.length})</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {docs.map((docUrl: string, idx: number) => {
-                              const isPdf = docUrl.toLowerCase().endsWith(".pdf");
-                              return (
-                                <button 
-                                  key={idx}
-                                  type="button" 
-                                  className="doc-pill"
-                                  title={isPdf ? "Ouvrir le PDF" : "Ouvrir le document"}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setViewerMedia({ 
-                                      url: normalizeUrl(docUrl), 
-                                      type: isPdf ? "pdf" : "image", 
-                                      filename: `Document ${idx + 1}` 
-                                    });
-                                  }}
-                                >
-                                  <FileText size={10} />
-                                  <span>Doc {idx + 1}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    <div className="card-actions icon-actions">
-                      <button type="button" title="Modifier" onClick={() => editBien(bien)}>Modifier</button>
-                      <button type="button" title="Historique" onClick={() => void openHistory(bien)}>Historique</button>
-                      <button type="button" title="Affecter" onClick={() => openAffectationFlow(bien)}>Affecter</button>
-                      <button type="button" title="Maintenance" onClick={() => openActionModule("/entretiens", bien, "Maintenance")}>Maintenance</button>
-                      <button type="button" title="Sinistre" onClick={() => openActionModule("/sinistres", bien, "Declaration sinistre")}>Sinistre</button>
-                      <button type="button" title="Reformer" onClick={() => openActionModule("/reforme", bien, "Procedure de reforme")}>Reformer</button>
-                      <button type="button" title="Supprimer" className="danger-text" onClick={() => askDelete(bien)}>Suppr.</button>
-                    </div>
                   </article>
                 );
               })}
             </div>
+
           )}
         </section>
       ) : (
@@ -1131,11 +1129,12 @@ export default function BiensPage() {
 
             <Stepper active={activeStep} maxStep={maxStep} onGo={setActiveStep} />
 
-            {activeStep === 0 ? (
+            <div className="form-body-premium" style={{ marginTop: 32 }}>
+            {activeStep === 0 && (
               <div className="step-panel fade-in-up">
                 <div style={{ textAlign: 'center', marginBottom: 40 }}>
-                  <h3 style={{ fontSize: '1.5rem', marginBottom: 10 }}>Sélectionnez la famille du bien</h3>
-                  <p style={{ opacity: 0.7 }}>Choisissez le type d'actif pour adapter automatiquement le formulaire de recensement.</p>
+                  <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: 8 }}>Classification du patrimoine</h3>
+                  <p className="form-subtitle">Choisissez une catégorie pour adapter le formulaire</p>
                 </div>
                 
                 <div className="family-selection-grid">
@@ -1150,27 +1149,30 @@ export default function BiensPage() {
                         setActiveStep(1);
                       }}
                     >
-                      <div className="family-icon" style={{ color: CATEGORY_META[category].color }}>
+                      <div className="family-icon-box" style={{ background: CATEGORY_META[category].color + '15', color: CATEGORY_META[category].color }}>
                         {CATEGORY_META[category].icon}
                       </div>
                       <div className="family-info">
                         <strong>{CATEGORY_META[category].label}</strong>
                         <p>{CATEGORY_META[category].description}</p>
                       </div>
-                      <div className="family-check">
-                        <ChevronRight size={24} />
+                      <div className="family-arrow">
+                        <ChevronRight size={20} />
                       </div>
                     </button>
                   ))}
                 </div>
               </div>
-            ) : null}
+            )}
 
-            {activeStep === 1 ? (
+            {activeStep === 1 && (
               <div className="step-panel fade-in-up">
                 {/* Section 1: Classification */}
-                <div className="glass-card stagger-1" style={{ marginBottom: 24 }}>
-                  <h3 className="premium-section-title"><Sparkles size={18} /> 1. Classification & Nomenclature</h3>
+                <div className="glass-card stagger-1" style={{ marginBottom: 32 }}>
+                  <h3 className="premium-section-title">
+                    <div className="icon-box-mini"><Monitor size={18} /></div>
+                    1. Classification & Nomenclature
+                  </h3>
                   <ErrorText message={errors.categoriePrincipale} />
 
                   <div className="full-span" style={{ marginTop: 24 }}>
@@ -1205,9 +1207,12 @@ export default function BiensPage() {
                 </div>
 
                 {/* Section 2: Identification de base */}
-                <div className="glass-card stagger-2" style={{ marginBottom: 24 }}>
-                  <h3 className="premium-section-title"><Search size={18} /> 2. Identification de l'Actif</h3>
-                  <div className="grid-2">
+                <div className="glass-card stagger-2" style={{ marginBottom: 32 }}>
+                  <h3 className="premium-section-title">
+                    <div className="icon-box-mini"><Search size={18} /></div>
+                    2. Identification de l'Actif
+                  </h3>
+                  <div className="form-grid-premium">
                     <Field label="Désignation de l'article" error={errors.designation}>
                       <input 
                         className="premium-input" 
@@ -1242,9 +1247,12 @@ export default function BiensPage() {
                 </div>
 
                 {/* Section 3: Acquisition & Valeur */}
-                <div className="glass-card stagger-3" style={{ marginBottom: 24 }}>
-                  <h3 className="premium-section-title"><CheckCircle2 size={18} /> 3. Acquisition & Données Comptables</h3>
-                  <div className="grid-2">
+                <div className="glass-card stagger-3" style={{ marginBottom: 32 }}>
+                  <h3 className="premium-section-title">
+                    <div className="icon-box-mini"><DollarSign size={18} /></div>
+                    3. Acquisition & Données Comptables
+                  </h3>
+                  <div className="form-grid-premium">
                     <Field label="Date d'acquisition" error={errors.dateAcquisition}>
                       <input type="date" className="premium-input" value={form.dateAcquisition} onChange={(event) => updateField("dateAcquisition", event.target.value)} />
                     </Field>
@@ -1276,9 +1284,12 @@ export default function BiensPage() {
                 </div>
 
                 {/* Section 4: Médias & Observations */}
-                <div className="glass-card stagger-4" style={{ marginBottom: 24 }}>
-                  <h3 className="premium-section-title"><X size={18} /> 4. Détails Supplémentaires & Médias</h3>
-                  <div className="grid-2">
+                <div className="glass-card stagger-4" style={{ marginBottom: 32 }}>
+                  <h3 className="premium-section-title">
+                    <div className="icon-box-mini"><Palette size={18} /></div>
+                    4. Détails Supplémentaires & Médias
+                  </h3>
+                  <div className="form-grid-premium">
                     {form.categoriePrincipale !== "IMMOBILIER" ? (
                       <Field label="Quantité" error={errors.quantite}>
                         <input type="number" className="premium-input" min={1} value={form.quantite} onChange={(event) => updateField("quantite", Number(event.target.value))} />
@@ -1305,31 +1316,32 @@ export default function BiensPage() {
 
                 <SpecificFields form={form} updateField={updateField} errors={errors} />
 
-                <div className="form-footer glass-card" style={{ background: 'var(--premium-accent)', color: 'white', border: 'none' }}>
+                <div className="form-footer-premium" style={{ marginTop: 40 }}>
                   <button
                     type="button"
-                    className="primary-premium"
-                    style={{ background: 'white', color: 'var(--premium-accent)', fontWeight: 800, padding: '12px 30px', borderRadius: 15, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, width: '100%', justifyContent: 'center' }}
+                    className="primary-premium large-btn"
+                    style={{ width: '100%', justifyContent: 'center', height: 60, fontSize: 16 }}
                     disabled={validatingImmatriculation}
                     onClick={() => void goIdentification()}
                   >
-                    {validatingImmatriculation ? "Validation en cours..." : "Continuer vers l'identification du bien"} <ChevronRight size={20} />
+                    {validatingImmatriculation ? <Loader2 className="animate-spin" /> : <ChevronRight size={20} />}
+                    {validatingImmatriculation ? "Validation..." : "Continuer vers l'identification du bien"}
                   </button>
                 </div>
               </div>
-            ) : null}
+            )}
 
-            {activeStep === 2 ? (
+            {activeStep === 2 && (
               <div className="step-panel fade-in-up">
-                <div className="glass-card" style={{ marginBottom: 24, borderLeft: `4px solid ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.color || '#7c3aed'}` }}>
+                <div className="glass-card" style={{ marginBottom: 32, borderLeft: `6px solid ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.color || '#7c3aed'}`, padding: '24px 32px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <h3 style={{ margin: 0 }}>{form.designation}</h3>
-                      <p style={{ margin: '4px 0', opacity: 0.7 }}>
-                        {form.categoriePrincipale} · {formatMoney(form.valeur)} · {form.service || "Sans service"}
+                      <h3 style={{ margin: 0, fontSize: '1.4rem' }}>{form.designation}</h3>
+                      <p style={{ margin: '8px 0', opacity: 0.7, fontWeight: 600 }}>
+                        {CATEGORY_META[form.categoriePrincipale as MainCategory]?.label} · {formatMoney(form.valeur)} · {form.service || "Sans service"}
                       </p>
                     </div>
-                    <div className="badge-pill-glow" style={{ fontSize: 10 }}>
+                    <div className="badge-pill-glow">
                       {renderCataloguePath(form.categoriePrincipale, form.codeFamille, form.familleCatalogue, form.codeSousCategorie, form.sousCategorie)}
                     </div>
                   </div>
@@ -1355,17 +1367,21 @@ export default function BiensPage() {
 
                 <div className="identification-grid stagger-2">
                   <div className="iup-panel glass-card">
-                    <h3 className="premium-section-title"><CheckCircle2 size={18} /> Identification Individuelle</h3>
-                    <p style={{ fontSize: 13, marginBottom: 20 }}>Saisissez les informations spécifiques pour cette unité (N° de série, IUP, etc.).</p>
+                    <h3 className="premium-section-title">
+                      <div className="icon-box-mini"><CheckCircle2 size={18} /></div>
+                      Identification Individuelle
+                    </h3>
+                    <p style={{ fontSize: 13, marginBottom: 24, color: 'var(--text-dim)' }}>Saisissez les informations spécifiques pour cette unité (N° de série, IUP, etc.).</p>
                     
                     <button 
                       type="button" 
                       className="primary-premium" 
-                      style={{ width: '100%', marginBottom: 16, background: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color || 'var(--premium-accent)', color: 'white', border: 'none', padding: '12px', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }} 
+                      style={{ width: '100%', marginBottom: 20, height: 50 }} 
                       disabled={generatingIup} 
                       onClick={() => void handleGenerateIupForUnit(currentUnitIndex)}
                     >
-                      {generatingIup ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />} {generatingIup ? "Génération..." : "Générer l'IUP Automatiquement"}
+                      {generatingIup ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />} 
+                      {generatingIup ? "Génération..." : "Générer l'IUP Automatiquement"}
                     </button>
 
                     <Field label="Identifiant Unique (IUP)" error={errors.iup}>
@@ -1378,7 +1394,7 @@ export default function BiensPage() {
                       />
                     </Field>
 
-                    <div className="grid-2" style={{ marginTop: 20 }}>
+                    <div className="form-grid-premium" style={{ marginTop: 24 }}>
                       {form.categoriePrincipale === "MATERIEL_ROULANT" ? (
                         <>
                           <Field label="Immatriculation">
@@ -1402,26 +1418,29 @@ export default function BiensPage() {
                     </div>
                   </div>
 
-                  <div className="qr-panel glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                    <h3 className="premium-section-title"><Sparkles size={18} /> Étiquette de l'unité</h3>
+                    <div className="qr-panel glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                    <h3 className="premium-section-title">
+                      <div className="icon-box-mini"><Sparkles size={18} /></div>
+                      Étiquette
+                    </h3>
                     
-                    <div className="print-label glass-card" style={{ background: 'white', color: 'black', padding: 20, width: '100%', maxWidth: 250, margin: '20px 0', border: '2px solid #eee' }}>
-                      <strong className="monospace" style={{ fontSize: 16, display: 'block', marginBottom: 10 }}>{individualUnits[currentUnitIndex]?.iup || "IUP-PENDING"}</strong>
+                    <div className="print-label">
+                      <strong className="monospace" style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>{individualUnits[currentUnitIndex]?.iup || "IUP-PENDING"}</strong>
                       {qrCode ? (
-                        <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" style={{ width: 120, height: 120 }} />
+                        <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" style={{ width: 140, height: 140 }} />
                       ) : (
-                        <div className="qr-placeholder" style={{ width: 120, height: 120, background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', borderRadius: 8, border: '1px dashed #ccc' }}>
+                        <div className="qr-placeholder" style={{ width: 140, height: 140, background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', borderRadius: 8, border: '1px dashed #ccc' }}>
                           <LayoutGrid size={30} style={{ opacity: 0.2 }} />
                         </div>
                       )}
-                      <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700 }}>{form.designation}</div>
-                      <div style={{ fontSize: 10, opacity: 0.7 }}>{form.service || "Service non défini"}</div>
+                      <div style={{ marginTop: 12, fontSize: 13, fontWeight: 800 }}>{form.designation}</div>
+                      <div style={{ fontSize: 11, opacity: 0.7 }}>{form.service || "Service non défini"}</div>
                     </div>
 
                     <button
                       type="button"
-                      className="btn-export glass-card"
-                      style={{ width: '100%' }}
+                      className="pill-filter"
+                      style={{ width: '100%', marginTop: 16, height: 44 }}
                       disabled={!individualUnits[currentUnitIndex]?.iup || generatingQr}
                       onClick={() => void handleGenerateQrForUnit(currentUnitIndex)}
                     >
@@ -1431,13 +1450,13 @@ export default function BiensPage() {
                   </div>
                 </div>
 
-                <div className="form-footer glass-card" style={{ display: 'flex', gap: 16, marginTop: 24 }}>
-                  <button type="button" className="btn-export glass-card" style={{ flex: 1 }} onClick={() => setActiveStep(1)}>
+                <div className="form-footer-premium" style={{ marginTop: 40 }}>
+                  <button type="button" className="btn-export glass-card" style={{ height: 54, padding: '0 24px' }} onClick={() => setActiveStep(1)}>
                     <ArrowLeft size={18} style={{ marginRight: 8 }} /> Recensement
                   </button>
                   
                   {form.quantite > 1 && currentUnitIndex > 0 && (
-                    <button type="button" className="btn-export glass-card" onClick={() => setCurrentUnitIndex(prev => prev - 1)}>
+                    <button type="button" className="btn-export glass-card" style={{ height: 54, padding: '0 24px' }} onClick={() => setCurrentUnitIndex(prev => prev - 1)}>
                       Précédent
                     </button>
                   )}
@@ -1446,7 +1465,7 @@ export default function BiensPage() {
                     <button 
                       type="button" 
                       className="primary-premium" 
-                      style={{ flex: 2, background: 'var(--text-main)', color: 'white' }}
+                      style={{ flex: 1, height: 54 }}
                       onClick={() => {
                         if (!individualUnits[currentUnitIndex].iup) {
                           showToast({ type: 'warning', title: 'IUP Manquant', message: 'Veuillez générer ou saisir un IUP pour cette unité.' });
@@ -1461,95 +1480,112 @@ export default function BiensPage() {
                     <button 
                       type="button" 
                       className="primary-premium" 
-                      style={{ flex: 2, background: 'var(--premium-accent)', color: 'white', border: 'none', padding: '12px', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }} 
+                      style={{ flex: 1, height: 54 }} 
                       disabled={saving} 
                       onClick={() => void saveAllUnits()}
                     >
                       {saving ? <Loader2 className="animate-spin" /> : <Check size={18} style={{ marginRight: 8 }} />} 
-                      {saving ? "Enregistrement..." : `Finaliser l'enregistrement (${form.quantite} unité${form.quantite > 1 ? 's' : ''})`}
+                      {saving ? "Enregistrement..." : `Finaliser (${form.quantite} unité${form.quantite > 1 ? 's' : ''})`}
                     </button>
                   )}
                 </div>
               </div>
-            ) : null}
+            )}
 
-            {activeStep === 3 ? (
+            </div>
+
+            {activeStep === 3 && (
               <div className="step-panel fade-in-up">
-                <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 0 30px rgba(16,185,129,0.4)' }}>
-                    <CheckCircle2 size={40} color="white" />
+                <div className="glass-card success-banner-premium" style={{ textAlign: 'center', padding: '60px 40px', background: 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(255,255,255,0.02) 100%)' }}>
+                  <div className="success-icon-wrapper">
+                    <div className="success-pulse" />
+                    <CheckCircle2 size={48} className="success-icon-check" />
                   </div>
-                  <h2 style={{ marginBottom: 10 }}>Actif Enregistré avec Succès !</h2>
-                  <p style={{ opacity: 0.7, maxWidth: 500, margin: '0 auto 30px' }}>
-                    Le bien <strong>{createdBien?.designation}</strong> ({createdBien?.iup}) est désormais inscrit au registre patrimonial.
+                  
+                  <h2 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: 12 }}>Actif enregistré avec succès !</h2>
+                  <p style={{ fontSize: '1.1rem', opacity: 0.8, maxWidth: 600, margin: '0 auto 40px' }}>
+                    Le bien <strong>{createdBien?.designation}</strong> est désormais inscrit dans le registre avec l'IUP : <code className="monospace-glow">{createdBien?.iup}</code>
                   </p>
 
-                  <div className="glass-card" style={{ background: 'rgba(255,255,255,0.05)', border: '1px dashed var(--glass-border)', maxWidth: 400, margin: '0 auto 40px' }}>
-                    <h3 style={{ fontSize: 16, marginBottom: 15 }}>Souhaitez-vous l'affecter immédiatement ?</h3>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <button type="button" className="primary-premium" style={{ flex: 1, background: 'var(--premium-accent)', color: 'white', border: 'none', padding: '12px', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }} disabled={returningToGallery} onClick={() => openAffectationFlow(createdBien)}>
-                        Affecter l'Actif
-                      </button>
-                      <button type="button" className="btn-export glass-card" style={{ flex: 1 }} disabled={returningToGallery} onClick={finalizeWithoutAffectation}>
-                        Plus tard
-                      </button>
+                  <div className="success-actions-grid" style={{ maxWidth: 500, margin: '0 auto' }}>
+                    <div className="glass-card stagger-1" style={{ padding: 30, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
+                      <h3 style={{ fontSize: 18, marginBottom: 20 }}>Souhaitez-vous l'affecter maintenant ?</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <button 
+                          type="button" 
+                          className="primary-premium large-btn" 
+                          style={{ width: '100%', height: 56, justifyContent: 'center' }} 
+                          disabled={returningToGallery} 
+                          onClick={() => openAffectationFlow(createdBien)}
+                        >
+                          <UserCheck size={20} /> Oui, affecter l'actif
+                        </button>
+                        
+                        <button 
+                          type="button" 
+                          className="btn-export glass-card" 
+                          style={{ width: '100%', height: 50, justifyContent: 'center' }} 
+                          disabled={returningToGallery} 
+                          onClick={finalizeWithoutAffectation}
+                        >
+                          Plus tard, retour à la galerie
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   {returningToGallery && (
-                    <div className="fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--primary)', fontWeight: 700 }}>
-                      <Loader2 className="animate-spin" /> Retour vers la galerie...
+                    <div className="fade-in-up" style={{ marginTop: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--primary)', fontWeight: 800 }}>
+                      <Loader2 className="animate-spin" /> Finalisation du dossier...
                     </div>
                   )}
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
         </section>
       )}
 
-      {showAffectationPrompt ? (
+      {showAffectationPrompt && (
         <div className="modal-overlay-premium">
-          <div className="modal-card compact-modal">
-            <h3>Voulez-vous affecter ce bien maintenant ?</h3>
-            <p>{createdBien?.designation || "Le bien enregistre"} est disponible pour une affectation rapide.</p>
-            <div className="modal-actions">
-              <button type="button" className="primary" onClick={() => openAffectationFlow(createdBien)}>
-                Oui, affecter maintenant
-              </button>
-              <button type="button" className="btn-export" onClick={finalizeWithoutAffectation}>Non, plus tard</button>
+          <div className="compact-modal-premium glass-card">
+            <div className="icon-circle-glow">
+              <UserCheck size={36} />
             </div>
-          </div>
-        </div>
-      ) : null}
-
-      {confirmation ? (
-        <div className="modal-overlay-premium">
-          <div className="modal-card compact-modal">
-            <h3>{confirmation.title}</h3>
-            <p>{confirmation.message}</p>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="primary btn-danger"
-                onClick={async (e) => {
-                  const btn = e.currentTarget as HTMLButtonElement;
-                  btn.disabled = true;
-                  try {
-                    await confirmation.onConfirm();
-                    setConfirmation(null);
-                  } finally {
-                    btn.disabled = false;
-                  }
-                }}
+            
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, marginBottom: 12, color: 'var(--text-main)' }}>
+              Affectation immédiate ?
+            </h2>
+            
+            <p style={{ color: 'var(--text-dim)', fontSize: '1.05rem', lineHeight: 1.6, marginBottom: 36 }}>
+              L'enregistrement de l'actif <strong>{createdBien?.designation}</strong> est terminé. <br/>
+              Souhaitez-vous l'affecter à un agent ou un service maintenant ?
+            </p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
+              <button 
+                type="button" 
+                className="primary-premium large-btn" 
+                style={{ width: '100%', height: 60, justifyContent: 'center', fontSize: '1rem' }} 
+                onClick={() => openAffectationFlow(createdBien)}
               >
-                Confirmer
+                <UserCheck size={20} /> Oui, affecter maintenant
               </button>
-              <button type="button" className="btn-export" onClick={() => setConfirmation(null)}>Annuler</button>
+              
+              <button 
+                type="button" 
+                className="btn-export glass-card" 
+                style={{ width: '100%', height: 54, justifyContent: 'center', border: '1px solid var(--glass-border)', fontSize: '0.95rem' }} 
+                onClick={finalizeWithoutAffectation}
+              >
+                Non, terminer plus tard
+              </button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
+
+
 
       {historyPanel ? (
         <>
@@ -1633,20 +1669,25 @@ function SpecificFields({
 }) {
   if (form.categoriePrincipale === "IMMOBILIER") {
     return (
-      <div className="specific-panel asset-immobilier">
-        <h4>Champs spécifiques immobilier</h4>
-        <div className="grid-2">
-          <Field label="Titre foncier" error={errors.titreFoncier}><input value={form.titreFoncier} onChange={(event) => updateField("titreFoncier", event.target.value)} /></Field>
-          <Field label="Superficie m2" error={errors.superficie}><input value={form.superficie} onChange={(event) => updateField("superficie", event.target.value)} /></Field>
+      <div className="glass-card stagger-5" style={{ marginBottom: 32 }}>
+        <h3 className="premium-section-title">
+          <div className="icon-box-mini"><Building2 size={18} /></div>
+          Champs spécifiques Immobilier
+        </h3>
+        <div className="form-grid-premium">
+          <Field label="Titre foncier" error={errors.titreFoncier}><input className="premium-input" value={form.titreFoncier} onChange={(event) => updateField("titreFoncier", event.target.value)} /></Field>
+          <Field label="Superficie m2" error={errors.superficie}><input className="premium-input" value={form.superficie} onChange={(event) => updateField("superficie", event.target.value)} /></Field>
           <Field label="Statut juridique">
-            <select value={form.statutJuridique} onChange={(event) => updateField("statutJuridique", event.target.value)}>
+            <select className="premium-input" value={form.statutJuridique} onChange={(event) => updateField("statutJuridique", event.target.value)}>
               {["PROPRIETE_ETAT", "PROPRIETE_PRIVEE", "DOMAINE_PUBLIC", "BAIL"].map((item) => <option key={item}>{item}</option>)}
             </select>
           </Field>
-          <label className="checkbox-modern">
-            <input type="checkbox" checked={form.permisOccuper} onChange={(event) => updateField("permisOccuper", event.target.checked)} />
-            <span>Permis d'occuper disponible</span>
-          </label>
+          <div className="form-group-modern" style={{ alignSelf: 'center' }}>
+            <label className="checkbox-modern-premium">
+              <input type="checkbox" checked={form.permisOccuper} onChange={(event) => updateField("permisOccuper", event.target.checked)} />
+              <span>Permis d'occuper disponible</span>
+            </label>
+          </div>
         </div>
       </div>
     );
@@ -1654,33 +1695,39 @@ function SpecificFields({
 
   if (form.categoriePrincipale === "MATERIEL_ROULANT") {
     return (
-      <div className="specific-panel asset-roulant">
-        <h4>Champs spécifiques matériel roulant</h4>
-        <div className="grid-2">
-          <Field label="Immatriculation" error={errors.immatriculation}><input value={form.immatriculation} onChange={(event) => updateField("immatriculation", event.target.value.toUpperCase())} /></Field>
-          <Field label="Numéro châssis" error={errors.numChassis}><input value={form.numChassis} onChange={(event) => updateField("numChassis", event.target.value)} /></Field>
-          <Field label="Marque" error={errors.marque}><input value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
-          <Field label="Modèle" error={errors.modele}><input value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
-          <Field label="Puissance fiscale"><input value={form.puissanceFiscale} onChange={(event) => updateField("puissanceFiscale", event.target.value)} /></Field>
-          <Field label="Type boîte"><input value={form.typeBoite} onChange={(event) => updateField("typeBoite", event.target.value)} /></Field>
-          <Field label="Type carburant"><input value={form.typeCarburant} onChange={(event) => updateField("typeCarburant", event.target.value)} /></Field>
-          <Field label="Charge utile"><input value={form.chargeUtile} onChange={(event) => updateField("chargeUtile", event.target.value)} /></Field>
-          <Field label="Date prochaine visite technique" error={errors.dateProchaineVisiteTechnique}><input type="date" value={form.dateProchaineVisiteTechnique} onChange={(event) => updateField("dateProchaineVisiteTechnique", event.target.value)} /></Field>
+      <div className="glass-card stagger-5" style={{ marginBottom: 32 }}>
+        <h3 className="premium-section-title">
+          <div className="icon-box-mini"><Car size={18} /></div>
+          Champs spécifiques Matériel Roulant
+        </h3>
+        <div className="form-grid-premium">
+          <Field label="Immatriculation" error={errors.immatriculation}><input className="premium-input" value={form.immatriculation} onChange={(event) => updateField("immatriculation", event.target.value.toUpperCase())} /></Field>
+          <Field label="Numéro châssis" error={errors.numChassis}><input className="premium-input" value={form.numChassis} onChange={(event) => updateField("numChassis", event.target.value)} /></Field>
+          <Field label="Marque" error={errors.marque}><input className="premium-input" value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
+          <Field label="Modèle" error={errors.modele}><input className="premium-input" value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
+          <Field label="Puissance fiscale"><input className="premium-input" value={form.puissanceFiscale} onChange={(event) => updateField("puissanceFiscale", event.target.value)} /></Field>
+          <Field label="Type boîte"><input className="premium-input" value={form.typeBoite} onChange={(event) => updateField("typeBoite", event.target.value)} /></Field>
+          <Field label="Type carburant"><input className="premium-input" value={form.typeCarburant} onChange={(event) => updateField("typeCarburant", event.target.value)} /></Field>
+          <Field label="Charge utile"><input className="premium-input" value={form.chargeUtile} onChange={(event) => updateField("chargeUtile", event.target.value)} /></Field>
+          <Field label="Date prochaine visite technique" error={errors.dateProchaineVisiteTechnique}><input className="premium-input" type="date" value={form.dateProchaineVisiteTechnique} onChange={(event) => updateField("dateProchaineVisiteTechnique", event.target.value)} /></Field>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="specific-panel asset-mobilier">
-      <h4>Champs spécifiques mobilier</h4>
-      <div className="grid-2">
-        <Field label="Numéro série"><input value={form.numSerie} onChange={(event) => updateField("numSerie", event.target.value)} /></Field>
-        <Field label="Fabricant"><input value={form.fabricant} onChange={(event) => updateField("fabricant", event.target.value)} /></Field>
-        <Field label="Marque"><input value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
-        <Field label="Modèle"><input value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
-        <Field label="Date fin garantie" error={errors.finGarantie}><input type="date" value={form.finGarantie} onChange={(event) => updateField("finGarantie", event.target.value)} /></Field>
-        <Field label="Spécifications techniques" span><textarea rows={3} value={form.specificationsTechniques} onChange={(event) => updateField("specificationsTechniques", event.target.value)} /></Field>
+    <div className="glass-card stagger-5" style={{ marginBottom: 32 }}>
+      <h3 className="premium-section-title">
+        <div className="icon-box-mini"><Armchair size={18} /></div>
+        Champs spécifiques Mobilier
+      </h3>
+      <div className="form-grid-premium">
+        <Field label="Numéro série"><input className="premium-input" value={form.numSerie} onChange={(event) => updateField("numSerie", event.target.value)} /></Field>
+        <Field label="Fabricant"><input className="premium-input" value={form.fabricant} onChange={(event) => updateField("fabricant", event.target.value)} /></Field>
+        <Field label="Marque"><input className="premium-input" value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
+        <Field label="Modèle"><input className="premium-input" value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
+        <Field label="Date fin garantie" error={errors.finGarantie}><input className="premium-input" type="date" value={form.finGarantie} onChange={(event) => updateField("finGarantie", event.target.value)} /></Field>
+        <Field label="Spécifications techniques" span><textarea className="premium-input" rows={3} value={form.specificationsTechniques} onChange={(event) => updateField("specificationsTechniques", event.target.value)} /></Field>
       </div>
     </div>
   );

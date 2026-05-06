@@ -5,6 +5,7 @@ import './styles/tokens.css'
 import './styles.css'
 import './styles/premium.css'
 import './styles/modals.css'
+import './styles/premium_gallery.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
