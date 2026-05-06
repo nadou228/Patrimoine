@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bien,
@@ -25,10 +25,11 @@ import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf
 import NomenclatureSelector from "../components/NomenclatureSelector";
 import MediaViewer, { MediaType } from "../components/MediaViewer";
 import AnimatedNumber from "../components/AnimatedNumber";
+import { QRCodeCanvas } from "qrcode.react";
 import { 
   Sparkles, Search, CheckCircle2, ChevronRight, X, Loader2, 
   Building2, Armchair, Monitor, Car, Wrench, FileText, Palette, Dog, LayoutGrid, Check, ArrowRight, ArrowLeft, PlusCircle,
-  DollarSign, UserCheck
+  DollarSign, UserCheck, Package
 } from "lucide-react";
 
 type MainCategory = 
@@ -377,7 +378,15 @@ export default function BiensPage() {
       try {
         const updatedDocs = (targetBien.documentsUrls || []).filter(u => u !== urlToDelete);
         const type = targetBien.type || (targetBien.categoriePrincipale === "IMMOBILIER" ? "IMMOBILIER" : targetBien.categoriePrincipale === "MATERIEL_ROULANT" ? "MATERIEL_ROULANT" : "MOBILIER");
-        await updateBien(targetBien.id, { documentsUrls: updatedDocs, type });
+        
+        // Envoi de l'objet complet pour ne pas écraser les autres champs avec null lors du PUT
+        const payload: Partial<BienPayload> = {
+          ...targetBien,
+          documentsUrls: updatedDocs,
+          type
+        };
+        
+        await updateBien(targetBien.id, payload);
         showToast({ title: "Document détaché avec succès", type: "success" });
         setViewerMedia(null);
         void refresh();
@@ -461,7 +470,15 @@ export default function BiensPage() {
   const filteredBiens = useMemo(() => {
     const term = filters.query.trim().toLowerCase();
     const list = biens.filter((bien) => {
-      const categoryOk = filters.category === "TOUS" || bien.categorie === filters.category || bien.categoriePrincipale === filters.category;
+      // Inférence robuste de la catégorie car le backend ne renvoie pas explicitement "type" ou "categorie"
+      let inferedCategory = bien.categoriePrincipale || bien.categorie || bien.type;
+      if (!inferedCategory) {
+        if ('immatriculation' in bien || 'numChassis' in bien || bien.immatriculation) inferedCategory = 'MATERIEL_ROULANT';
+        else if ('titreFoncier' in bien || 'superficie' in bien || bien.titreFoncier) inferedCategory = 'IMMOBILIER';
+        else inferedCategory = 'MOBILIER';
+      }
+      
+      const categoryOk = filters.category === "TOUS" || inferedCategory === filters.category;
       const etatOk = filters.etat === "TOUS" || bien.etat === filters.etat;
       const isAffected = Boolean(bien.service) || bien.statutOperationnel === "AFFECTE";
       const affectationOk =
@@ -555,7 +572,7 @@ export default function BiensPage() {
     if (!form.valeur || form.valeur <= 0) nextErrors.valeur = "La valeur d'acquisition est obligatoire.";
     if (!form.modeAcquisition.trim()) nextErrors.modeAcquisition = "Le mode d'acquisition est obligatoire.";
     if (!form.localisation.trim()) nextErrors.localisation = "La localisation precise est obligatoire.";
-    if (!form.service.trim()) nextErrors.service = "Le service detenteur est obligatoire.";
+
     if (form.categoriePrincipale !== "IMMOBILIER" && (!form.quantite || form.quantite < 1)) {
       nextErrors.quantite = "La quantite doit etre au minimum egale a 1.";
     }
@@ -792,6 +809,29 @@ export default function BiensPage() {
       coordonneesGps: bien.coordonneesGps || bien.coordonneeGps || "",
       documentsUrls: bien.documentsUrls || [],
       dateAcquisition: bien.dateAcquisition || today,
+      // Garantir que toutes les valeurs de type string ne sont jamais null/undefined
+      designation: bien.designation ?? "",
+      localisation: bien.localisation ?? "",
+      service: bien.service ?? "",
+      observation: bien.observation ?? "",
+      specificationsTechniques: (bien as any).specificationsTechniques ?? "",
+      titreFoncier: (bien as any).titreFoncier ?? "",
+      superficie: (bien as any).superficie ?? "",
+      numSerie: (bien as any).numSerie ?? "",
+      fabricant: (bien as any).fabricant ?? "",
+      marque: (bien as any).marque ?? "",
+      modele: (bien as any).modele ?? "",
+      immatriculation: (bien as any).immatriculation ?? "",
+      numChassis: (bien as any).numChassis ?? "",
+      puissanceFiscale: (bien as any).puissanceFiscale ?? "",
+      chargeUtile: (bien as any).chargeUtile ?? "",
+      typeBoite: (bien as any).typeBoite ?? "MANUELLE",
+      typeCarburant: (bien as any).typeCarburant ?? "ESSENCE",
+      finGarantie: (bien as any).finGarantie ?? "",
+      dateProchaineVisiteTechnique: (bien as any).dateProchaineVisiteTechnique ?? "",
+      numInventaire: (bien as any).numInventaire ?? "",
+      photoUrl: bien.photoUrl ?? "",
+      nomenclatureCode: (bien as any).nomenclatureCode ?? "",
     });
     setView("form");
     setActiveStep(1);
@@ -915,19 +955,42 @@ export default function BiensPage() {
         <section className="patris-gallery fade-in">
           <div className="stats-dashboard">
             <div className="stat-card-premium">
-              <span className="stat-label">Total biens</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="stat-label">Total actifs</span>
+                <div className="icon-box-mini" style={{ background: 'rgba(5, 150, 222, 0.1)', color: 'var(--primary)' }}>
+                  <Package size={16} />
+                </div>
+              </div>
               <span className="stat-value"><AnimatedNumber value={totals.count} /></span>
             </div>
             <div className="stat-card-premium">
-              <span className="stat-label">Valeur active</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="stat-label">Valeur du parc</span>
+                <div className="icon-box-mini" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
+                  <DollarSign size={16} />
+                </div>
+              </div>
               <span className="stat-value"><AnimatedNumber value={totals.value} isMoney /></span>
             </div>
             <div className="stat-card-premium">
-              <span className="stat-label">Affectés</span>
-              <span className="stat-value"><AnimatedNumber value={totals.affected} /></span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="stat-label">Taux d'affectation</span>
+                <div className="icon-box-mini" style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
+                  <UserCheck size={16} />
+                </div>
+              </div>
+              <span className="stat-value">
+                <AnimatedNumber value={Math.round((totals.affected / (totals.count || 1)) * 100)} />
+                <small style={{ fontSize: 14, marginLeft: 4, opacity: 0.6 }}>%</small>
+              </span>
             </div>
             <div className="stat-card-premium">
-              <span className="stat-label">Libres</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="stat-label">Actifs Libres</span>
+                <div className="icon-box-mini" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+                  <LayoutGrid size={16} />
+                </div>
+              </div>
               <span className="stat-value"><AnimatedNumber value={totals.free} /></span>
             </div>
           </div>
@@ -1229,15 +1292,6 @@ export default function BiensPage() {
                         onChange={(event) => updateField("localisation", event.target.value)} 
                       />
                     </Field>
-                    <Field label="Service détenteur" error={errors.service}>
-                      <select className="premium-input" value={form.service} onChange={(event) => updateField("service", event.target.value)}>
-                        <option value="">-- Choisir un service --</option>
-                        {services.map((service) => {
-                          const name = serviceName(service);
-                          return <option key={service.id || name} value={name}>{name}</option>;
-                        })}
-                      </select>
-                    </Field>
                     <Field label="État initial">
                       <select className="premium-input" value={form.etat} onChange={(event) => updateField("etat", event.target.value)}>
                         {["NEUF", "BON", "MOYEN", "DEGRADE", "HORS_SERVICE"].map((item) => <option key={item}>{item}</option>)}
@@ -1309,7 +1363,7 @@ export default function BiensPage() {
                       ) : null}
                     </Field>
                     <Field label="Observations" span>
-                      <textarea rows={3} className="premium-input" placeholder="Remarques éventuelles sur l'état ou l'origine du bien..." value={form.observation} onChange={(event) => updateField("observation", event.target.value)} />
+                      <textarea rows={3} className="premium-input" placeholder="Remarques éventuelles sur l'état ou l'origine du bien..." value={form.observation || ""} onChange={(event) => updateField("observation", event.target.value)} />
                     </Field>
                   </div>
                 </div>
@@ -1423,30 +1477,104 @@ export default function BiensPage() {
                       <div className="icon-box-mini"><Sparkles size={18} /></div>
                       Étiquette
                     </h3>
-                    
-                    <div className="print-label">
-                      <strong className="monospace" style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>{individualUnits[currentUnitIndex]?.iup || "IUP-PENDING"}</strong>
-                      {qrCode ? (
-                        <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" style={{ width: 140, height: 140 }} />
-                      ) : (
-                        <div className="qr-placeholder" style={{ width: 140, height: 140, background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', borderRadius: 8, border: '1px dashed #ccc' }}>
-                          <LayoutGrid size={30} style={{ opacity: 0.2 }} />
-                        </div>
-                      )}
-                      <div style={{ marginTop: 12, fontSize: 13, fontWeight: 800 }}>{form.designation}</div>
-                      <div style={{ fontSize: 11, opacity: 0.7 }}>{form.service || "Service non défini"}</div>
-                    </div>
 
-                    <button
-                      type="button"
-                      className="pill-filter"
-                      style={{ width: '100%', marginTop: 16, height: 44 }}
-                      disabled={!individualUnits[currentUnitIndex]?.iup || generatingQr}
-                      onClick={() => void handleGenerateQrForUnit(currentUnitIndex)}
-                    >
-                      {generatingQr ? <Loader2 className="animate-spin" size={16} /> : <PlusCircle size={16} style={{ marginRight: 8 }} />} 
-                      {generatingQr ? "Génération..." : "Générer QR Code"}
-                    </button>
+                    {/* QR avec vraies données du bien */}
+                    {(() => {
+                      const unit = individualUnits[currentUnitIndex];
+                      const iup = unit?.iup || "IUP-EN-ATTENTE";
+                      const qrPayload = JSON.stringify({
+                        iup,
+                        designation: form.designation || "",
+                        categorie: form.categoriePrincipale || "",
+                        dateAcquisition: form.dateAcquisition || "",
+                        valeur: form.valeur || 0,
+                        localisation: unit?.localisation || form.localisation || "",
+                        etat: form.etat || "",
+                        systeme: "PATRIS",
+                      });
+
+                      const canvasRef = React.createRef<HTMLCanvasElement>();
+
+                      const downloadQr = (format: "png" | "jpeg") => {
+                        const canvas = document.querySelector(`#qr-canvas-${currentUnitIndex} canvas`) as HTMLCanvasElement;
+                        if (!canvas) return;
+                        const link = document.createElement("a");
+                        link.download = `${iup}.${format}`;
+                        link.href = canvas.toDataURL(`image/${format}`, 1.0);
+                        link.click();
+                      };
+
+                      return (
+                        <>
+                          <div className="print-label">
+                            <strong className="monospace" style={{ fontSize: 14, display: 'block', marginBottom: 10 }}>{iup}</strong>
+                            <div id={`qr-canvas-${currentUnitIndex}`} style={{ display: 'flex', justifyContent: 'center', margin: '0 auto' }}>
+                              <QRCodeCanvas
+                                value={qrPayload}
+                                size={140}
+                                level="M"
+                                includeMargin
+                                style={{ borderRadius: 8 }}
+                              />
+                            </div>
+                            <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800 }}>{form.designation}</div>
+                            <div style={{ fontSize: 11, opacity: 0.5 }}>{form.localisation || "Localisation non définie"}</div>
+                          </div>
+
+                          {/* Boutons de téléchargement stylés */}
+                          <div style={{ display: 'flex', gap: 10, marginTop: 16, width: '100%' }}>
+                            <button
+                              type="button"
+                              onClick={() => downloadQr("png")}
+                              style={{
+                                flex: 1,
+                                height: 42,
+                                borderRadius: 12,
+                                border: '1.5px solid var(--primary)',
+                                background: 'rgba(5, 150, 222, 0.06)',
+                                color: 'var(--primary)',
+                                fontWeight: 800,
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(5, 150, 222, 0.12)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(5, 150, 222, 0.06)')}
+                            >
+                              <LayoutGrid size={14} /> PNG
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadQr("jpeg")}
+                              style={{
+                                flex: 1,
+                                height: 42,
+                                borderRadius: 12,
+                                border: '1.5px solid var(--success)',
+                                background: 'rgba(16, 185, 129, 0.06)',
+                                color: 'var(--success)',
+                                fontWeight: 800,
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.12)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.06)')}
+                            >
+                              <LayoutGrid size={14} /> JPG
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1587,53 +1715,144 @@ export default function BiensPage() {
 
 
 
-      {historyPanel ? (
-        <>
-          <div className="side-panel-overlay" onClick={() => setHistoryPanel(null)} />
-          <aside className="side-panel">
-            <div className="form-header-premium" style={{ padding: "24px 24px 0" }}>
-              <div>
-                <span className="badge-pill-glow">Historique du bien</span>
-                <h2 style={{ marginTop: 8 }}>{historyPanel.bien.designation}</h2>
-                <p className="form-subtitle">{historyPanel.bien.iup || "Sans IUP"} · {historyPanel.bien.service || "Service non renseigne"}</p>
+      {/* Lock body scroll when modal is open */}
+      {historyPanel && (
+        <style>{`
+          body { overflow: hidden !important; }
+        `}</style>
+      )}
+
+      {historyPanel && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          zIndex: 10000, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          padding: 20
+        }}>
+          <div className="side-panel-overlay" style={{ position: 'absolute' }} onClick={() => setHistoryPanel(null)} />
+          <aside className="side-panel" style={{ position: 'relative' }}>
+            {/* Header Modal Style */}
+            <div style={{ padding: '32px 32px 20px', background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>{historyPanel.bien.designation}</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <code style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 800, background: 'rgba(5, 150, 222, 0.05)', padding: '2px 8px', borderRadius: 6 }}>{historyPanel.bien.iup || "SANS IUP"}</code>
+                    <span style={{ fontSize: 13, color: '#94a3b8' }}>•</span>
+                    <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>{historyPanel.bien.service || "Service non renseigné"}</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setHistoryPanel(null)}
+                  style={{ width: 40, height: 40, borderRadius: 14, border: 'none', background: '#f8fafc', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <button type="button" className="btn-export" onClick={() => setHistoryPanel(null)}>Fermer</button>
             </div>
 
-            <div style={{ padding: 24, display: "grid", gap: 16 }}>
-              <div className="recap-card">
-                <strong>{historyPanel.bien.categoriePrincipale || historyPanel.bien.categorie || "Bien"}</strong>
-                <span>Valeur : {formatMoney(historyPanel.bien.valeur)} · VNC : {formatMoney(historyPanel.bien.valeurNetteComptable ?? historyPanel.bien.valeur)}</span>
-              </div>
+            {/* Onglets compacts */}
+            <div style={{ display: 'flex', gap: 24, padding: '0 32px', background: '#ffffff', borderBottom: '1px solid #f8fafc' }}>
+              {['Détails', 'Historique'].map((tab) => {
+                const isActive = (tab === 'Historique' && historyPanel.view === 'history') || (tab === 'Détails' && (!historyPanel.view || historyPanel.view === 'details'));
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setHistoryPanel({ ...historyPanel, view: tab === 'Historique' ? 'history' : 'details' })}
+                    style={{
+                      padding: '14px 0',
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: isActive ? '3px solid var(--primary)' : '3px solid transparent',
+                      color: isActive ? 'var(--primary)' : '#94a3b8',
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {tab}
+                  </button>
+                );
+              })}
+            </div>
 
-              {historyPanel.loading ? (
-                <>
-                  <div className="skeleton" style={{ height: 92 }} />
-                  <div className="skeleton" style={{ height: 92 }} />
-                  <div className="skeleton" style={{ height: 92 }} />
-                </>
-              ) : historyPanel.entries.length > 0 ? (
-                historyPanel.entries.map((entry, index) => (
-                  <article key={`${entry.typeEvenement || "evt"}-${entry.date || index}`} className="asset-card" style={{ padding: 18 }}>
-                    <div className="card-badge-row">
-                      <span className="badge-premium">{entry.typeEvenement || "EVENEMENT"}</span>
-                      <span className="field-hint">{entry.date ? new Date(entry.date).toLocaleString("fr-FR") : "Date inconnue"}</span>
+            <div className="side-panel-content" style={{ flex: 1, overflowY: 'auto', padding: '32px' }}>
+              {(!historyPanel.view || historyPanel.view === 'details') ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  <div style={{ padding: 20, background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', border: '1px solid #e2e8f0', borderRadius: 24 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                      <div>
+                        <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 6, display: 'block' }}>Valeur d'origine</span>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{formatMoney(historyPanel.bien.valeur)}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 6, display: 'block' }}>VNC Actuelle</span>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--success)' }}>{formatMoney(historyPanel.bien.valeurNetteComptable ?? historyPanel.bien.valeur)}</div>
+                      </div>
                     </div>
-                    <h3 style={{ fontSize: 16, marginTop: 12 }}>{entry.description || "Action sans libelle"}</h3>
-                    <p style={{ color: "var(--text-dim)", marginTop: 8 }}>{entry.details || "Aucun detail supplementaire."}</p>
-                    <small className="field-hint">Acteur : {entry.utilisateur || "systeme"}</small>
-                  </article>
-                ))
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 32px' }}>
+                    {[
+                      { label: 'Catégorie Principale', value: historyPanel.bien.categoriePrincipale },
+                      { label: 'État Physique', value: historyPanel.bien.etatPhysique },
+                      { label: 'Statut Comptable', value: historyPanel.bien.statutComptable },
+                      { label: 'Affectation Actuelle', value: historyPanel.bien.localisation },
+                    ].map((item, i) => item.value && (
+                      <div key={i}>
+                        <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 4, display: 'block' }}>{item.label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ) : (
-                <div className="recap-card">
-                  <strong>Aucun historique disponible</strong>
-                  <span>Ce bien n'a pas encore de mouvement ou d'evenement historise.</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {historyPanel.loading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 70, borderRadius: 16 }} />)}
+                    </div>
+                  ) : historyPanel.entries.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+                      <p style={{ fontSize: 14 }}>Aucun événement trouvé.</p>
+                    </div>
+                  ) : (
+                    historyPanel.entries.map((entry, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: 16, padding: 16, borderRadius: 16, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)', marginTop: 4, flexShrink: 0, boxShadow: '0 0 10px var(--primary-glow)' }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 900, color: 'var(--primary)', textTransform: 'uppercase' }}>{entry.typeEvenement}</span>
+                            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{entry.date ? new Date(entry.date).toLocaleDateString('fr-FR') : "N/C"}</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: 14, color: '#334155', lineHeight: 1.5, fontWeight: 500 }}>{entry.description}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
+
+            <div style={{ padding: '24px 32px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 12 }}>
+              <button 
+                className="primary-premium" 
+                style={{ flex: 1, height: 52, borderRadius: 16, fontSize: 14, fontWeight: 800 }}
+                onClick={() => {
+                  setHistoryPanel(null);
+                  editBien(historyPanel.bien);
+                }}
+              >
+                Modifier les informations
+              </button>
+            </div>
           </aside>
-        </>
-      ) : null}
+        </div>
+      )}
 
       {viewerMedia && (
         <MediaViewer 
@@ -1722,12 +1941,12 @@ function SpecificFields({
         Champs spécifiques Mobilier
       </h3>
       <div className="form-grid-premium">
-        <Field label="Numéro série"><input className="premium-input" value={form.numSerie} onChange={(event) => updateField("numSerie", event.target.value)} /></Field>
-        <Field label="Fabricant"><input className="premium-input" value={form.fabricant} onChange={(event) => updateField("fabricant", event.target.value)} /></Field>
-        <Field label="Marque"><input className="premium-input" value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
-        <Field label="Modèle"><input className="premium-input" value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
-        <Field label="Date fin garantie" error={errors.finGarantie}><input className="premium-input" type="date" value={form.finGarantie} onChange={(event) => updateField("finGarantie", event.target.value)} /></Field>
-        <Field label="Spécifications techniques" span><textarea className="premium-input" rows={3} value={form.specificationsTechniques} onChange={(event) => updateField("specificationsTechniques", event.target.value)} /></Field>
+        <Field label="Numéro série"><input className="premium-input" value={form.numSerie || ""} onChange={(event) => updateField("numSerie", event.target.value)} /></Field>
+        <Field label="Fabricant"><input className="premium-input" value={form.fabricant || ""} onChange={(event) => updateField("fabricant", event.target.value)} /></Field>
+        <Field label="Marque"><input className="premium-input" value={form.marque || ""} onChange={(event) => updateField("marque", event.target.value)} /></Field>
+        <Field label="Modèle"><input className="premium-input" value={form.modele || ""} onChange={(event) => updateField("modele", event.target.value)} /></Field>
+        <Field label="Date fin garantie" error={errors.finGarantie}><input className="premium-input" type="date" value={form.finGarantie || ""} onChange={(event) => updateField("finGarantie", event.target.value)} /></Field>
+        <Field label="Spécifications techniques" span><textarea className="premium-input" rows={3} value={form.specificationsTechniques || ""} onChange={(event) => updateField("specificationsTechniques", event.target.value)} /></Field>
       </div>
     </div>
   );

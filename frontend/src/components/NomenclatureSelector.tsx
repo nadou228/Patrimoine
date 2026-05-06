@@ -269,9 +269,7 @@ export default function NomenclatureSelector({ partie, family, onSelect, disable
         <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }} />
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, opacity: 0.6, textTransform: "uppercase", marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}>
-              <Sparkles size={10} /> Nomenclature SYSCOHADA
-            </div>
+
             <div style={{ fontSize: 16, fontWeight: 800 }}>
               Classification {partie === "A" ? "Immobilisations" : partie === "B" ? "Stocks" : "Générale"}
             </div>

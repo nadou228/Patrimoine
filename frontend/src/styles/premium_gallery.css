@@ -210,44 +210,60 @@
 }
 
 /* Statistics Dashboard */
+/* Statistics Dashboard - Light & Clean */
 .stats-dashboard {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 32px;
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  padding: 4px;
 }
 
 .stat-card-premium {
-  background: var(--card-bg);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-border);
+  flex: 1;
+  min-width: 180px;
+  background: #ffffff; /* Explicit light background */
+  border: 1px solid #e2e8f0;
   border-radius: 20px;
-  padding: 20px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: all 0.3s ease;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .stat-card-premium {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .stat-card-premium:hover {
-  transform: translateY(-4px);
+  transform: translateY(-4px) scale(1.02);
   border-color: var(--primary);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
 }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--text-main);
+  font-size: 28px;
+  font-weight: 900;
+  color: #0f172a; /* Dark text for light mode */
   font-family: 'Space Grotesk', sans-serif;
+  line-height: 1.1;
+}
+
+[data-theme="dark"] .stat-value {
+  color: #f8fafc;
 }
 
 .stat-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
 }
 
 /* Toolbar */
@@ -326,6 +342,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 28px;
+  transition: all 0.3s ease;
 }
 
 .asset-card-premium {
@@ -597,7 +614,7 @@
   width: 44px;
   height: 44px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1.5px solid var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   display: flex;
   align-items: center;
