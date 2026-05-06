@@ -30,12 +30,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    @ExceptionHandler(com.patris.exception.BusinessException.class)
+    public ResponseEntity<Map<String, Object>> handleBusiness(com.patris.exception.BusinessException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Règle métier non respectée");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAll(Exception ex) {
+        // Log deep details for debugging
+        ex.printStackTrace(); 
+        
         Map<String, Object> body = new HashMap<>();
         body.put("error", "Erreur backend critique: " + ex.getClass().getSimpleName());
         body.put("message", ex.getMessage() != null ? ex.getMessage() : "Aucun détail");
-        ex.printStackTrace(); // Log in console
+
+        // Ajout de la stacktrace pour le debug
+        java.io.StringWriter sw = new java.io.StringWriter();
+        java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+        ex.printStackTrace(pw);
+        body.put("stackTrace", sw.toString());
+        
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }

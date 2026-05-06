@@ -65,7 +65,8 @@ public class StockService {
             stock.setQuantite(nouvelleQte);
             consommableRepository.save(article);
         } else if (mouv.getTypeMouvement() == com.patris.enums.type_mouvement.SORTIE) {
-            if (mouv.getBeneficiaire() == null) {
+            boolean hasManualBeneficiaire = mouv.getDestination() != null && mouv.getDestination().contains("Bénéficiaire manuel");
+            if (mouv.getBeneficiaire() == null && !hasManualBeneficiaire) {
                 throw new RuntimeException("Un bénéficiaire est obligatoire pour valider une sortie de stock");
             }
             if (stock.getQuantite() < mouv.getQuantite()) {
@@ -78,6 +79,14 @@ public class StockService {
                 for (int i = 0; i < mouv.getQuantite(); i++) {
                     Bien nouveauBien = new BienMobilier();
                     nouveauBien.setDesignation(article.getNomProduit());
+                    nouveauBien.setNomenclature(article.getNomenclature());
+                    nouveauBien.setCodeArticle(article.getCodeArticle());
+                    
+                    // On force des codes de secours si la nomenclature est absente pour éviter l'échec de l'IUP
+                    if (article.getNomenclature() == null) {
+                        nouveauBien.setCodeCategorie("MOB"); // Fallback par défaut pour Mobilier
+                    }
+                    
                     nouveauBien.setValeur(mouv.getPrixUnitaire() != null ? mouv.getPrixUnitaire() : article.getPrixMoyenPondere());
                     nouveauBien.setObservation("Créé automatiquement depuis mouvement de stock " + mouv.getId());
                     bienService.saveBien(nouveauBien);

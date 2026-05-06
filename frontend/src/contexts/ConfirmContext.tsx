@@ -62,10 +62,10 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
             </div>
             <p id="confirm-message">{state.message}</p>
             <div className="confirm-dialog-actions">
-              <button type="button" className="btn-export" onClick={() => close(false)}>
+              <button type="button" className="btn-cancel-light" onClick={() => close(false)}>
                 {state.cancelLabel}
               </button>
-              <button type="button" className="primary" onClick={() => close(true)}>
+              <button type="button" className={`primary-premium ${state.tone === 'danger' ? 'danger' : ''}`} onClick={() => close(true)}>
                 {state.confirmLabel}
               </button>
             </div>

@@ -57,6 +57,7 @@ const StocksPage: React.FC = () => {
     pieceJustificative: "",
     observations: "",
     beneficiaire: "",
+    beneficiaireLibre: "",
     destination: "",
   });
 
@@ -141,11 +142,20 @@ const StocksPage: React.FC = () => {
 
   const submitMouvement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mouvType === "SORTIE" && !mouvForm.beneficiaire) {
+    if (!mouvForm.consommableId || Number(mouvForm.consommableId) <= 0) {
       showToast({
         type: "warning",
-        title: "Beneficiaire obligatoire",
-        message: "Une sortie de stock doit etre rattachee a un beneficiaire identifie.",
+        title: "Article obligatoire",
+        message: "Veuillez sélectionner un article dans la liste.",
+      });
+      return;
+    }
+
+    if (mouvType === "SORTIE" && !mouvForm.beneficiaire && !mouvForm.beneficiaireLibre?.trim()) {
+      showToast({
+        type: "warning",
+        title: "Bénéficiaire obligatoire",
+        message: "Une sortie de stock doit être rattachée à un bénéficiaire (sélectionné ou saisi manuellement).",
       });
       return;
     }
@@ -158,11 +168,12 @@ const StocksPage: React.FC = () => {
       pieceJustificative: mouvForm.pieceJustificative,
       observations: mouvForm.observations,
       destination: mouvForm.destination,
+      beneficiaireLibre: mouvForm.beneficiaireLibre,
       typeOperation: mouvType,
       dateOperation: new Date().toISOString().slice(0, 19),
       beneficiaireId: mouvType === "SORTIE" && mouvForm.beneficiaire ? Number(mouvForm.beneficiaire) : null,
     });
-    setMouvForm({ consommableId: "", magasinId: "", quantite: 0, prixUnitaire: 0, pieceJustificative: "", observations: "", beneficiaire: "", destination: "" });
+    setMouvForm({ consommableId: "", magasinId: "", quantite: 0, prixUnitaire: 0, pieceJustificative: "", observations: "", beneficiaire: "", beneficiaireLibre: "", destination: "" });
     await loadData();
     setView("MOUVEMENTS");
   };
@@ -318,10 +329,18 @@ const StocksPage: React.FC = () => {
                     {mouvType === "SORTIE" && (
                       <>
                         <div className="form-group-modern" style={{ gridColumn: "span 1" }}>
-                          <label>Bénéficiaire (Obligatoire)</label>
+                          <label>Bénéficiaire (Liste)</label>
                           <BeneficiaireSelect 
                             value={mouvForm.beneficiaire} 
                             onChange={val => setMouvForm({ ...mouvForm, beneficiaire: val })} 
+                          />
+                        </div>
+                        <div className="form-group-modern" style={{ gridColumn: "span 1" }}>
+                          <label>Ou saisir manuellement</label>
+                          <input 
+                            placeholder="Si non trouvé dans la liste..." 
+                            value={mouvForm.beneficiaireLibre} 
+                            onChange={e => setMouvForm({ ...mouvForm, beneficiaireLibre: e.target.value })} 
                           />
                         </div>
                         <div className="form-group-modern" style={{ gridColumn: "span 1" }}>

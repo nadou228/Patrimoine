@@ -90,7 +90,9 @@ public class SecurityConfig {
 
                 // STOCKS
                 .requestMatchers(HttpMethod.GET, "/api/stocks/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","AUDITEUR")
+                    .authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/consommables/**")
+                    .authenticated()
 
                 .requestMatchers(HttpMethod.POST, "/api/stocks/**")
                     .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE")

@@ -285,7 +285,7 @@ const DashboardPage: React.FC = () => {
                   </div>
                 </div>
                 
-                <div style={{ height: 320, marginTop: 24 }}>
+                <div style={{ height: 320, minHeight: 320, marginTop: 24 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData}>
                       <defs>
@@ -354,7 +354,7 @@ const DashboardPage: React.FC = () => {
                   <div className="icon-box-premium" style={{ color: '#10b981' }}><LayoutDashboard /></div>
                   <h3 className="card-title-premium">Répartition</h3>
                 </div>
-                <div style={{ height: 200, position: 'relative' }}>
+                <div style={{ height: 200, minHeight: 200, position: 'relative' }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie

@@ -39,16 +39,26 @@ public class MouvementStockService {
 
     @Transactional
     public MouvementStock save(MouvementStock mouvementStock) {
-        Long stockId = mouvementStock.getStock().getId();
-        Stock stock = stockRepository.findById(stockId)
-                .orElseThrow(() -> new RuntimeException("Stock introuvable"));
-
-        if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE && stock.getQuantite() < mouvementStock.getQuantite()) {
-            throw new RuntimeException("Stock insuffisant");
+        if (mouvementStock.getStock() == null || mouvementStock.getStock().getId() == null) {
+            throw new RuntimeException("Lien avec le stock manquant ou invalide");
         }
 
-        if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE && mouvementStock.getBeneficiaire() == null) {
-            throw new com.patris.exception.BusinessException("Le bénéficiaire est obligatoire pour toute sortie de stock (exigence de traçabilité)");
+        Long stockId = mouvementStock.getStock().getId();
+        Stock stock = stockRepository.findById(stockId)
+                .orElseThrow(() -> new RuntimeException("Stock introuvable pour l'ID: " + stockId));
+
+        if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE && stock.getQuantite() < mouvementStock.getQuantite()) {
+            throw new RuntimeException("Stock insuffisant (disponible: " + stock.getQuantite() + ", demandé: " + mouvementStock.getQuantite() + ")");
+        }
+
+        // Vérification de la traçabilité pour les sorties
+        if (mouvementStock.getTypeMouvement() == type_mouvement.SORTIE) {
+            boolean hasEntityBeneficiaire = mouvementStock.getBeneficiaire() != null;
+            boolean hasManualBeneficiaire = mouvementStock.getDestination() != null && mouvementStock.getDestination().contains("Bénéficiaire manuel");
+            
+            if (!hasEntityBeneficiaire && !hasManualBeneficiaire) {
+                throw new com.patris.exception.BusinessException("Le bénéficiaire est obligatoire pour toute sortie de stock (sélectionnez-en un ou saisissez-le manuellement)");
+            }
         }
 
         mouvementStock.setStock(stock);

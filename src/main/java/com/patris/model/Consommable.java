@@ -60,6 +60,9 @@ public class Consommable {
     public String getServiceAffiche() { return serviceAffiche; }
     public void setServiceAffiche(String serviceAffiche) { this.serviceAffiche = serviceAffiche; }
 
+    public NomenclatureCompte getNomenclature() { return nomenclature; }
+    public void setNomenclature(NomenclatureCompte nomenclature) { this.nomenclature = nomenclature; }
+
     public Commune getCommune() { return commune; }
     public void setCommune(Commune commune) { this.commune = commune; }
 }

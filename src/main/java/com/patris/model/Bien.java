@@ -12,10 +12,23 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
 @Entity
 @Table(name = "bien")
 @Inheritance(strategy = InheritanceType.JOINED)
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonTypeInfo(
+    use = JsonTypeInfo.Id.NAME,
+    include = JsonTypeInfo.As.PROPERTY,
+    property = "type"
+)
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = BienMobilier.class, name = "MOBILIER"),
+    @JsonSubTypes.Type(value = BienImmobilier.class, name = "IMMOBILIER"),
+    @JsonSubTypes.Type(value = BienMaterielRoulant.class, name = "MATERIEL_ROULANT")
+})
 @Getter
 @Setter
 public abstract class Bien {

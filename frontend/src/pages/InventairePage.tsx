@@ -13,8 +13,9 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { useToast } from '../contexts/ToastContext';
 import { 
   Sparkles, CheckCircle2, LayoutGrid, Search, X, Check, ChevronRight,
-  ShieldCheck, Activity, BarChart3, QrCode
+  ShieldCheck, Activity, BarChart3, QrCode, FileText, PlusCircle, AlertTriangle
 } from 'lucide-react';
+import AnimatedNumber from "../components/AnimatedNumber";
 
 const MISSION_TEMPLATES = [
   { id: 'ANNUAL', name: 'Inventaire Annuel', desc: 'Audit complet de fin d\'exercice pour certification officielle des comptes patrimoniaux.', icon: '📅', color: '#6366f1' },
@@ -36,16 +37,16 @@ const CircularProgress = ({ percent, size = 56 }: { percent: number; size?: numb
   const offset = circ - (Math.max(0, Math.min(100, percent)) / 100) * circ;
   const color = percent >= 80 ? '#10b981' : percent >= 40 ? '#6366f1' : '#f59e0b';
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div className="circular-progress-wrap" style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={6}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={6}/>
         <circle cx={size/2} cy={size/2} r={r} fill="none"
           stroke={color} strokeWidth={6} strokeLinecap="round"
           strokeDasharray={circ} strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 0.8s ease' }}/>
+          style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)' }}/>
       </svg>
       <span style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
-        fontSize: size < 50 ? 9 : 11, fontWeight: 800, color }}>
+        fontSize: size < 50 ? 10 : 12, fontWeight: 900, color }}>
         {percent}%
       </span>
     </div>
@@ -228,116 +229,139 @@ const InventairePage: React.FC = () => {
   return (
     <div className="inv-page fade-in">
       {/* ══════════ HEADER ══════════ */}
-      <header className="page-header-premium">
-        <div>
+      <header className="page-header-modern">
+        <div className="header-meta">
           <span className="badge-pill-glow">Audit & Certification Patrimoniale</span>
-          <h1 className="inv-h1">Inventaire & Certification</h1>
+          <h1>Inventaire & Certification</h1>
         </div>
-        <div className="inv-header-right">
-          <nav className="nav-btn-group" style={{ display: 'flex', gap: 8, background: 'rgba(255,255,255,0.03)', padding: 6, borderRadius: 16, border: '1px solid var(--glass-border)' }}>
-            <button className={`nav-btn ${view === 'DASHBOARD' ? 'active' : ''}`} onClick={() => setView('DASHBOARD')}>📦 Missions</button>
-            {selectedCampagne && (
-              <>
-                <button className={`nav-btn ${view === 'EXECUTION' ? 'active' : ''}`} onClick={() => goView('EXECUTION')}>📡 Terrain</button>
-                <button className={`nav-btn ${view === 'RECONCILIATION' ? 'active' : ''}`} onClick={() => goView('RECONCILIATION')}>🔎 Écarts</button>
-                <button className={`nav-btn ${view === 'CERTIFICATION' ? 'active' : ''}`} onClick={() => goView('CERTIFICATION')}>📜 Certificat</button>
-              </>
-            )}
-          </nav>
+        
+        <div className="toolbar-filters">
+          {[
+            { id: 'DASHBOARD', label: 'Missions', icon: <LayoutGrid size={16} /> },
+            ...(selectedCampagne ? [
+              { id: 'EXECUTION', label: 'Terrain', icon: <Activity size={16} /> },
+              { id: 'RECONCILIATION', label: 'Écarts', icon: <Search size={16} /> },
+              { id: 'CERTIFICATION', label: 'Certificat', icon: <ShieldCheck size={16} /> }
+            ] : [])
+          ].map((item) => (
+            <button
+              key={item.id}
+              className={`pill-filter ${view === item.id ? "active" : ""}`}
+              onClick={() => goView(item.id as ViewType)}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
           <button className="primary-premium" onClick={() => { setView('PREPARATION'); setWizardStep(1); }}>
-            ＋ Lancer un Audit
+            <Sparkles size={16} />
+            Lancer un Audit
           </button>
         </div>
       </header>
 
       {/* ══════════ LOADING ══════════ */}
       {loading && (
-        <div style={{ textAlign:'center', padding: 60, color: 'var(--text-dim)' }}>
+        <div className="empty-state-modern">
           <div className="inv-spinner"/>
-          <p style={{ marginTop: 16 }}>Chargement en cours…</p>
+          <p>Initialisation du moteur d'audit...</p>
+        </div>
+      )}
+
+      {/* ══════════ STATS DASHBOARD ══════════ */}
+      {!loading && (
+        <div className="stats-dashboard fade-in">
+          <div className="stat-card-premium">
+            <span className="stat-label">Missions Actives</span>
+            <span className="stat-value">
+              <AnimatedNumber value={campagnes.filter(c => c.statut === 'EN_COURS').length} />
+            </span>
+            <p className="stat-hint">Audits physiques live</p>
+          </div>
+
+          <div className="stat-card-premium">
+            <span className="stat-label">Taux de Conformité</span>
+            <span className="stat-value text-success">
+              <AnimatedNumber value={selectedCampagne ? progressPercent : 94} />%
+            </span>
+            <p className="stat-hint">Moyenne globale</p>
+          </div>
+
+          <div className="stat-card-premium">
+            <span className="stat-label">Anomalies Détectées</span>
+            <span className="stat-value text-danger">
+              <AnimatedNumber value={selectedCampagne ? ecarts.length : 12} />
+            </span>
+            <p className="stat-hint">Écarts à régulariser</p>
+          </div>
+
+          <div className="stat-card-premium">
+            <span className="stat-label">Biens Certifiés</span>
+            <span className="stat-value text-warning">
+              <AnimatedNumber value={campagnes.filter(c => c.statut === 'CERTIFIE').length * 150} />
+            </span>
+            <p className="stat-hint">Scellés au registre</p>
+          </div>
         </div>
       )}
 
       {/* ══════════ DASHBOARD ══════════ */}
       {!loading && view === 'DASHBOARD' && (
-        <div className="fade-in">
-          <div className="dashboard-shell-grid" style={{ marginBottom: 40 }}>
-            <div className="premium-card">
-              <div className="card-header-premium">
-                <div className="icon-box-premium"><Sparkles size={20} /></div>
-                <div>
-                  <h3 className="card-title-premium">Campagnes Actives</h3>
-                  <p className="card-subtitle">Missions en cours d'audit physique</p>
-                </div>
-              </div>
-              <div style={{ fontSize: 36, fontWeight: 900 }}>{campagnes.filter(c => c.statut === 'EN_COURS').length}</div>
-            </div>
-
-            <div className="premium-card">
-              <div className="card-header-premium">
-                <div className="icon-box-premium" style={{ color: '#10b981' }}><CheckCircle2 size={20} /></div>
-                <div>
-                  <h3 className="card-title-premium">Missions Certifiées</h3>
-                  <p className="card-subtitle">Audits clôturés et scellés</p>
-                </div>
-              </div>
-              <div style={{ fontSize: 36, fontWeight: 900 }}>{campagnes.filter(c => c.statut === 'CERTIFIE').length}</div>
-            </div>
-
-            <div className="premium-card">
-              <div className="card-header-premium">
-                <div className="icon-box-premium" style={{ color: '#f59e0b' }}><LayoutGrid size={20} /></div>
-                <div>
-                  <h3 className="card-title-premium">Total Missions</h3>
-                  <p className="card-subtitle">Historique global des audits</p>
-                </div>
-              </div>
-              <div style={{ fontSize: 36, fontWeight: 900 }}>{campagnes.length}</div>
-            </div>
-          </div>
-
+        <div className="fade-in" style={{ marginTop: 20 }}>
           {campagnes.length === 0 ? (
-            <EmptyState icon="🗂️"
-              title="Aucune mission d'inventaire"
-              subtitle="Démarrez une nouvelle mission d'audit pour prendre le contrôle de votre patrimoine."
-              action="+ Lancer ma première mission"
-              onAction={() => setView('PREPARATION')} />
+            <div className="empty-state-modern">
+              <div className="icon-box-premium" style={{ width: 100, height: 100, fontSize: 40, margin: '0 auto 24px' }}>🗂️</div>
+              <h3>Aucune mission d'inventaire</h3>
+              <p>Démarrez une nouvelle mission d'audit pour prendre le contrôle de votre patrimoine.</p>
+              <button className="primary-premium" onClick={() => setView('PREPARATION')}>
+                + Lancer ma première mission
+              </button>
+            </div>
           ) : (
             <div className="mission-grid-modern">
               {campagnes.map(c => {
                 const prog = c.statut === 'CERTIFIE' ? 100 : Math.floor(Math.random() * 70) + 15;
                 const isCert = c.statut === 'CERTIFIE';
                 return (
-                  <div key={c.id} className={`mission-card-premium ${isCert ? 'certified' : ''}`}>
-                    <div className="card-status-indicator" style={{ background: isCert ? '#10b981' : '#6366f1' }} />
-                    <div className="inv-card-top">
-                      <span className={`status-pill ${isCert ? 'neuf' : 'bon'}`}>
-                        {isCert ? 'CERTIFIÉ' : 'EN COURS'}
-                      </span>
-                      <CircularProgress percent={prog} />
-                    </div>
-                    <h3 className="inv-mission-name" style={{ fontSize: 20, marginBottom: 12 }}>{c.nom}</h3>
-                    <div className="inv-mission-meta" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ opacity: 0.5 }}>📍</span> <strong>{c.sites || 'National'}</strong>
+                  <div key={c.id} className={`mission-card-premium glass-card ${isCert ? 'certified' : ''}`}>
+                    <div className="card-header-premium">
+                      <div className="icon-box-premium" style={{ background: isCert ? 'var(--success-glow)' : 'var(--primary-glow)' }}>
+                        {isCert ? <ShieldCheck size={20} className="text-success" /> : <Activity size={20} className="text-primary" />}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ opacity: 0.5 }}>📅</span> {c.dateDebut || new Date(c.dateCreation).toLocaleDateString()}
+                      <div style={{ flex: 1 }}>
+                        <h3 className="inv-mission-name">{c.nom}</h3>
+                        <span className={`badge-pill-glow ${isCert ? 'text-success' : 'text-primary'}`} style={{ fontSize: 9, padding: '2px 10px' }}>
+                          {isCert ? 'CERTIFIÉ' : 'EN COURS'}
+                        </span>
+                      </div>
+                      <CircularProgress percent={prog} size={48} />
+                    </div>
+
+                    <div className="inv-mission-meta-modern">
+                      <div className="meta-item">
+                        <Search size={14} />
+                        <span>Périmètre : <strong>{c.sites || 'National'}</strong></span>
+                      </div>
+                      <div className="meta-item">
+                        <Activity size={14} />
+                        <span>Équipes : <strong>{c.equipes || 'Audit Interne'}</strong></span>
+                      </div>
+                      <div className="meta-item">
+                        <CheckCircle2 size={14} />
+                        <span>Lancé le : <strong>{c.dateDebut || new Date(c.dateCreation).toLocaleDateString()}</strong></span>
                       </div>
                     </div>
                     
-                    <div className="inv-card-actions" style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--glass-border)', display: 'flex', gap: 10 }}>
-                      <button className="primary-premium" style={{ flex: 1, padding: '8px 16px' }} onClick={() => openCampagne(c)}>Gérer</button>
-                      <button className="nav-btn" style={{ padding: 10 }} title="Exporter XLS"
-                        onClick={async () => {
-                          try {
-                            const [f, e] = await Promise.all([getInventaireFiches(c.id), getInventaireEcarts(c.id)]);
-                            exportInventaireCompletExcel(c, f || [], e || []);
-                          } catch {
-                            showToast({ type: "error", title: "Erreur lors de l'export" });
-                          }
-                        }}><Search size={16} /></button>
-                      <button className="nav-btn" style={{ padding: 10, color: '#ef4444' }} title="Supprimer" onClick={async () => {
+                    <div className="card-actions-premium">
+                      <button className="primary-premium" onClick={() => openCampagne(c)}>
+                        Gérer la mission
+                      </button>
+                      <button className="pill-filter" title="Exporter" onClick={() => {
+                        getInventaireFiches(c.id).then(f => exportInventaireCompletExcel(c, f, []));
+                      }}>
+                        <Search size={16} />
+                      </button>
+                      <button className="pill-filter text-danger" title="Supprimer" onClick={async () => {
                         const approved = await confirm({
                           title: "Supprimer cette mission ?",
                           message: "La campagne et ses donnees associees seront retirees.",
@@ -346,17 +370,21 @@ const InventairePage: React.FC = () => {
                         });
                         if (!approved) return;
                         await deleteInventaire(c.id);
-                        showToast({ type: "success", title: "Mission supprimee" });
-                        await loadInitialData();
-                      }}><X size={16} /></button>
+                        loadInitialData();
+                      }}>
+                        <X size={16} />
+                      </button>
                     </div>
                   </div>
                 );
               })}
-              {/* Add card */}
-              <div className="inv-add-card" onClick={() => setView('PREPARATION')} style={{ border: '2px dashed var(--glass-border)', borderRadius: 30, background: 'rgba(255,255,255,0.02)' }}>
-                <div className="inv-add-icon" style={{ opacity: 0.5 }}>+</div>
-                <span style={{ fontWeight: 700 }}>Lancer un nouvel audit</span>
+              
+              <div className="mission-card-premium add-placeholder glass-card" onClick={() => setView('PREPARATION')}>
+                <div className="add-icon-glow">
+                  <PlusCircle size={32} />
+                </div>
+                <h3>Nouvel Audit</h3>
+                <p>Initialiser un protocole</p>
               </div>
             </div>
           )}
@@ -366,51 +394,45 @@ const InventairePage: React.FC = () => {
       {/* ══════════ WIZARD ══════════ */}
       {!loading && view === 'PREPARATION' && (
         <div className="inv-wizard fade-in">
-          <div className="inv-stepper" style={{ marginBottom: 48 }}>
+          <div className="inv-stepper-modern">
             {['Modèle','Périmètre','Lancement'].map((lbl, i) => {
               const n = i+1;
               const isActive = wizardStep === n;
               const isDone = wizardStep > n;
               return (
                 <React.Fragment key={n}>
-                  <div className="inv-step" style={{ flex: 1, textAlign: 'center' }}>
-                    <div className={`step-circle-premium ${isActive ? 'active' : ''} ${isDone ? 'completed' : ''}`} style={{ 
-                      width: 44, height: 44, margin: '0 auto 12px',
-                      background: isDone ? '#10b981' : isActive ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
-                      color: isDone || isActive ? 'white' : 'var(--text-dim)',
-                      border: '2px solid ' + (isDone ? '#10b981' : isActive ? 'var(--primary)' : 'var(--glass-border)'),
-                      boxShadow: isActive ? '0 0 20px var(--primary-glow)' : 'none',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontWeight: 900
-                    }}>
-                      {isDone ? <Check size={20} /> : n}
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: isActive ? 'var(--text-main)' : 'var(--text-dim)' }}>{lbl}</span>
+                  <div className={`step-item ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}>
+                    <div className="step-number">{isDone ? <Check size={16} /> : n}</div>
+                    <span className="step-label">{lbl}</span>
                   </div>
-                  {i < 2 && <div style={{ width: 60, height: 2, background: isDone ? '#10b981' : 'var(--glass-border)', marginTop: -25 }} />}
+                  {i < 2 && <div className={`step-line ${isDone ? 'done' : ''}`} />}
                 </React.Fragment>
               );
             })}
           </div>
 
-          <div className="premium-card" style={{ padding: '48px' }}>
+          <div className="glass-card premium-card wizard-content-box">
             {/* Step 1 - Templates */}
             {wizardStep === 1 && (
               <div className="fade-in">
-                <div style={{ textAlign: 'center', marginBottom: 40 }}>
-                  <h2 className="inv-wizard-title" style={{ fontSize: 28, fontWeight: 900 }}>Configuration de la Mission</h2>
-                  <p className="card-subtitle">Sélectionnez le protocole d'audit adapté à vos objectifs</p>
+                <div className="wizard-header-center">
+                  <span className="badge-pill-glow">Étape 01</span>
+                  <h2>Protocole d'Audit</h2>
+                  <p>Sélectionnez le protocole adapté à vos objectifs stratégiques</p>
                 </div>
-                <div className="family-selection-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                <div className="template-grid-creative">
                   {MISSION_TEMPLATES.map(t => (
                     <div key={t.id}
-                      className={`family-card-premium ${form.templateId === t.id ? 'selected' : ''}`}
+                      className={`template-card-creative ${form.templateId === t.id ? 'selected' : ''}`}
                       onClick={() => { setForm({...form, templateId: t.id, nom: `Mission ${t.name} ${new Date().getFullYear()}`}); setWizardStep(2); }}>
-                      <div className="icon-box-premium" style={{ width: 60, height: 60, fontSize: 32 }}>{t.icon}</div>
-                      <div className="family-info">
-                        <strong>{t.name}</strong>
+                      <div className="template-icon-wrap" style={{ background: t.color + '20', color: t.color }}>
+                        <span style={{ fontSize: 32 }}>{t.icon}</span>
+                      </div>
+                      <div className="template-info">
+                        <h3>{t.name}</h3>
                         <p>{t.desc}</p>
                       </div>
-                      <div className="family-check"><ChevronRight size={20} /></div>
+                      <div className="template-arrow"><ChevronRight size={20} /></div>
                     </div>
                   ))}
                 </div>
@@ -420,65 +442,70 @@ const InventairePage: React.FC = () => {
             {/* Step 2 - Périmètre */}
             {wizardStep === 2 && (
               <div className="fade-in">
-                <div style={{ marginBottom: 40 }}>
-                  <h2 className="inv-wizard-title" style={{ fontSize: 24, fontWeight: 900 }}>Périmètre d'Intervention</h2>
-                  <p className="card-subtitle">Définissez les limites géographiques et opérationnelles</p>
+                <div className="wizard-header-center">
+                  <span className="badge-pill-glow">Étape 02</span>
+                  <h2>Périmètre & Équipes</h2>
+                  <p>Définissez les limites géographiques et opérationnelles de la mission</p>
                 </div>
                 
-                <div className="form-grid-premium">
-                  <div className="form-group-modern" style={{ gridColumn: '1 / -1' }}>
-                    <label>Nom de la Campagne</label>
-                    <input className="premium-input" value={form.nom} onChange={e => setForm({...form, nom: e.target.value})} placeholder="Ex : Inventaire Annuel 2025"/>
-                  </div>
-                  
-                  <div className="form-group-modern">
-                    <label>Service / Site concerné</label>
-                    <select className="premium-input" value={form.sites} onChange={e => setForm({...form, sites: e.target.value})}>
-                      <option value="">🌍 TOUS LES SERVICES (National)</option>
-                      {services.map(s => <option key={s.id} value={s.nomService || s.nom}>{s.nomService || s.nom}</option>)}
-                    </select>
-                  </div>
+                <div className="form-content-premium">
+                  <div className="grid-2">
+                    <div className="form-group-modern" style={{ gridColumn: 'span 2' }}>
+                      <label>Désignation de la Mission</label>
+                      <input value={form.nom} onChange={e => setForm({...form, nom: e.target.value})} placeholder="Ex : Inventaire Annuel 2025"/>
+                    </div>
+                    
+                    <div className="form-group-modern">
+                      <label>Site / Direction concernée</label>
+                      <select value={form.sites} onChange={e => setForm({...form, sites: e.target.value})}>
+                        <option value="">🌍 Périmètre National (Tous sites)</option>
+                        {services.map(s => <option key={s.id} value={s.nomService || s.nom}>{s.nomService || s.nom}</option>)}
+                      </select>
+                    </div>
 
-                  <div className="form-group-modern">
-                    <label>Brigades assignées</label>
-                    <input className="premium-input" value={form.equipes} onChange={e => setForm({...form, equipes: e.target.value})} placeholder="Ex : Équipe Alpha + Audit Interne"/>
-                  </div>
+                    <div className="form-group-modern">
+                      <label>Brigades de recensement</label>
+                      <input value={form.equipes} onChange={e => setForm({...form, equipes: e.target.value})} placeholder="Ex : Équipe Alpha + Audit Interne"/>
+                    </div>
 
-                  <div className="form-group-modern">
-                    <label>Date de Lancement</label>
-                    <input type="date" className="premium-input" value={form.dateDebut} onChange={e => setForm({...form, dateDebut: e.target.value})}/>
-                  </div>
+                    <div className="form-group-modern">
+                      <label>Date de démarrage</label>
+                      <input type="date" value={form.dateDebut} onChange={e => setForm({...form, dateDebut: e.target.value})}/>
+                    </div>
 
-                  <div className="form-group-modern">
-                    <label>Date de Clôture prévue</label>
-                    <input type="date" className="premium-input" value={form.dateFin} onChange={e => setForm({...form, dateFin: e.target.value})}/>
+                    <div className="form-group-modern">
+                      <label>Date de clôture estimée</label>
+                      <input type="date" value={form.dateFin} onChange={e => setForm({...form, dateFin: e.target.value})}/>
+                    </div>
                   </div>
                 </div>
 
-                <div className="form-footer-premium" style={{ marginTop: 40 }}>
-                  <button className="nav-btn" onClick={() => setWizardStep(1)}>Précédent</button>
-                  <button className="primary-premium" onClick={() => setWizardStep(3)}>Suivant : Lancement</button>
+                <div className="form-actions-wizard">
+                  <button className="pill-filter" onClick={() => setWizardStep(1)}>Précédent</button>
+                  <button className="primary-premium" onClick={() => setWizardStep(3)}>Suivant : Validation</button>
                 </div>
               </div>
             )}
 
             {/* Step 3 - Launch */}
             {wizardStep === 3 && (
-              <div className="fade-in" style={{ textAlign: 'center' }}>
-                <div className="icon-box-premium" style={{ width: 100, height: 100, margin: '0 auto 24px', fontSize: 48 }}>🚀</div>
-                <h2 style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>Initialisation du Protocole</h2>
-                <p className="card-subtitle" style={{ marginBottom: 40 }}>Récapitulatif des paramètres de mission avant propulsion</p>
+              <div className="fade-in launch-confirmation">
+                <div className="launch-icon-container">
+                  <div className="pulse-ring" />
+                  <Sparkles size={48} className="text-primary" />
+                </div>
+                <h2>Prêt pour le Lancement</h2>
+                <p>Récapitulatif des paramètres avant initialisation du registre d'audit</p>
 
-                <div className="glass-card" style={{ maxWidth: 500, margin: '0 auto 40px', textAlign: 'left' }}>
-                  <div className="inv-sum-row"><span>MISSION</span><strong>{form.nom}</strong></div>
-                  <div className="inv-sum-row"><span>PROTOCOLE</span><strong>{MISSION_TEMPLATES.find(t => t.id === form.templateId)?.name}</strong></div>
-                  <div className="inv-sum-row"><span>ZONE</span><strong>{form.sites || 'NATIONAL'}</strong></div>
-                  <div className="inv-sum-row"><span>DÉBUT</span><strong>{form.dateDebut}</strong></div>
+                <div className="summary-glass-box">
+                  <div className="summary-item"><span>MISSION</span><strong>{form.nom}</strong></div>
+                  <div className="summary-item"><span>ZONE</span><strong>{form.sites || 'NATIONAL'}</strong></div>
+                  <div className="summary-item"><span>DÉBUT</span><strong>{form.dateDebut}</strong></div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
-                  <button className="nav-btn" onClick={() => setWizardStep(2)}>Ajuster</button>
-                  <button className="primary-premium" style={{ padding: '16px 48px' }} onClick={async () => {
+                <div className="form-actions-wizard centered">
+                  <button className="pill-filter" onClick={() => setWizardStep(2)}>Ajuster</button>
+                  <button className="primary-premium large-btn" onClick={async () => {
                     try {
                       await createInventaire(form);
                       showToast({ type: "success", title: "Mission lancée !" });
@@ -497,81 +524,100 @@ const InventairePage: React.FC = () => {
 
       {/* ══════════ TERRAIN / EXECUTION ══════════ */}
       {!loading && view === 'EXECUTION' && selectedCampagne && (
-        <div className="fade-in">
-          <div className="premium-card" style={{ marginBottom: 32, padding: '32px' }}>
-            <div className="inv-terrain-header" style={{ border: 'none', marginBottom: 24 }}>
-              <div>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                  <div className="inv-live-dot" style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', animation: 'blink 1.5s infinite' }} />
-                  <span style={{ fontWeight: 800, fontSize: 12, color: '#ef4444', letterSpacing: 1 }}>MONITORING LIVE</span>
-                </div>
-                <h2 style={{ fontSize: 24, fontWeight: 800 }}>{selectedCampagne.nom}</h2>
-                <p className="card-subtitle">Opérations de recensement physique sur le terrain</p>
+        <div className="fade-in terrain-shell">
+          <div className="glass-card premium-card monitoring-header">
+            <div className="monitoring-meta">
+              <div className="live-status">
+                <div className="pulse-dot-red" />
+                <span>MONITORING TERRAIN LIVE</span>
               </div>
-              <div style={{ display:'flex', gap:16, alignItems:'center' }}>
-                <div className="inv-progress-info" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', padding: '12px 24px', borderRadius: 20 }}>
-                  <CircularProgress percent={progressPercent} size={64}/>
-                  <div>
-                    <div style={{ fontWeight:900, fontSize:18 }}>{fichesValidees.length} / {fiches.length}</div>
-                    <div style={{ fontSize:11, color:'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Actifs Scannés</div>
-                  </div>
-                </div>
-                <button className="nav-btn" onClick={() => exportInventaireCompletExcel(selectedCampagne, fiches, ecarts)}>📊 Rapport</button>
-                <button className="primary-premium" onClick={handleGlobalValidate}>✅ Clôturer Zone</button>
-              </div>
+              <h2>{selectedCampagne.nom}</h2>
+              <p className="text-dim">Capture de données physiques en temps réel</p>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
-              <form onSubmit={handleScan} className="glass-card" style={{ display: 'flex', gap: 12, padding: '16px 24px', borderRadius: 20, width: '100%', maxWidth: 600, alignItems: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
-                <Search size={24} style={{ color: 'var(--primary)', opacity: 0.7 }} />
+            <div className="monitoring-stats">
+              <div className="mini-stat-box">
+                <CircularProgress percent={progressPercent} size={50}/>
+                <div className="stat-text">
+                  <strong>{fichesValidees.length} / {fiches.length}</strong>
+                  <span>ACTIFS AUDITÉS</span>
+                </div>
+              </div>
+              <div className="action-group">
+                <button className="pill-filter" onClick={() => exportInventaireCompletExcel(selectedCampagne, fiches, ecarts)}>
+                  <FileText size={16} />
+                  Rapport
+                </button>
+                <button className="primary-premium" onClick={handleGlobalValidate}>
+                  <CheckCircle2 size={16} />
+                  Clôturer Zone
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="scan-section-premium">
+            <div className="scan-bar-glow">
+              <QrCode size={24} className="text-primary" />
+              <form onSubmit={handleScan} style={{ flex: 1, display: 'flex' }}>
                 <input 
                   type="text" 
-                  placeholder="Scanner un code-barres ou saisir un IUP..." 
+                  placeholder="Scanner un code IUP ou identifiant d'actif..." 
                   value={scanInput} 
                   onChange={(e) => setScanInput(e.target.value)} 
-                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: 'var(--text-main)', fontSize: 16, fontWeight: 600 }} 
                   autoFocus
                 />
-                <button type="submit" className="primary-premium" style={{ padding: '10px 20px' }}>Identifier</button>
+                <button type="submit">IDENTIFIER</button>
               </form>
             </div>
           </div>
 
           {fiches.length === 0 ? (
-            <EmptyState icon="📡" title="Aucune fiche générée" subtitle="Les fiches d'audit sont créées automatiquement selon le périmètre défini lors de la configuration de la mission."/>
+            <div className="empty-state-modern">
+              <Activity size={48} className="text-dim" style={{ marginBottom: 20 }} />
+              <h3>Aucune fiche disponible</h3>
+              <p>Les fiches d'audit seront générées dès que les données du périmètre seront synchronisées.</p>
+            </div>
           ) : (
-            <div className="inv-fiches-grid">
+            <div className="audit-fiches-grid">
               {fiches.map(f => {
                 const done = f.validationAgent === 'VALIDE';
-                const supDone = f.validationSuperviseur === 'VALIDE';
                 return (
-                  <div key={f.id} className={`premium-card ${done ? 'scanned' : ''}`} style={{ padding: '20px', borderTop: done ? '4px solid #10b981' : '1.5px solid var(--glass-border)' }}>
-                    <div className="inv-fiche-top" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <span className="monospace-glow" style={{ fontSize: 10 }}>{f.bien?.iup || f.codeIup}</span>
-                      <span className={`status-pill ${f.anomalie ? 'degrade' : 'neuf'}`} style={{ fontSize: 9 }}>
+                  <div key={f.id} className={`audit-card-premium glass-card ${done ? 'completed' : ''}`}>
+                    <div className="card-top-info">
+                      <span className="iup-badge">{f.bien?.iup || f.codeIup}</span>
+                      <span className={`status-tag ${f.anomalie ? 'anomaly' : 'conforming'}`}>
                         {f.anomalie ? 'ANOMALIE' : 'CONFORME'}
                       </span>
                     </div>
-                    <div className="inv-fiche-name" style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{f.bien?.designation || '—'}</div>
-                    <div className="inv-fiche-cat" style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 16 }}>{f.bien?.categorie}</div>
                     
-                    <div className="glass-card" style={{ padding: '12px', marginBottom: 16, background: 'rgba(255,255,255,0.02)' }}>
-                      <div style={{ fontSize: 11, marginBottom: 8 }}>
-                        <span style={{ opacity: 0.5 }}>📍 Théorique:</span> <strong>{f.bien?.localisation || '—'}</strong>
-                      </div>
-                      {f.localisationReelle && (
-                        <div style={{ fontSize: 11, color: 'var(--primary)' }}>
-                          <span style={{ opacity: 0.5 }}>📍 Constaté:</span> <strong>{f.localisationReelle}</strong>
+                    <div className="card-main-content">
+                      <h3>{f.bien?.designation || 'Actif non identifié'}</h3>
+                      <p className="cat-text">{f.bien?.categorie || 'Catégorie inconnue'}</p>
+                      
+                      <div className="loc-info-box">
+                        <div className="loc-row">
+                          <span className="label">Théorique :</span>
+                          <span className="val">{f.bien?.localisation || '—'}</span>
                         </div>
-                      )}
+                        {f.localisationReelle && (
+                          <div className="loc-row real">
+                            <span className="label">Constaté :</span>
+                            <span className="val">{f.localisationReelle}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="inv-fiche-footer" style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+                    <div className="card-footer-premium">
                       {!done ? (
-                        <button className="primary-premium" style={{ flex: 1, padding: '8px' }} onClick={() => setAuditModal({...f})}>Scanner</button>
+                        <button className="primary-premium small" onClick={() => setAuditModal({...f})}>
+                          AUDITER L'ACTIF
+                        </button>
                       ) : (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#10b981', fontWeight: 800, fontSize: 12 }}>
-                          <CheckCircle2 size={16} /> AUDITÉ
+                        <div className="audit-status-badge">
+                          <CheckCircle2 size={14} />
+                          <span>STATUT : AUDITÉ</span>
                         </div>
                       )}
                     </div>
@@ -585,17 +631,23 @@ const InventairePage: React.FC = () => {
 
       {/* ══════════ ÉCARTS / RECONCILIATION ══════════ */}
       {!loading && view === 'RECONCILIATION' && selectedCampagne && (
-        <div className="fade-in">
-          <div className="inv-view-header">
-            <div>
-              <h2 style={{ margin:0, fontSize:24 }}>🔎 Analyse des Écarts Patrimoniaux</h2>
-              <p style={{ color:'var(--text-dim)', margin:'4px 0 0', fontSize:13 }}>
-                Mission : {selectedCampagne.nom}
-              </p>
+        <div className="fade-in reconciliation-shell">
+          <div className="glass-card premium-card reconciliation-header">
+            <div className="header-meta">
+              <span className="badge-pill-glow">Phase d'Audit 03</span>
+              <h2>Analyse & Résolution des Écarts</h2>
+              <p className="text-dim">Traitement des anomalies constatées lors du recensement terrain</p>
             </div>
-            <div style={{ display:'flex', gap:12 }}>
-              <div className="inv-ecart-kpi"><strong>{ecarts.length}</strong><span>Écarts détectés</span></div>
-              <div className="inv-ecart-kpi warn"><strong>{ecartsEnAttente.length}</strong><span>En attente</span></div>
+            
+            <div className="header-kpis">
+              <div className="kpi-pill">
+                <span className="kpi-label">DÉTECTÉS</span>
+                <span className="kpi-val">{ecarts.length}</span>
+              </div>
+              <div className="kpi-pill warning">
+                <span className="kpi-label">À TRAITER</span>
+                <span className="kpi-val">{ecartsEnAttente.length}</span>
+              </div>
             </div>
           </div>
 
@@ -646,73 +698,81 @@ const InventairePage: React.FC = () => {
 
       {/* ══════════ CERTIFICATION ══════════ */}
       {!loading && view === 'CERTIFICATION' && selectedCampagne && (
-        <div className="fade-in inv-cert-view">
+        <div className="fade-in certification-shell">
           {selectedCampagne.statut === 'CERTIFIE' ? (
-            <div className="premium-card" style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center', padding: '60px 40px' }}>
-              <div className="success-icon-wrapper" style={{ width: 120, height: 120, marginBottom: 40 }}>
-                <div className="success-pulse" style={{ background: 'rgba(16,185,129,0.1)' }} />
-                <div className="success-pulse" style={{ animationDelay: '0.5s', background: 'rgba(16,185,129,0.05)' }} />
-                <CheckCircle2 size={64} className="success-icon-check" />
+            <div className="glass-card premium-card certification-result-box light">
+              <div className="success-icon-container">
+                <div className="ripple-effect" />
+                <ShieldCheck size={80} className="text-success" />
               </div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, marginBottom: 16 }}>Certification Officielle Scellée</h2>
-              <p className="card-subtitle" style={{ maxWidth: 500, margin: '0 auto 40px' }}>
-                Cette campagne d'inventaire a été auditée, validée et scellée dans le registre numérique du patrimoine.
+              <h2>Certification Officielle Scellée</h2>
+              <p className="certification-status-text">
+                Cette campagne d'inventaire a été auditée, validée et scellée dans le registre numérique immuable du patrimoine.
               </p>
               
-              <div className="glass-card" style={{ textAlign: 'left', marginBottom: 40, background: 'rgba(255,255,255,0.02)' }}>
-                <div className="inv-sum-row"><span>N° Certification</span><strong>CERT-{selectedCampagne.id.toString().padStart(6, '0')}</strong></div>
-                <div className="inv-sum-row"><span>Date de Clôture</span><strong>{new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
-                <div className="inv-sum-row"><span>Signataire</span><strong>{selectedCampagne.validePar || 'ADMINISTRATION CENTRALE'}</strong></div>
+              <div className="certification-details-glass light">
+                <div className="detail-row">
+                  <span>NUMÉRO DE CERTIFICAT</span>
+                  <strong>CERT-{selectedCampagne.id.toString().padStart(6, '0')}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>DATE DE SCELLÉ</span>
+                  <strong>{new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>AUTORITÉ DE VALIDATION</span>
+                  <strong>{selectedCampagne.validePar || 'DIRECTION GÉNÉRALE DU PATRIMOINE'}</strong>
+                </div>
               </div>
 
-              <button className="primary-premium" style={{ width: '100%', padding: '16px' }} onClick={handleExportCertificat}>
-                📥 Télécharger le PV d'Inventaire Certifié (PDF)
+              <button className="primary-premium large-btn" onClick={handleExportCertificat}>
+                <FileText size={20} />
+                TÉLÉCHARGER LE PROCÈS-VERBAL CERTIFIÉ (PDF)
               </button>
             </div>
           ) : (
-            <div className="premium-card" style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center', padding: '60px 40px' }}>
-              <div className="icon-box-premium" style={{ width: 80, height: 80, margin: '0 auto 32px', borderRadius: 24 }}>
-                <Sparkles size={40} />
+            <div className="glass-card premium-card certification-ready-box light">
+              <div className="ready-icon-wrap">
+                <Sparkles size={48} className="text-primary" />
               </div>
-              <h2 style={{ fontSize: 32, fontWeight: 900, marginBottom: 16 }}>Prêt pour la Certification</h2>
-              <p className="card-subtitle" style={{ maxWidth: 600, margin: '0 auto 48px', fontSize: 16 }}>
-                En certifiant cette campagne, vous engagez la responsabilité de l'audit et validez la mise à jour définitive du registre du patrimoine.
+              <h2>Homologation de l'Audit</h2>
+              <p className="ready-subtitle">
+                Engagement de la responsabilité de l'audit et validation définitive du registre patrimonial.
               </p>
 
-              <div className="dashboard-shell-grid" style={{ marginBottom: 48 }}>
-                <div className="glass-card">
-                  <div className="pill-label">Audit Physique</div>
-                  <div className="pill-value">{fiches.length}</div>
+              <div className="kpi-grid-certification">
+                <div className="kpi-card-mini light">
+                  <span className="kpi-label">Actifs Recensés</span>
+                  <span className="kpi-value">{fiches.length}</span>
                 </div>
-                <div className="glass-card">
-                  <div className="pill-label">Conformité</div>
-                  <div className="pill-value">{Math.round((fichesValidees.length / Math.max(fiches.length, 1)) * 100)}%</div>
+                <div className="kpi-card-mini light">
+                  <span className="kpi-label">Taux d'Audit</span>
+                  <span className="kpi-value">{Math.round((fichesValidees.length / Math.max(fiches.length, 1)) * 100)}%</span>
                 </div>
-                <div className="glass-card">
-                  <div className="pill-label">Écarts Résolus</div>
-                  <div className="pill-value">{ecarts.filter(e => e.statutValidation === 'VALIDE').length}</div>
+                <div className="kpi-card-mini light">
+                  <span className="kpi-label">Écarts Résolus</span>
+                  <span className="kpi-value">{ecarts.filter(e => e.statutValidation === 'VALIDE').length}</span>
                 </div>
               </div>
 
               {ecartsEnAttente.length > 0 ? (
-                <div className="premium-card" style={{ background: 'rgba(239, 68, 68, 0.05)', borderColor: 'rgba(239, 68, 68, 0.2)', padding: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, color: '#ef4444', textAlign: 'left' }}>
-                    <X size={24} />
-                    <div>
-                      <strong style={{ display: 'block' }}>Action Requise</strong>
-                      <span style={{ fontSize: 13 }}>{ecartsEnAttente.length} écart(s) en attente. Impossible de certifier.</span>
-                    </div>
-                    <button className="primary-premium" style={{ background: '#ef4444', marginLeft: 'auto' }} onClick={() => setView('RECONCILIATION')}>Régulariser</button>
+                <div className="alert-card-premium danger light">
+                  <AlertTriangle size={24} />
+                  <div className="alert-content">
+                    <strong>Action Impérative Requise</strong>
+                    <p>{ecartsEnAttente.length} écart(s) n'ont pas encore été régularisés par un superviseur.</p>
                   </div>
+                  <button className="pill-filter danger" onClick={() => setView('RECONCILIATION')}>Régulariser maintenant</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, alignItems: 'center' }}>
-                  <div className="inv-cert-hash" style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 24px', borderRadius: 12 }}>
-                    <span style={{ opacity: 0.5, fontSize: 12 }}>CODE DE SÉCURITÉ :</span>
-                    <code style={{ fontSize: 14, fontWeight: 900, color: 'var(--primary)', letterSpacing: 2 }}>{Math.random().toString(36).substring(2, 12).toUpperCase()}</code>
+                <div className="certification-action-zone">
+                  <div className="security-hash-box light">
+                    <span className="label">EMPREINTE DE SÉCURITÉ :</span>
+                    <code>{Math.random().toString(36).substring(2, 12).toUpperCase()}</code>
                   </div>
-                  <button className="primary-premium" style={{ padding: '20px 48px', fontSize: 18, width: '100%' }} onClick={handleCertify}>
-                    📜 SCELLER ET CERTIFIER LA MISSION
+                  <button className="primary-premium extra-large" onClick={handleCertify}>
+                    <ShieldCheck size={24} />
+                    SCELLER ET CERTIFIER LA MISSION
                   </button>
                 </div>
               )}

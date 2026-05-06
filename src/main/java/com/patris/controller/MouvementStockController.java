@@ -1,16 +1,10 @@
 package com.patris.controller;
 
 import java.util.List;
-
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 
 import com.patris.dto.MouvementStockCreateDTO;
 import com.patris.enums.type_mouvement;
@@ -21,11 +15,10 @@ import com.patris.service.StockService;
 import com.patris.repository.BeneficiaireRepository;
 import com.patris.repository.MagasinRepository;
 
-import lombok.RequiredArgsConstructor;
-
 @RestController
 @RequestMapping("/api/mouvement_stock")
 @RequiredArgsConstructor
+@Slf4j
 public class MouvementStockController {
 
     private final MouvementStockService service;
@@ -39,7 +32,7 @@ public class MouvementStockController {
     }
     
     @GetMapping("/{id}")
-    public MouvementStock  findById(@PathVariable Long id){
+    public MouvementStock findById(@PathVariable Long id){
         return service.findById(id);
     }
 
@@ -50,21 +43,46 @@ public class MouvementStockController {
 
     @PostMapping("/create")
     public ResponseEntity<MouvementStock> createFromDTO(@RequestBody MouvementStockCreateDTO dto){
+        log.debug("Reception DTO mouvement stock: articleId={}, type={}, qte={}", 
+            dto.getConsommableId(), dto.getTypeOperation(), dto.getQuantite());
+
+        if (dto.getConsommableId() == null || dto.getConsommableId() <= 0) {
+            throw new RuntimeException("Un article valide doit être sélectionné.");
+        }
+
         // Trouver le stock associé au consommable
         Stock stock = stockService.findByConsommableId(dto.getConsommableId());
         if (stock == null) {
-            throw new RuntimeException("Aucun stock trouvé pour ce consommable");
+            throw new RuntimeException("Stock introuvable pour l'article sélectionné (ID: " + dto.getConsommableId() + "). Veuillez initialiser l'article.");
         }
 
         // Créer le mouvement de stock
         MouvementStock mouvementStock = new MouvementStock();
         mouvementStock.setStock(stock);
-        mouvementStock.setTypeMouvement(type_mouvement.valueOf(dto.getTypeOperation().toUpperCase()));
+        
+        try {
+            mouvementStock.setTypeMouvement(type_mouvement.valueOf(dto.getTypeOperation().toUpperCase()));
+        } catch (Exception e) {
+            throw new RuntimeException("Type d'opération invalide: " + dto.getTypeOperation());
+        }
+        
         mouvementStock.setQuantite(dto.getQuantite());
-        mouvementStock.setDateMouvement(dto.getDateOperation());
+        mouvementStock.setDateMouvement(dto.getDateOperation() != null ? dto.getDateOperation() : java.time.LocalDateTime.now());
         mouvementStock.setReferencePiece(dto.getPieceJustificative());
         mouvementStock.setPrixUnitaire(dto.getPrixUnitaire());
-        mouvementStock.setDestination(dto.getObservations());
+        
+        String finalDestination = dto.getDestination() != null ? dto.getDestination() : "";
+        String obs = dto.getObservations() != null ? dto.getObservations() : "";
+        
+        if (!obs.isEmpty()) {
+            finalDestination += (finalDestination.isEmpty() ? "" : " | ") + "Obs: " + obs;
+        }
+        
+        if (dto.getBeneficiaireLibre() != null && !dto.getBeneficiaireLibre().isEmpty()) {
+            finalDestination += (finalDestination.isEmpty() ? "" : " | ") + "Bénéficiaire manuel : " + dto.getBeneficiaireLibre();
+        }
+        
+        mouvementStock.setDestination(finalDestination);
         
         if (dto.getBeneficiaireId() != null) {
             mouvementStock.setBeneficiaire(
@@ -79,7 +97,15 @@ public class MouvementStockController {
             );
         }
 
-        return ResponseEntity.ok(service.save(mouvementStock));
+        log.debug("Mouvement construit: stockId={}, type={}, destination={}", 
+            mouvementStock.getStock().getId(), mouvementStock.getTypeMouvement(), mouvementStock.getDestination());
+        
+        try {
+            return ResponseEntity.ok(service.save(mouvementStock));
+        } catch (Exception e) {
+            log.error("Erreur lors de la sauvegarde du mouvement: {}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     @PutMapping("/{id}")
@@ -92,8 +118,4 @@ public class MouvementStockController {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
-    
-
-    
-
 }

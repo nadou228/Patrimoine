@@ -12,6 +12,8 @@ public class MouvementStockCreateDTO {
     private Double prixUnitaire;
     private String observations;
     private Long beneficiaireId;
+    private String destination;
+    private String beneficiaireLibre;
 
     public MouvementStockCreateDTO() {}
 
@@ -33,4 +35,8 @@ public class MouvementStockCreateDTO {
     public void setObservations(String observations) { this.observations = observations; }
     public Long getBeneficiaireId() { return beneficiaireId; }
     public void setBeneficiaireId(Long beneficiaireId) { this.beneficiaireId = beneficiaireId; }
+    public String getDestination() { return destination; }
+    public void setDestination(String destination) { this.destination = destination; }
+    public String getBeneficiaireLibre() { return beneficiaireLibre; }
+    public void setBeneficiaireLibre(String beneficiaireLibre) { this.beneficiaireLibre = beneficiaireLibre; }
 }
