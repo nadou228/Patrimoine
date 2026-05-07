@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { createSinistre, deleteSinistre, getSinistres, updateSinistre } from "../api/api";
-import { Bien, updateBienStatus } from "../api/biens";
+import { updateBienStatus } from "../api/biens";
 import BienSelector from "../components/BienSelector";
 import FileUpload from "../components/FileUpload";
 import { useToast } from "../contexts/ToastContext";
@@ -259,18 +259,72 @@ export default function SinistresPage() {
       )}
 
       {followUp ? (
-        <div className="modal-overlay-premium">
-          <div className="modal-card compact-modal">
-            <h3>Suivi assurance</h3>
-            <Field label="Numero dossier assureur"><input value={followUp.numeroDossierAssureur} onChange={(event) => setFollowUp({ ...followUp, numeroDossierAssureur: event.target.value })} /></Field>
-            <Field label="Montant indemnise"><input type="number" value={followUp.montantIndemnise} onChange={(event) => setFollowUp({ ...followUp, montantIndemnise: Number(event.target.value) })} /></Field>
-            <Field label="Date paiement"><input type="date" value={followUp.datePaiement} onChange={(event) => setFollowUp({ ...followUp, datePaiement: event.target.value })} /></Field>
-            <p className="field-hint">A l'indemnisation, planifiez une remise en etat ou lancez une reforme si le bien est irreparable.</p>
-            <div className="modal-actions">
+        <div 
+          className="modal-overlay-premium" 
+          style={{ 
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+            backgroundColor: 'rgba(15, 23, 42, 0.75)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' 
+          }}
+        >
+          <div 
+            className="modal-card" 
+            style={{ 
+              background: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '500px',
+              display: 'flex', flexDirection: 'column',
+              maxHeight: '85vh', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 600 }}>Mise à jour du suivi assurance</h3>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <Field label="Numéro dossier assureur">
+                <input 
+                  value={followUp.numeroDossierAssureur} 
+                  onChange={(event) => setFollowUp({ ...followUp, numeroDossierAssureur: event.target.value })} 
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+              <Field label="Montant indemnisé (FCFA)">
+                <input 
+                  type="number" 
+                  value={followUp.montantIndemnise} 
+                  onChange={(event) => setFollowUp({ ...followUp, montantIndemnise: Number(event.target.value) })} 
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+              <Field label="Date de paiement">
+                <input 
+                  type="date" 
+                  value={followUp.datePaiement} 
+                  onChange={(event) => setFollowUp({ ...followUp, datePaiement: event.target.value })} 
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+              <div style={{ background: '#f0fdf4', color: '#166534', padding: '14px', borderRadius: '8px', fontSize: '0.9rem', border: '1px solid #bbf7d0', marginTop: '8px' }}>
+                <strong>Information :</strong> À l'indemnisation, planifiez une remise en état ou lancez une réforme si le bien est irréparable.
+              </div>
+            </div>
+
+            {/* Modal Footer (Fixed, Buttons Always Visible) */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                type="button" 
+                onClick={() => setFollowUp(null)} 
+                style={{ padding: '10px 20px', borderRadius: '8px', background: '#e2e8f0', color: '#475569', border: 'none', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Annuler
+              </button>
               <button
                 type="button"
                 className="primary"
                 disabled={savingFollowUp}
+                style={{ padding: '10px 24px', borderRadius: '8px', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.5)', border: 'none', cursor: 'pointer', background: 'var(--primary, #3b82f6)', color: 'white' }}
                 onClick={async () => {
                   if (!followUp) return;
                   try {
@@ -298,9 +352,9 @@ export default function SinistresPage() {
                     
                     await loadData();
                     setFollowUp(null);
-                    showToast({ type: "success", title: "Suivi assurance mis a jour" });
+                    showToast({ type: "success", title: "Suivi assurance mis à jour" });
                   } catch {
-                    showToast({ type: "error", title: "Mise a jour impossible" });
+                    showToast({ type: "error", title: "Mise à jour impossible" });
                   } finally {
                     setSavingFollowUp(false);
                   }
@@ -308,7 +362,6 @@ export default function SinistresPage() {
               >
                 {savingFollowUp ? "Enregistrement..." : "Enregistrer"}
               </button>
-              <button type="button" className="btn-export" onClick={() => setFollowUp(null)}>Fermer</button>
             </div>
           </div>
         </div>

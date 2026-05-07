@@ -391,208 +391,315 @@ export default function AffectationsPage() {
     setView("FORM");
   };
 
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(() =>
+    data.filter(item =>
+      !search ||
+      (item.bien?.designation || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.bien?.iup || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.service || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.detenteur || "").toLowerCase().includes(search.toLowerCase())
+    ), [data, search]);
+
+  const statsExtra = useMemo(() => ({
+    ...stats,
+    transferred: data.filter(i => normalizeValidationStatus(i.statutValidation) === "TRANSFERE").length,
+  }), [data, stats]);
+
   return (
-    <div className="module-container fade-in" style={{ padding: "24px" }}>
+    <div className="module-container fade-in" style={{ padding: "28px" }}>
       {showTimeline ? <MouvementTimeline mouvements={timelineData as never} onClose={() => setShowTimeline(false)} /> : null}
 
-      <header className="page-header-premium">
+      {/* PAGE HEADER */}
+      <header className="page-header-premium" style={{ marginBottom: 28 }}>
         <div className="header-meta">
-          <span className="badge-pill-glow">Tracabilite & detention</span>
-          <h1>Affectations des biens</h1>
-          <p className="header-subtitle">{stats.total} affectations | {stats.validated} validees | {stats.pending} en attente</p>
+          <span className="badge-pill-glow">Traçabilité & Détention</span>
+          <h1>Gestion des Affectations</h1>
+          <p className="header-subtitle">Suivi en temps réel des mouvements de biens et affectations aux services</p>
         </div>
         {view === "LIST" ? (
-          <button className="primary" type="button" onClick={() => setView("FORM")}>Nouvelle affectation</button>
+          <button className="primary" type="button" onClick={() => setView("FORM")}>
+            ＋ Nouvelle affectation
+          </button>
         ) : (
-          <button className="btn-export" type="button" onClick={() => { setView("LIST"); setForm(EMPTY_FORM); }}>Retour</button>
+          <button className="btn-export" type="button" onClick={() => { setView("LIST"); setForm(EMPTY_FORM); }}>
+            ← Retour à la liste
+          </button>
         )}
       </header>
 
+      {/* KPI BANNER */}
+      <div className="affectation-kpi-banner">
+        <div className="aff-kpi-card kpi-total">
+          <div className="aff-kpi-icon">📋</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value">{statsExtra.total}</span>
+            <span className="aff-kpi-label">Total</span>
+          </div>
+        </div>
+        <div className="aff-kpi-card kpi-valide">
+          <div className="aff-kpi-icon">✅</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value">{statsExtra.validated}</span>
+            <span className="aff-kpi-label">Validées</span>
+          </div>
+        </div>
+        <div className="aff-kpi-card kpi-attente">
+          <div className="aff-kpi-icon">⏳</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value">{statsExtra.pending}</span>
+            <span className="aff-kpi-label">En attente</span>
+          </div>
+        </div>
+        <div className="aff-kpi-card kpi-transfer">
+          <div className="aff-kpi-icon">🔄</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value">{statsExtra.transferred}</span>
+            <span className="aff-kpi-label">Transférés</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== FORM VIEW ===== */}
       {view === "FORM" ? (
-        <div className="centered-form-card fade-in">
-          <div className="form-header-premium">
+        <div className="aff-form-wrapper fade-in">
+          <div className="aff-form-hero">
+            <div className="aff-form-hero-icon">{form.id ? "✏️" : "📦"}</div>
             <div>
               <h2>{form.id ? "Modifier l'affectation" : "Nouvelle affectation"}</h2>
-              <p className="form-subtitle">Selection du bien, beneficiaire, service API et mise a jour automatique du statut.</p>
+              <p>Sélection du bien, bénéficiaire et service — mise à jour automatique du statut</p>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="premium-dynamic-form">
-            <div className="form-group-modern">
-              <label>Bien a affecter</label>
-              <BienSelector value={form.bien} onChange={(bien) => void handleBienChange(bien)} />
-              <ErrorText message={errors.bien} />
-              {form.bien?.service ? (
-                <span className="field-hint">Ce bien est actuellement affecte a {form.bien.service}. La nouvelle affectation le rebasculera.</span>
-              ) : null}
-            </div>
+          <div className="aff-form-body">
+            <form onSubmit={handleSubmit} className="premium-dynamic-form">
 
-            {form.bien ? (
-              <div className="recap-card" style={{ marginBottom: 20 }}>
-                <strong>{form.bien.designation || "Bien selectionne"}</strong>
-                <span>{form.bien.iup || "Sans IUP"} - {form.bien.statutOperationnel || "ACTIF"} - {form.bien.service || "Non affecte"}</span>
+              {/* Bien selector */}
+              <div className="form-group-modern">
+                <label>Bien à affecter</label>
+                <BienSelector value={form.bien} onChange={(bien) => void handleBienChange(bien)} />
+                <ErrorText message={errors.bien} />
+                {form.bien?.service ? (
+                  <span className="field-hint">Ce bien est actuellement affecté à <strong>{form.bien.service}</strong>. La nouvelle affectation le rebasculera.</span>
+                ) : null}
               </div>
-            ) : null}
 
-            {isTransferFlow ? (
-              <div className="recap-card" style={{ marginBottom: 20 }}>
-                <strong>Reaffectation / transfert</strong>
-                <span>Ce flux va basculer le bien vers un nouveau detenteur ou un nouveau service.</span>
-              </div>
-            ) : null}
-
-            {form.bien?.quantite && form.bien.quantite > 1 ? (
-              <div className="recap-card" style={{ marginBottom: 20 }}>
-                <strong>Bien gere en quantite</strong>
-                <span>{form.bien.quantite} unite(s) disponible(s) sur ce bien. L'affectation doit etre suivie avec vigilance tant que la decrementaion back n'est pas specialisee.</span>
-              </div>
-            ) : null}
-
-            <div className="segmented-control">
-              <button type="button" className={form.beneficiaryMode === "PERSONNE" ? "active" : ""} onClick={() => updateForm("beneficiaryMode", "PERSONNE")}>
-                Affecter a une personne
-              </button>
-              <button type="button" className={form.beneficiaryMode === "SERVICE" ? "active" : ""} onClick={() => updateForm("beneficiaryMode", "SERVICE")}>
-                Affecter a un service
-              </button>
-            </div>
-
-            {form.beneficiaryMode === "PERSONNE" ? (
-              <div className="grid-2">
-                <Field label="Matricule">
-                  <input value={form.matricule} onChange={(event) => updateForm("matricule", event.target.value)} />
-                  <small className="field-hint">
-                    {loadingMatricule
-                      ? "Recherche du matricule en cours..."
-                      : matriculeMatched
-                      ? "Utilisateur trouve et informations auto-remplies."
-                      : "Si aucun agent n'est trouve, complete les champs manuellement."}
-                  </small>
-                </Field>
-                <Field label="Fonction"><input value={form.fonction} onChange={(event) => updateForm("fonction", event.target.value)} /></Field>
-                <Field label="Nom" error={errors.nom}><input value={form.nom} onChange={(event) => updateForm("nom", event.target.value)} /></Field>
-                <Field label="Prenom"><input value={form.prenom} onChange={(event) => updateForm("prenom", event.target.value)} /></Field>
-                <Field label="Telephone"><input value={form.telephone} onChange={(event) => updateForm("telephone", event.target.value)} /></Field>
-                <Field label="Email"><input type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></Field>
-              </div>
-            ) : (
-              <div className="grid-2">
-                <Field label="Responsable de reception" error={errors.responsableReception}>
-                  <input value={form.responsableReception} onChange={(event) => updateForm("responsableReception", event.target.value)} />
-                </Field>
-              </div>
-            )}
-
-            <div className="grid-2">
-              <Field label="Service de destination" error={errors.service}>
-                <div className="field-inline">
-                  <select value={form.service} onChange={(event) => updateForm("service", event.target.value)}>
-                    <option value="">-- Choisir le service --</option>
-                    {services.map((service) => {
-                      const name = serviceName(service);
-                      return <option key={service.id} value={name}>{name}</option>;
-                    })}
-                  </select>
-                  <button type="button" className="btn-export" onClick={() => setShowServiceModal(true)}>+ Service</button>
+              {/* Recap cards */}
+              {form.bien ? (
+                <div className="aff-recap-card">
+                  <span className="recap-icon">🏷️</span>
+                  <div>
+                    <strong>{form.bien.designation || "Bien sélectionné"}</strong>
+                    <br />
+                    <span>{form.bien.iup || "Sans IUP"} · {form.bien.statutOperationnel || "ACTIF"} · {form.bien.service || "Non affecté"}</span>
+                  </div>
                 </div>
-              </Field>
-              <Field label="Origine">
-                <input value={form.detenteurA} onChange={(event) => updateForm("detenteurA", event.target.value)} />
-              </Field>
-              <Field label="Date d'affectation">
-                <input type="date" value={form.dateAffectation} onChange={(event) => updateForm("dateAffectation", event.target.value)} />
-              </Field>
-              <Field label="Bordereau signe">
-                <FileUpload onUploadSuccess={(url) => updateForm("signatureUrl", url)} />
-              </Field>
-              <Field label="Motif" error={errors.motif} span>
-                <textarea rows={3} value={form.motif} onChange={(event) => updateForm("motif", event.target.value)} />
-              </Field>
-            </div>
+              ) : null}
 
-            <button type="submit" className="primary" disabled={saving}>
-              {saving ? "Enregistrement..." : "Valider l'affectation"}
-            </button>
-          </form>
+              {isTransferFlow ? (
+                <div className="aff-recap-card" style={{ background: "linear-gradient(135deg,#fff7ed,#ffedd5)", borderColor: "#fed7aa" }}>
+                  <span className="recap-icon">🔄</span>
+                  <div>
+                    <strong style={{ color: "#9a3412" }}>Réaffectation / Transfert</strong>
+                    <br />
+                    <span style={{ color: "#c2410c" }}>Ce flux va basculer le bien vers un nouveau détenteur ou service.</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {form.bien?.quantite && form.bien.quantite > 1 ? (
+                <div className="aff-recap-card" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)", borderColor: "#86efac" }}>
+                  <span className="recap-icon">📊</span>
+                  <div>
+                    <strong style={{ color: "#14532d" }}>Bien géré en quantité</strong>
+                    <br />
+                    <span style={{ color: "#15803d" }}>{form.bien.quantite} unité(s) disponible(s) — l'affectation décrémente le stock.</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Segmented beneficiary mode */}
+              <div className="aff-segmented">
+                <button type="button" className={form.beneficiaryMode === "PERSONNE" ? "active" : ""} onClick={() => updateForm("beneficiaryMode", "PERSONNE")}>
+                  👤 Affecter à une personne
+                </button>
+                <button type="button" className={form.beneficiaryMode === "SERVICE" ? "active" : ""} onClick={() => updateForm("beneficiaryMode", "SERVICE")}>
+                  🏢 Affecter à un service
+                </button>
+              </div>
+
+              {form.beneficiaryMode === "PERSONNE" ? (
+                <div className="grid-2">
+                  <Field label="Matricule">
+                    <input value={form.matricule} onChange={(e) => updateForm("matricule", e.target.value)} placeholder="Ex: AGT-2024-001" />
+                    <small className="field-hint">
+                      {loadingMatricule ? "🔍 Recherche en cours..." : matriculeMatched ? "✅ Agent trouvé — champs auto-remplis" : "Saisir le matricule pour auto-complétion"}
+                    </small>
+                  </Field>
+                  <Field label="Fonction"><input value={form.fonction} onChange={(e) => updateForm("fonction", e.target.value)} /></Field>
+                  <Field label="Nom" error={errors.nom}><input value={form.nom} onChange={(e) => updateForm("nom", e.target.value)} /></Field>
+                  <Field label="Prénom"><input value={form.prenom} onChange={(e) => updateForm("prenom", e.target.value)} /></Field>
+                  <Field label="Téléphone"><input value={form.telephone} onChange={(e) => updateForm("telephone", e.target.value)} /></Field>
+                  <Field label="Email"><input type="email" value={form.email} onChange={(e) => updateForm("email", e.target.value)} /></Field>
+                </div>
+              ) : (
+                <div className="grid-2">
+                  <Field label="Responsable de réception" error={errors.responsableReception}>
+                    <input value={form.responsableReception} onChange={(e) => updateForm("responsableReception", e.target.value)} />
+                  </Field>
+                </div>
+              )}
+
+              <div className="grid-2">
+                <Field label="Service de destination" error={errors.service}>
+                  <div className="field-inline">
+                    <select value={form.service} onChange={(e) => updateForm("service", e.target.value)}>
+                      <option value="">— Choisir le service —</option>
+                      {services.map((s) => { const n = serviceName(s); return <option key={s.id} value={n}>{n}</option>; })}
+                    </select>
+                    <button type="button" className="btn-export" onClick={() => setShowServiceModal(true)}>+ Service</button>
+                  </div>
+                </Field>
+                <Field label="Origine (Détenteur précédent)">
+                  <input value={form.detenteurA} onChange={(e) => updateForm("detenteurA", e.target.value)} />
+                </Field>
+                <Field label="Date d'affectation">
+                  <input type="date" value={form.dateAffectation} onChange={(e) => updateForm("dateAffectation", e.target.value)} />
+                </Field>
+                <Field label="Bordereau signé">
+                  <FileUpload onUploadSuccess={(url) => updateForm("signatureUrl", url)} />
+                </Field>
+                <Field label="Motif" error={errors.motif} span>
+                  <textarea rows={3} value={form.motif} onChange={(e) => updateForm("motif", e.target.value)} placeholder="Motif de l'affectation ou du transfert..." />
+                </Field>
+              </div>
+
+              <button type="submit" className="primary" disabled={saving} style={{ marginTop: 8 }}>
+                {saving ? "⏳ Enregistrement..." : form.id ? "💾 Mettre à jour" : "✅ Valider l'affectation"}
+              </button>
+            </form>
+          </div>
         </div>
+
       ) : (
-        <div className="table-card">
-          <table className="patris-table">
-            <thead>
-              <tr>
-                <th>IUP</th>
-                <th>Designation</th>
-                <th>Affecte a</th>
-                <th>Service</th>
-                <th>Date</th>
-                <th>Statut</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((item) => (
-                <tr key={item.id}>
-                  <td className="monospace">{item.bien?.iup || "N/A"}</td>
-                  <td>{item.bien?.designation || "Bien non renseigne"}</td>
-                  <td>{item.detenteur || item.detenteurA || "-"}</td>
-                  <td>{item.service || "-"}</td>
-                  <td>{item.dateAffectation ? new Date(item.dateAffectation).toLocaleDateString("fr-FR") : "-"}</td>
-                  <td><span className={`status-badge status-${String(normalizeValidationStatus(item.statutValidation)).toLowerCase()}`}>{normalizeValidationStatus(item.statutValidation)}</span></td>
-                  <td>
-                    <div className="table-actions">
-                      <button type="button" onClick={() => openEdit(item)}>Modifier</button>
-                      <button type="button" onClick={() => void showHistory(item.bien?.id)}>Historique</button>
-                      <button type="button" onClick={() => setReturnModal({ affectation: item, motif: "", dateRetour: today })}>Retourner</button>
-                      <button type="button" onClick={() => openEdit(item)}>Transfert</button>
-                      {canValidate && normalizeValidationStatus(item.statutValidation) === "EN_ATTENTE" ? <button type="button" onClick={() => void handleValidate(item)}>Valider</button> : null}
-                      <button
-                        type="button"
-                        onClick={() => exportBordereauMutationExcel(item as Record<string, string | number | boolean | null | undefined>, `BM_${item.id}.xlsx`)}
-                      >
-                        XLS
-                      </button>
+        /* ===== LIST VIEW ===== */
+        <div className="affectation-list-wrapper fade-in">
+          <div className="affectation-list-toolbar">
+            <h2>📋 Liste des affectations ({filtered.length})</h2>
+            <input
+              className="aff-search-input"
+              placeholder="🔍 Rechercher par bien, service, agent..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="affectation-cards-grid">
+            {filtered.length === 0 ? (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                <p style={{ fontWeight: 600 }}>Aucune affectation trouvée</p>
+              </div>
+            ) : filtered.map((item) => {
+              const statut = normalizeValidationStatus(item.statutValidation);
+              return (
+                <div className="aff-card" key={item.id}>
+                  <div className="aff-card-header">
+                    <div>
+                      <span className="aff-card-iup">{item.bien?.iup || "N/A"}</span>
+                      <p className="aff-card-designation" style={{ marginTop: 6 }}>{item.bien?.designation || "Bien non renseigné"}</p>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span className={`aff-status-pill status-${statut.toLowerCase()}`}>{statut}</span>
+                  </div>
+
+                  <div className="aff-card-meta">
+                    <div className="aff-meta-row">
+                      <span>🏢</span><strong>Service</strong>{item.service || "—"}
+                    </div>
+                    <div className="aff-meta-row">
+                      <span>👤</span><strong>Détenteur</strong>{item.detenteur || item.detenteurA || "—"}
+                    </div>
+                    <div className="aff-meta-row">
+                      <span>📅</span><strong>Date</strong>{item.dateAffectation ? new Date(item.dateAffectation).toLocaleDateString("fr-FR") : "—"}
+                    </div>
+                  </div>
+
+                  <div className="aff-card-actions">
+                    <button className="aff-action-btn" type="button" onClick={() => openEdit(item)}>✏️ Modifier</button>
+                    <button className="aff-action-btn" type="button" onClick={() => void showHistory(item.bien?.id)}>📜 Historique</button>
+                    <button className="aff-action-btn btn-danger" type="button" onClick={() => setReturnModal({ affectation: item, motif: "", dateRetour: today })}>↩️ Retourner</button>
+                    <button className="aff-action-btn" type="button" onClick={() => openEdit(item)}>🔄 Transfert</button>
+                    {canValidate && statut === "EN_ATTENTE" ? (
+                      <button className="aff-action-btn btn-success" type="button" onClick={() => void handleValidate(item)}>✅ Valider</button>
+                    ) : null}
+                    <button
+                      className="aff-action-btn"
+                      type="button"
+                      onClick={() => exportBordereauMutationExcel(item as Record<string, string | number | boolean | null | undefined>, `BM_${item.id}.xlsx`)}
+                    >📊 XLS</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
+      {/* MODAL — Créer un service */}
       {showServiceModal ? (
-        <div className="modal-overlay-premium">
-          <div className="modal-card compact-modal">
-            <h3>Créer un service</h3>
-            <div className="grid-2">
-              <Field label="Nom service"><input value={serviceForm.nomService} onChange={(event) => setServiceForm((current) => ({ ...current, nomService: event.target.value }))} /></Field>
-              <Field label="Code"><input value={serviceForm.code} onChange={(event) => setServiceForm((current) => ({ ...current, code: event.target.value }))} /></Field>
-              <Field label="Direction"><input value={serviceForm.direction} onChange={(event) => setServiceForm((current) => ({ ...current, direction: event.target.value }))} /></Field>
-              <Field label="Responsable"><input value={serviceForm.responsable} onChange={(event) => setServiceForm((current) => ({ ...current, responsable: event.target.value }))} /></Field>
-              <Field label="Localisation" span><input value={serviceForm.localisation} onChange={(event) => setServiceForm((current) => ({ ...current, localisation: event.target.value }))} /></Field>
+        <div className="aff-modal-overlay">
+          <div className="aff-modal-card">
+            <div className="aff-modal-header">
+              <div className="aff-modal-header-icon">🏢</div>
+              <div>
+                <h3>Créer un nouveau service</h3>
+                <p>Ajoutez un service à l'annuaire de l'organisation</p>
+              </div>
             </div>
-            <ErrorText message={errors.serviceForm} />
-            <div className="modal-actions">
-              <button type="button" className="primary" onClick={() => void createServiceInline()}>Créer</button>
-              <button type="button" className="btn-export" onClick={() => setShowServiceModal(false)}>Annuler</button>
+            <div className="aff-modal-body">
+              <div className="grid-2">
+                <Field label="Nom du service"><input value={serviceForm.nomService} onChange={(e) => setServiceForm(c => ({ ...c, nomService: e.target.value }))} /></Field>
+                <Field label="Code"><input value={serviceForm.code} onChange={(e) => setServiceForm(c => ({ ...c, code: e.target.value }))} /></Field>
+                <Field label="Direction"><input value={serviceForm.direction} onChange={(e) => setServiceForm(c => ({ ...c, direction: e.target.value }))} /></Field>
+                <Field label="Responsable"><input value={serviceForm.responsable} onChange={(e) => setServiceForm(c => ({ ...c, responsable: e.target.value }))} /></Field>
+                <Field label="Localisation" span><input value={serviceForm.localisation} onChange={(e) => setServiceForm(c => ({ ...c, localisation: e.target.value }))} /></Field>
+              </div>
+              <ErrorText message={errors.serviceForm} />
+            </div>
+            <div className="aff-modal-footer">
+              <button className="btn-cancel" type="button" onClick={() => setShowServiceModal(false)}>Annuler</button>
+              <button className="btn-confirm" type="button" onClick={() => void createServiceInline()} disabled={savingService}>
+                {savingService ? "Création..." : "🏢 Créer le service"}
+              </button>
             </div>
           </div>
         </div>
       ) : null}
 
+      {/* MODAL — Retourner le bien */}
       {returnModal ? (
-        <div className="modal-overlay-premium">
-          <div className="modal-card compact-modal">
-            <h3>Retourner le bien</h3>
-            <Field label="Date retour">
-              <input type="date" value={returnModal.dateRetour} onChange={(event) => setReturnModal({ ...returnModal, dateRetour: event.target.value })} />
-            </Field>
-            <Field label="Motif obligatoire" error={errors.retour}>
-              <textarea rows={3} value={returnModal.motif} onChange={(event) => setReturnModal({ ...returnModal, motif: event.target.value })} />
-            </Field>
-            <div className="modal-actions">
-              <button type="button" className="primary" onClick={() => void handleReturn()}>Confirmer le retour</button>
-              <button type="button" className="btn-export" onClick={() => setReturnModal(null)}>Annuler</button>
+        <div className="aff-modal-overlay">
+          <div className="aff-modal-card">
+            <div className="aff-modal-header">
+              <div className="aff-modal-header-icon" style={{ background: "#fee2e2" }}>↩️</div>
+              <div>
+                <h3>Retourner le bien</h3>
+                <p>Le bien sera remis au stock actif et désaffecté</p>
+              </div>
+            </div>
+            <div className="aff-modal-body">
+              <Field label="Date de retour">
+                <input type="date" value={returnModal.dateRetour} onChange={(e) => setReturnModal({ ...returnModal, dateRetour: e.target.value })} />
+              </Field>
+              <Field label="Motif de retour (obligatoire)" error={errors.retour}>
+                <textarea rows={3} value={returnModal.motif} onChange={(e) => setReturnModal({ ...returnModal, motif: e.target.value })} placeholder="Raison du retour du bien..." />
+              </Field>
+            </div>
+            <div className="aff-modal-footer">
+              <button className="btn-cancel" type="button" onClick={() => setReturnModal(null)}>Annuler</button>
+              <button className="btn-confirm btn-danger-confirm" type="button" onClick={() => void handleReturn()} disabled={returning}>
+                {returning ? "Traitement..." : "↩️ Confirmer le retour"}
+              </button>
             </div>
           </div>
         </div>
@@ -610,3 +717,4 @@ function Field({ label, error, span = false, children }: React.PropsWithChildren
     </div>
   );
 }
+

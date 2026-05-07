@@ -14,6 +14,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import com.patris.enums.statut;
 
@@ -38,5 +39,6 @@ public class Bail {
     private statut statut; // ACTIF, TERMINE
 
     @ManyToOne
+    @JsonIgnore
     private Bien bien;
 }

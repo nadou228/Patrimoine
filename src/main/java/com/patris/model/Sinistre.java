@@ -36,6 +36,19 @@ public class Sinistre {
     private Double montantIndemnise;
     private String datePaiement;
     private String piecesJointes;
+    
+    @JsonProperty("piecesJointes")
+    public void setPiecesJointes(Object pieces) {
+        if (pieces instanceof java.util.List) {
+            this.piecesJointes = String.join(",", (java.util.List<String>) pieces);
+        } else if (pieces != null) {
+            this.piecesJointes = pieces.toString();
+        }
+    }
+    
+    public String getPiecesJointes() {
+        return piecesJointes;
+    }
     private String lieuSinistre;
     private java.time.LocalDate dateCloture;
     private String gravite;

@@ -43,17 +43,21 @@ public class MouvementService {
                 .orElseThrow(() -> new RuntimeException("Bien introuvable"));
         mouvement.setBien(bien);
 
-        // RÃ©solution du service source
-        Long sourceId = mouvement.getServiceSource().getId();
-        Services serviceSource = servicesRepository.findById(sourceId)
-                .orElseThrow(() -> new RuntimeException("Service source introuvable"));
-        mouvement.setServiceSource(serviceSource);
+        // Résolution du service source
+        if (mouvement.getServiceSource() != null && mouvement.getServiceSource().getId() != null) {
+            Long sourceId = mouvement.getServiceSource().getId();
+            Services serviceSource = servicesRepository.findById(sourceId)
+                    .orElseThrow(() -> new RuntimeException("Service source introuvable"));
+            mouvement.setServiceSource(serviceSource);
+        }
 
-        // RÃ©solution du service destination
-        Long destinationId = mouvement.getServiceDestination().getId();
-        Services serviceDestination = servicesRepository.findById(destinationId)
-                .orElseThrow(() -> new RuntimeException("Service destination introuvable"));
-        mouvement.setServiceDestination(serviceDestination);
+        // Résolution du service destination
+        if (mouvement.getServiceDestination() != null && mouvement.getServiceDestination().getId() != null) {
+            Long destinationId = mouvement.getServiceDestination().getId();
+            Services serviceDestination = servicesRepository.findById(destinationId)
+                    .orElseThrow(() -> new RuntimeException("Service destination introuvable"));
+            mouvement.setServiceDestination(serviceDestination);
+        }
 
         if (mouvement.getDateCreation() == null) {
             mouvement.setDateCreation(LocalDateTime.now());

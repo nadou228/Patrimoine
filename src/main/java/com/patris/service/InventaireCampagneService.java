@@ -67,6 +67,7 @@ public class InventaireCampagneService {
             fiche.setBien(bien);
             fiche.setCodeIup(bien.getIup());
             fiche.setEtatConstate("NON_VERIFIÉ");
+            fiche.setAnomalie(false);
             fiche.setValidationAgent(statutValidation.EN_ATTENTE);
             fiche.setValidationSuperviseur(statutValidation.EN_ATTENTE);
             ficheRepository.save(fiche);
@@ -98,12 +99,16 @@ public class InventaireCampagneService {
         String supervisor = SecurityContextHolder.getContext().getAuthentication().getName();
 
         List<InventaireFiche> fiches = ficheRepository.findByCampagneId(id);
-        long nonTraitees = fiches.stream()
+        List<InventaireFiche> nonTraiteesList = fiches.stream()
                 .filter(f -> f.getValidationSuperviseur() == com.patris.enums.statutValidation.EN_ATTENTE)
-                .count();
+                .toList();
         
-        if (nonTraitees > 0) {
-            throw new RuntimeException("Certification impossible : " + nonTraitees + " fiches n'ont pas encore été validées par le superviseur.");
+        if (!nonTraiteesList.isEmpty()) {
+            System.out.println("BLOCKING FICHES FOR CERTIFICATION (Campagne " + id + "):");
+            for (InventaireFiche f : nonTraiteesList) {
+                System.out.println(" - ID: " + f.getId() + " | IUP: " + f.getCodeIup() + " | Anomalie: " + f.getAnomalie());
+            }
+            throw new RuntimeException("Certification impossible : " + nonTraiteesList.size() + " fiches n'ont pas encore été validées par le superviseur.");
         }
 
         long ecartsNonValides = ecartRepository.countByCampagneIdAndStatutValidation(id, statutValidation.EN_ATTENTE);
