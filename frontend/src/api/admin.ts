@@ -75,8 +75,8 @@ export const getAllPermissions = async () => {
   return response.data;
 };
 
-export const updateRolePermissions = async (roleId: number, permissionCodes: string[]) => {
-  const response = await api.put(`/admin/roles/${roleId}/permissions`, permissionCodes);
+export const updateRolePermissions = async (roleCode: string, permissionCodes: string[]) => {
+  const response = await api.put(`/admin/roles/${roleCode}/permissions`, permissionCodes);
   return response.data;
 };
 
@@ -85,8 +85,13 @@ export const createRole = async (role: any) => {
   return response.data;
 };
 
-export const deleteRole = async (roleId: number) => {
-  await api.delete(`/admin/roles/${roleId}`);
+export const updateRoleMeta = async (roleCode: string, data: { libelle: string, description: string }) => {
+  const response = await api.put(`/admin/roles/${roleCode}`, data);
+  return response.data;
+};
+
+export const deleteRole = async (roleCode: string) => {
+  await api.delete(`/admin/roles/${roleCode}`);
 };
 export interface EtiquetteDto {
   iup: string;
