@@ -99,4 +99,14 @@ public abstract class Bien {
         this.archived = false;
         this.statutOperationnel = com.patris.enums.statutOperationnel.ACTIF;
     }
+
+    public String getCompteComptable() {
+        if (nomenclature != null && nomenclature.getCode() != null) {
+            return nomenclature.getCode();
+        }
+        if (codeFamille != null) {
+            return codeFamille;
+        }
+        return "2441"; // Default account
+    }
 }

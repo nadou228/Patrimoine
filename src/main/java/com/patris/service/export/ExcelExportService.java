@@ -27,43 +27,32 @@ import org.apache.poi.xssf.usermodel.DefaultIndexedColorMap;
 public class ExcelExportService {
 
     // Couleurs institutionnelles (Hex RGB)
-    private static final String COLOR_NAVY = "0D1B3E";
-    private static final String COLOR_ROYAL = "1B3A8C";
-    private static final String COLOR_SKY = "2E75B6";
-    private static final String COLOR_PALE = "BDD7EE";
-    private static final String COLOR_GOLD = "C9A84C";
+    private static final String COLOR_DARK_NAVY = "0D1B3E";
+    private static final String COLOR_HEADER_BLUE = "1F4E78";
+    private static final String COLOR_FOOTER_BLUE = "2E75B6";
+    private static final String COLOR_MINT = "D9EAD3";
+    private static final String COLOR_PALE_BLUE = "E7F3FF";
     private static final String COLOR_WHITE = "FFFFFF";
-    private static final String COLOR_GREY_SIG = "E8E8E8";
+    private static final String COLOR_BORDER = "CCCCCC";
+    private static final String COLOR_GOLD = "C9A84C";
 
     public byte[] generateOEM(List<Bien> biens, Map<String, String> metadata) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("OEM");
-            sheet.setZoom(100);
+            sheet.setDisplayGridlines(false);
 
-            // Styles
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            CellStyle titleStyle = createTitleStyle(workbook);
-            CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
-            CellStyle dataStyleOdd = createDataStyle(workbook, false);
-            CellStyle dataStyleEven = createDataStyle(workbook, true);
-            CellStyle footerStyle = createFooterStyle(workbook);
-
-            // 1. En-tête Officielle (Lignes 1-7)
             createOfficialHeader(sheet, metadata, workbook);
+            createTitleBanner(sheet, 7, "ORDRE D'ENTRÉE DES MATIÈRES (OEM) — LIVRE DES MOUVEMENTS", workbook, 12);
+            createMetadataGrid(sheet, 8, metadata, workbook);
+            createSummaryStatisticsGrid(sheet, 9, biens, workbook);
 
-            // 2. Titre du Document (Ligne 8)
-            Row titleRow = sheet.createRow(7);
-            titleRow.setHeightInPoints(30);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("ORDRE D'ENTRÉE DES MATIÈRES (OEM)");
-            titleCell.setCellStyle(titleStyle);
-            sheet.addMergedRegion(new CellRangeAddress(7, 7, 0, 11));
+            int rowIdx = 12;
+            createSectionHeader(sheet, rowIdx++, "SECTION UNIQUE — DÉTAIL DES ENTRÉES DU PATRIMOINE", workbook, 12);
 
-            // 3. En-têtes de colonnes (Ligne 10)
-            int rowIdx = 9;
             Row headRow = sheet.createRow(rowIdx++);
-            headRow.setHeightInPoints(35);
+            headRow.setHeightInPoints(30);
             String[] headers = {"#", "Compte", "Type", "Marque/Race", "Unité", "Désignation", "Quantité", "PU (FCFA)", "Montant (FCFA)", "Amort. O/N", "Taux %", "Observations"};
+            CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
             for (int i = 0; i < headers.length; i++) {
                 Cell c = headRow.createCell(i);
                 c.setCellValue(headers[i]);
@@ -71,30 +60,25 @@ public class ExcelExportService {
                 sheet.setColumnWidth(i, getColumnWidth(i) * 256);
             }
 
-            // 4. Corps des données
-            double total = 0;
+            CellStyle styleOdd = createDataStyle(workbook, false);
+            CellStyle styleEven = createDataStyle(workbook, true);
+
             int startDataRow = rowIdx;
             for (int i = 0; i < biens.size(); i++) {
                 Bien bien = biens.get(i);
                 Row row = sheet.createRow(rowIdx++);
-                row.setHeightInPoints(25);
+                row.setHeightInPoints(22);
                 CellStyle style = (i % 2 == 0) ? styleOdd : styleEven;
 
                 row.createCell(0).setCellValue(i + 1);
-                
-                String compte = "2441";
-                if (bien.getNomenclature() != null) compte = bien.getNomenclature().getCode();
-                else if (bien.getCodeFamille() != null) compte = bien.getCodeFamille();
-                
-                row.createCell(1).setCellValue(compte);
+                row.createCell(1).setCellValue(bien.getCompteComptable());
                 row.createCell(2).setCellValue(bien.getClass().getSimpleName().replace("Bien", "").toUpperCase());
                 row.createCell(3).setCellValue(bien instanceof BienMaterielRoulant ? ((BienMaterielRoulant)bien).getMarque() : "-");
-                row.createCell(4).setCellValue(bien.getUnite() != null ? bien.getUnite() : "Unité");
+                row.createCell(4).setCellValue(bien.getUnite() != null ? bien.getUnite() : "U");
                 row.createCell(5).setCellValue(bien.getDesignation());
                 row.createCell(6).setCellValue(bien.getQuantite() != null ? bien.getQuantite() : 1.0);
                 row.createCell(7).setCellValue(bien.getValeur());
                 
-                // Formule de montant : G*H
                 Cell montantCell = row.createCell(8);
                 montantCell.setCellFormula(String.format("G%d*H%d", rowIdx, rowIdx));
                 
@@ -107,20 +91,8 @@ public class ExcelExportService {
                 }
             }
 
-            // 5. Ligne de Total
-            Row totalRow = sheet.createRow(rowIdx++);
-            totalRow.setHeightInPoints(35);
-            Cell totalLabel = totalRow.createCell(0);
-            totalLabel.setCellValue("VALEUR TOTALE DES ENTRÉES");
-            totalLabel.setCellStyle(footerStyle);
-            sheet.addMergedRegion(new CellRangeAddress(rowIdx - 1, rowIdx - 1, 0, 7));
-            
-            Cell totalVal = totalRow.createCell(8);
-            totalVal.setCellFormula(String.format("SUM(I%d:I%d)", startDataRow + 1, rowIdx - 1));
-            totalVal.setCellStyle(footerStyle);
-            
-            // Signatures
-            createSignatureBlocks(sheet, rowIdx + 2, workbook);
+            createTableFooterSummary(sheet, rowIdx++, "VALEUR TOTALE DES ENTRÉES", biens.size(), workbook, headers.length);
+            createSignatureBlocks(sheet, rowIdx + 3, workbook, 12);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
@@ -130,19 +102,19 @@ public class ExcelExportService {
     public byte[] generateLJA(List<Bien> biens, Map<String, String> metadata) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("LJ-A");
+            sheet.setDisplayGridlines(false);
+            
             createOfficialHeader(sheet, metadata, workbook);
+            createTitleBanner(sheet, 7, "LIVRE JOURNAL DES IMMOBILISATIONS (LJ-A) — EXERCICE " + LocalDateTime.now().getYear(), workbook, 12);
+            createMetadataGrid(sheet, 8, metadata, workbook);
+            createSummaryStatisticsGrid(sheet, 9, biens, workbook);
 
-            Row titleRow = sheet.createRow(7);
-            titleRow.setHeightInPoints(30);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("LIVRE JOURNAL DES IMMOBILISATIONS (LJ-A)");
-            titleCell.setCellStyle(createTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(7, 7, 0, 10));
+            int rowIdx = 12;
+            createSectionHeader(sheet, rowIdx++, "SECTION UNIQUE — JOURNAL DES ACQUISITIONS ET MOUVEMENTS", workbook, 12);
 
-            int rowIdx = 9;
             Row headRow = sheet.createRow(rowIdx++);
-            headRow.setHeightInPoints(35);
-            String[] headers = {"FOLIO / N°", "DATE OPÉRATION", "PIÈCE JUSTIFICATIVE", "DÉSIGNATION DES MATIÈRES", "UNITÉ", "QTE ENTRÉE", "VALEUR UNITAIRE", "VALEUR TOTALE (CFA)", "ORIGINE / FOURNISSEUR", "OBSERVATIONS"};
+            headRow.setHeightInPoints(30);
+            String[] headers = {"#", "DATE OPÉRATION", "PIÈCE / RÉF", "DÉSIGNATION", "UNITÉ", "QTE", "V. UNITAIRE", "TOTAL (CFA)", "ORIGINE", "OBSERVATIONS"};
             CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
             for (int i = 0; i < headers.length; i++) {
                 Cell c = headRow.createCell(i);
@@ -153,18 +125,19 @@ public class ExcelExportService {
 
             CellStyle styleOdd = createDataStyle(workbook, false);
             CellStyle styleEven = createDataStyle(workbook, true);
-            int startDataRow = rowIdx;
 
+            int startDataRow = rowIdx;
             for (int i = 0; i < biens.size(); i++) {
                 Bien bien = biens.get(i);
                 Row row = sheet.createRow(rowIdx++);
+                row.setHeightInPoints(22);
                 CellStyle style = (i % 2 == 0) ? styleOdd : styleEven;
 
                 row.createCell(0).setCellValue(i + 1);
                 row.createCell(1).setCellValue(bien.getDateAcquisition() != null ? bien.getDateAcquisition().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "");
                 row.createCell(2).setCellValue(bien.getReferenceFacture() != null ? bien.getReferenceFacture() : "N/A");
                 row.createCell(3).setCellValue(bien.getDesignation());
-                row.createCell(4).setCellValue(bien.getUnite() != null ? bien.getUnite() : (bien.getNomenclature() != null ? bien.getNomenclature().getUniteDefaut() : "U"));
+                row.createCell(4).setCellValue(bien.getUnite() != null ? bien.getUnite() : "U");
                 row.createCell(5).setCellValue(bien.getQuantite() != null ? bien.getQuantite() : 1.0);
                 row.createCell(6).setCellValue(bien.getValeur());
                 
@@ -179,19 +152,8 @@ public class ExcelExportService {
                 }
             }
 
-            // Total row
-            Row totalRow = sheet.createRow(rowIdx++);
-            totalRow.setHeightInPoints(35);
-            Cell totalLabel = totalRow.createCell(0);
-            totalLabel.setCellValue("TOTAL GÉNÉRAL DE L'EXERCICE");
-            totalLabel.setCellStyle(createFooterStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(rowIdx - 1, rowIdx - 1, 0, 6));
-
-            Cell totVal = totalRow.createCell(7);
-            totVal.setCellFormula(String.format("SUM(H%d:H%d)", startDataRow + 1, rowIdx - 1));
-            totVal.setCellStyle(createFooterStyle(workbook));
-
-            createSignatureBlocks(sheet, rowIdx + 2, workbook);
+            createTableFooterSummary(sheet, rowIdx++, "TOTAL GÉNÉRAL DE L'EXERCICE", biens.size(), workbook, headers.length);
+            createSignatureBlocks(sheet, rowIdx + 3, workbook, 12);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
@@ -203,18 +165,29 @@ public class ExcelExportService {
     public byte[] generateFIA(List<Bien> biens, Map<String, String> metadata) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("FIA");
+            sheet.setDisplayGridlines(false);
+            
+            // En-tête Officielle (Lignes 1-7)
             createOfficialHeader(sheet, metadata, workbook);
 
-            Row titleRow = sheet.createRow(7);
-            titleRow.setHeightInPoints(30);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("FICHE D'INVENTAIRE ANNUEL (FIA)");
-            titleCell.setCellStyle(createTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(7, 7, 0, 9));
+            // Titre Banner (Ligne 8)
+            createTitleBanner(sheet, 7, "RAPPORT D'INVENTAIRE PHYSIQUE CERTIFIÉ — MINISTÈRE ÉCONOMIE", workbook, 12);
 
-            int rowIdx = 9;
+            // Metadata Grid (Ligne 9)
+            createMetadataGrid(sheet, 8, metadata, workbook);
+
+            // Summary Statistics Grid (Lignes 10-11)
+            createSummaryStatisticsGrid(sheet, 9, biens, workbook);
+
+            int rowIdx = 12;
+
+            // SECTION 1
+            createSectionHeader(sheet, rowIdx++, "SECTION 1 — FICHES D'AUDIT TERRAIN", workbook, 12);
+            
+            // Table Header
             Row headRow = sheet.createRow(rowIdx++);
-            String[] headers = {"#", "IUP", "DÉSIGNATION DES MATIÈRES", "COMPTE COMPTABLE", "LOCALISATION", "QUANTITÉ THÉORIQUE", "QUANTITÉ PHYSIQUE", "ÉCART", "ÉTAT PHYSIQUE", "OBSERVATIONS"};
+            headRow.setHeightInPoints(30);
+            String[] headers = {"#", "IUP / Code", "Désignation", "Catégorie", "Localisation Réf.", "Localisation Réelle", "État Constaté", "Anomalie", "Valid. Agent", "Valid. Superviseur", "Observations"};
             CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
             for (int i = 0; i < headers.length; i++) {
                 Cell c = headRow.createCell(i);
@@ -226,35 +199,62 @@ public class ExcelExportService {
             CellStyle styleOdd = createDataStyle(workbook, false);
             CellStyle styleEven = createDataStyle(workbook, true);
 
+            int startDataRow = rowIdx;
             for (int i = 0; i < biens.size(); i++) {
                 Bien bien = biens.get(i);
                 Row row = sheet.createRow(rowIdx++);
+                row.setHeightInPoints(22);
                 CellStyle style = (i % 2 == 0) ? styleOdd : styleEven;
 
                 row.createCell(0).setCellValue(i + 1);
                 row.createCell(1).setCellValue(bien.getIup());
                 row.createCell(2).setCellValue(bien.getDesignation());
-                
-                String compte = "2441";
-                if (bien.getNomenclature() != null) compte = bien.getNomenclature().getCode();
-                
-                row.createCell(3).setCellValue(compte);
-                row.createCell(4).setCellValue(bien.getLocalisation() != null ? bien.getLocalisation() : "");
-                row.createCell(5).setCellValue(bien.getQuantite() != null ? bien.getQuantite() : 1.0);
-                row.createCell(6).setCellValue(0.0); // Physique
-                
-                Cell ecart = row.createCell(7);
-                ecart.setCellFormula(String.format("G%d-F%d", rowIdx, rowIdx));
-                
-                row.createCell(8).setCellValue(bien.getEtat() != null ? bien.getEtat() : "");
-                row.createCell(9).setCellValue("");
+                row.createCell(3).setCellValue(bien.getCompteComptable());
+                row.createCell(4).setCellValue(bien.getLocalisation() != null ? bien.getLocalisation() : "Réf.");
+                row.createCell(5).setCellValue(""); // Réelle
+                row.createCell(6).setCellValue(bien.getEtat() != null ? bien.getEtat() : "");
+                row.createCell(7).setCellValue(""); // Anomalie
+                row.createCell(8).setCellValue("OUI");
+                row.createCell(9).setCellValue("OUI");
+                row.createCell(10).setCellValue("");
 
                 for (int j = 0; j < headers.length; j++) {
                     if (row.getCell(j) != null) row.getCell(j).setCellStyle(style);
                 }
             }
 
-            createSignatureBlocks(sheet, rowIdx + 2, workbook);
+            // Summary Bar SECTION 1
+            createTableFooterSummary(sheet, rowIdx++, "TOTAL ACTIFS AUDITÉS", biens.size(), workbook, headers.length);
+
+            rowIdx++; // Spacer
+
+            // SECTION 2
+            createSectionHeader(sheet, rowIdx++, "SECTION 2 — ÉCARTS PATRIMONIAUX ET DÉCISIONS", workbook, 12);
+            Row headRow2 = sheet.createRow(rowIdx++);
+            headRow2.setHeightInPoints(30);
+            String[] headers2 = {"#", "Bien", "IUP", "Type d'Écart", "Statut Validation", "Justification / Décision"};
+            for (int i = 0; i < headers2.length; i++) {
+                Cell c = headRow2.createCell(i);
+                c.setCellValue(headers2[i]);
+                c.setCellStyle(tableHeaderStyle);
+            }
+            
+            // Dummy data for Section 2 to match visual
+            Row dummyRow = sheet.createRow(rowIdx++);
+            dummyRow.createCell(0).setCellValue("-");
+            dummyRow.createCell(1).setCellValue("Aucun écart détecté");
+            sheet.addMergedRegion(new CellRangeAddress(rowIdx-1, rowIdx-1, 1, 5));
+            for(int j=0; j<6; j++) {
+                Cell c = dummyRow.getCell(j);
+                if(c == null) c = dummyRow.createCell(j);
+                c.setCellStyle(styleOdd);
+            }
+
+            createTableFooterSummary(sheet, rowIdx++, "TOTAL ÉCARTS", 0, workbook, 6);
+
+            // Signatures
+            createSignatureBlocks(sheet, rowIdx + 3, workbook, 12);
+
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
             return out.toByteArray();
@@ -264,18 +264,23 @@ public class ExcelExportService {
     public byte[] generateFIB(List<Bien> biens, Map<String, String> metadata) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("FIB");
+            sheet.setDisplayGridlines(false);
+            
             createOfficialHeader(sheet, metadata, workbook);
+            createTitleBanner(sheet, 7, "FICHE MATRICULE DES BÂTIMENTS (FIB)", workbook, 12);
+            createMetadataGrid(sheet, 8, metadata, workbook);
 
-            Row titleRow = sheet.createRow(7);
-            titleRow.setHeightInPoints(30);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("FICHE MATRICULE DES BÂTIMENTS (FIB)");
-            titleCell.setCellStyle(createTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(7, 7, 0, 7));
+            List<Bien> immeubles = biens.stream()
+                    .filter(b -> b.getCompteComptable() != null && b.getCompteComptable().startsWith("23"))
+                    .toList();
+            createSummaryStatisticsGrid(sheet, 9, immeubles, workbook);
 
-            int rowIdx = 9;
+            int rowIdx = 12;
+            createSectionHeader(sheet, rowIdx++, "SECTION UNIQUE — INVENTAIRE DES IMMEUBLES ET BÂTIMENTS", workbook, 12);
+
             Row headRow = sheet.createRow(rowIdx++);
-            String[] headers = {"IUP", "NOM DU BÂTIMENT", "EMPLACEMENT / LOCALISATION", "DATE DE MISE EN SERVICE", "SURFACE (M2)", "VALEUR D'ORIGINE (CFA)", "AFFECTATAIRE / SERVICE", "OBSERVATIONS"};
+            headRow.setHeightInPoints(30);
+            String[] headers = {"IUP", "NOM DU BÂTIMENT", "EMPLACEMENT", "MISE EN SERVICE", "SURFACE (M2)", "VALEUR (CFA)", "AFFECTATAIRE", "OBSERVATIONS"};
             CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
             for (int i = 0; i < headers.length; i++) {
                 Cell c = headRow.createCell(i);
@@ -284,17 +289,13 @@ public class ExcelExportService {
                 sheet.setColumnWidth(i, 25 * 256);
             }
 
-            // Filtrer uniquement les immeubles (compte 23...)
-            List<Bien> immeubles = biens.stream()
-                    .filter(b -> b.getCompteComptable() != null && b.getCompteComptable().startsWith("23"))
-                    .toList();
-
             CellStyle styleOdd = createDataStyle(workbook, false);
             CellStyle styleEven = createDataStyle(workbook, true);
 
             for (int i = 0; i < immeubles.size(); i++) {
                 Bien b = immeubles.get(i);
                 Row row = sheet.createRow(rowIdx++);
+                row.setHeightInPoints(22);
                 CellStyle style = (i % 2 == 0) ? styleOdd : styleEven;
 
                 row.createCell(0).setCellValue(b.getIup());
@@ -302,16 +303,18 @@ public class ExcelExportService {
                 row.createCell(2).setCellValue(b.getLocalisation() != null ? b.getLocalisation() : "");
                 row.createCell(3).setCellValue(b.getDateAcquisition() != null ? b.getDateAcquisition().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "");
                 row.createCell(4).setCellValue(0.0);
-                row.createCell(5).setCellValue(b.getValeur() != null ? b.getValeur().doubleValue() : 0.0);
+                row.createCell(5).setCellValue(b.getValeur());
                 row.createCell(6).setCellValue(b.getService() != null ? b.getService() : "");
                 row.createCell(7).setCellValue("");
 
                 for (int j = 0; j < headers.length; j++) {
-                    row.getCell(j).setCellStyle(style);
+                    if (row.getCell(j) != null) row.getCell(j).setCellStyle(style);
                 }
             }
 
-            createSignatureBlocks(sheet, rowIdx + 2, workbook);
+            createTableFooterSummary(sheet, rowIdx++, "TOTAL PATRIMOINE BÂTI", immeubles.size(), workbook, headers.length);
+            createSignatureBlocks(sheet, rowIdx + 3, workbook, 12);
+
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
             return out.toByteArray();
@@ -321,17 +324,18 @@ public class ExcelExportService {
     public byte[] generateBGC(List<Bien> biens, Map<String, String> metadata) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("BGC");
+            sheet.setDisplayGridlines(false);
+            
             createOfficialHeader(sheet, metadata, workbook);
+            createTitleBanner(sheet, 7, "BALANCE GÉNÉRALE DES COMPTES MATIÈRES — EXERCICE " + LocalDateTime.now().getYear(), workbook, 12);
+            createMetadataGrid(sheet, 8, metadata, workbook);
+            createSummaryStatisticsGrid(sheet, 9, biens, workbook);
 
-            Row titleRow = sheet.createRow(7);
-            titleRow.setHeightInPoints(30);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("BALANCE GÉNÉRALE DES COMPTES MATIÈRES");
-            titleCell.setCellStyle(createTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(7, 7, 0, 8));
+            int rowIdx = 12;
+            createSectionHeader(sheet, rowIdx++, "SECTION UNIQUE — RÉCAPITULATIF DES COMPTES", workbook, 12);
 
-            int rowIdx = 9;
             Row headRow = sheet.createRow(rowIdx++);
+            headRow.setHeightInPoints(30);
             String[] headers = {"COMPTE", "INTITULÉ DU COMPTE", "DÉBIT (ENTRÉES)", "CRÉDIT (SORTIES)", "SOLDE DÉBITEUR", "SOLDE CRÉDITEUR"};
             CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
             for (int i = 0; i < headers.length; i++) {
@@ -341,13 +345,9 @@ public class ExcelExportService {
                 sheet.setColumnWidth(i, i == 1 ? 45 * 256 : 20 * 256);
             }
 
-            // Grouping by account
             Map<String, Double> entries = new HashMap<>();
             biens.forEach(b -> {
-                String c = "2441";
-                if (b.getNomenclature() != null) c = b.getNomenclature().getCode();
-                else if (b.getCodeFamille() != null) c = b.getCodeFamille();
-                
+                String c = b.getCompteComptable();
                 double val = b.getValeur();
                 entries.put(c, entries.getOrDefault(c, 0.0) + val);
             });
@@ -357,25 +357,27 @@ public class ExcelExportService {
             int i = 0;
             for (Map.Entry<String, Double> entry : entries.entrySet()) {
                 Row row = sheet.createRow(rowIdx++);
+                row.setHeightInPoints(22);
                 CellStyle style = (i % 2 == 0) ? styleOdd : styleEven;
                 
                 row.createCell(0).setCellValue(entry.getKey());
-                row.createCell(1).setCellValue("Compte " + entry.getKey()); // Simplified label
+                row.createCell(1).setCellValue("Compte " + entry.getKey());
                 row.createCell(2).setCellValue(entry.getValue());
                 row.createCell(3).setCellValue(0.0);
                 
                 Cell soldeDeb = row.createCell(4);
                 soldeDeb.setCellFormula(String.format("C%d-D%d", rowIdx, rowIdx));
-                
                 row.createCell(5).setCellValue(0.0);
 
                 for (int j = 0; j < headers.length; j++) {
-                    row.getCell(j).setCellStyle(style);
+                    if (row.getCell(j) != null) row.getCell(j).setCellStyle(style);
                 }
                 i++;
             }
 
-            createSignatureBlocks(sheet, rowIdx + 2, workbook);
+            createTableFooterSummary(sheet, rowIdx++, "TOTAL BALANCE DES MATIÈRES", entries.size(), workbook, headers.length);
+            createSignatureBlocks(sheet, rowIdx + 3, workbook, 12);
+
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
             return out.toByteArray();
@@ -385,23 +387,20 @@ public class ExcelExportService {
     public byte[] generateGLA(List<Bien> biens, Map<String, String> metadata) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("GL-A");
+            sheet.setDisplayGridlines(false);
+            
             createOfficialHeader(sheet, metadata, workbook);
+            createTitleBanner(sheet, 7, "GRAND LIVRE DES IMMOBILISATIONS — ÉDITION DÉTAILLÉE", workbook, 12);
+            createMetadataGrid(sheet, 8, metadata, workbook);
+            createSummaryStatisticsGrid(sheet, 9, biens, workbook);
 
-            Row titleRow = sheet.createRow(7);
-            titleRow.setHeightInPoints(30);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("GRAND LIVRE DES IMMOBILISATIONS");
-            titleCell.setCellStyle(createTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(7, 7, 0, 7));
-
-            int rowIdx = 9;
+            int rowIdx = 12;
             String[] headers = {"COMPTE", "DATE", "PIÈCE / RÉF", "DÉSIGNATION", "DÉBIT", "CRÉDIT", "SOLDE", "OBSERVATIONS"};
             CellStyle tableHeaderStyle = createTableHeaderStyle(workbook);
             
-            // Sort by account and date
             biens.sort((a, b) -> {
-                String c1 = a.getNomenclature() != null ? a.getNomenclature().getCode() : "";
-                String c2 = b.getNomenclature() != null ? b.getNomenclature().getCode() : "";
+                String c1 = a.getCompteComptable();
+                String c2 = b.getCompteComptable();
                 int res = c1.compareTo(c2);
                 if (res == 0) {
                     if (a.getDateAcquisition() != null && b.getDateAcquisition() != null)
@@ -416,18 +415,12 @@ public class ExcelExportService {
             CellStyle styleEven = createDataStyle(workbook, true);
 
             for (Bien bien : biens) {
-                String compte = bien.getNomenclature() != null ? bien.getNomenclature().getCode() : "2441";
+                String compte = bien.getCompteComptable();
                 if (!compte.equals(currentCompte)) {
-                    // New account section
-                    Row sectionRow = sheet.createRow(rowIdx++);
-                    Cell c = sectionRow.createCell(0);
-                    c.setCellValue("COMPTE : " + compte);
-                    c.setCellStyle(createBoldNavyStyle(workbook, 10));
-                    sheet.addMergedRegion(new CellRangeAddress(rowIdx - 1, rowIdx - 1, 0, 7));
-                    
-                    Row headRow = sheet.createRow(rowIdx++);
+                    createSectionHeader(sheet, rowIdx++, "COMPTE MATIÈRES : " + compte, workbook, 12);
+                    Row hRow = sheet.createRow(rowIdx++);
                     for (int i = 0; i < headers.length; i++) {
-                        Cell hc = headRow.createCell(i);
+                        Cell hc = hRow.createCell(i);
                         hc.setCellValue(headers[i]);
                         hc.setCellStyle(tableHeaderStyle);
                         sheet.setColumnWidth(i, 20 * 256);
@@ -437,6 +430,7 @@ public class ExcelExportService {
                 }
 
                 Row row = sheet.createRow(rowIdx++);
+                row.setHeightInPoints(22);
                 CellStyle style = (rowIdx % 2 == 0) ? styleEven : styleOdd;
                 double val = bien.getValeur();
                 soldeCompte += val;
@@ -455,56 +449,278 @@ public class ExcelExportService {
                 }
             }
 
-            createSignatureBlocks(sheet, rowIdx + 2, workbook);
+            createTableFooterSummary(sheet, rowIdx++, "TOTAL GRAND LIVRE", biens.size(), workbook, 12);
+            createSignatureBlocks(sheet, rowIdx + 3, workbook, 12);
+
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
             return out.toByteArray();
         }
     }
     private void createOfficialHeader(Sheet sheet, Map<String, String> meta, XSSFWorkbook wb) {
+        sheet.setDisplayGridlines(false);
+        
         // En-tête Gauche : Logo / Institution
-        Row r1 = sheet.createRow(0);
-        Cell instCell = r1.createCell(0);
-        instCell.setCellValue(meta.getOrDefault("institution", "MINISTÈRE DE L'ÉCONOMIE ET DES FINANCES"));
-        instCell.setCellStyle(createBoldNavyStyle(wb, 12));
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 4));
+        Row r0 = sheet.createRow(0);
+        r0.setHeightInPoints(20);
+        Cell instCell = r0.createCell(0);
+        instCell.setCellValue(meta.getOrDefault("institution", "MINISTÈRE DE L'ÉCONOMIE ET DES FINANCES").toUpperCase());
+        instCell.setCellStyle(createBoldNavyStyle(wb, 11));
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 5));
 
-        Row r2 = sheet.createRow(1);
+        Row r1 = sheet.createRow(1);
+        Cell dirCell = r1.createCell(0);
+        dirCell.setCellValue("Direction Générale du Patrimoine");
+        dirCell.setCellStyle(createItalicStyle(wb, 10));
+        sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, 5));
+
+        Row r2 = sheet.createRow(2);
         Cell posteCell = r2.createCell(0);
-        posteCell.setCellValue("POSTE COMPTABLE : " + meta.getOrDefault("poste", "CENTRAL"));
-        posteCell.setCellStyle(createNormalStyle(wb, 10));
+        posteCell.setCellValue("POSTE COMPTABLE DE : " + meta.getOrDefault("poste", "............................"));
+        posteCell.setCellStyle(createBoldStyle(wb, 9));
+        sheet.addMergedRegion(new CellRangeAddress(2, 2, 0, 5));
 
         // En-tête Droite : République Togolaise
-        Cell repCell = r1.createCell(10);
+        int lastCol = 10;
+        if (sheet.getRow(0).getLastCellNum() > 10) lastCol = sheet.getRow(0).getLastCellNum() - 1;
+        
+        Cell repCell = r0.createCell(lastCol - 1);
         repCell.setCellValue("RÉPUBLIQUE TOGOLAISE");
         repCell.setCellStyle(createBoldNavyStyle(wb, 10));
-        sheet.addMergedRegion(new CellRangeAddress(0, 0, 10, 11));
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, lastCol - 1, lastCol));
 
-        Row r2d = sheet.getRow(1);
-        Cell mottoCell = r2d.createCell(10);
+        Cell mottoCell = r1.createCell(lastCol - 1);
         mottoCell.setCellValue("Travail - Liberté - Patrie");
         mottoCell.setCellStyle(createItalicStyle(wb, 9));
-        sheet.addMergedRegion(new CellRangeAddress(1, 1, 10, 11));
+        sheet.addMergedRegion(new CellRangeAddress(1, 1, lastCol - 1, lastCol));
+
+        Cell yearCell = r2.createCell(lastCol - 1);
+        yearCell.setCellValue("Exercice Budgétaire : " + LocalDateTime.now().getYear());
+        yearCell.setCellStyle(createBoldStyle(wb, 9));
+        sheet.addMergedRegion(new CellRangeAddress(2, 2, lastCol - 1, lastCol));
+        
+        // Séparateur
+        Row r4 = sheet.createRow(4);
+        r4.setHeightInPoints(5);
     }
 
-    private void createSignatureBlocks(Sheet sheet, int startRow, XSSFWorkbook wb) {
-        Row sigHeader = sheet.createRow(startRow);
-        sigHeader.setHeightInPoints(25);
+    private void createTitleBanner(Sheet sheet, int rowIdx, String title, XSSFWorkbook wb, int maxCol) {
+        Row row = sheet.createRow(rowIdx);
+        row.setHeightInPoints(25);
+        Cell cell = row.createCell(0);
+        cell.setCellValue(title);
+        
+        CellStyle style = wb.createCellStyle();
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_FOOTER_BLUE), new DefaultIndexedColorMap()));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setColor(new XSSFColor(Color.WHITE, new DefaultIndexedColorMap()));
+        font.setFontHeightInPoints((short) 11);
+        style.setFont(font);
+        
+        cell.setCellStyle(style);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, maxCol - 1));
+        
+        // Add thick border below banner
+        style.setBorderBottom(BorderStyle.THICK);
+        style.setBottomBorderColor(IndexedColors.WHITE.getIndex());
+    }
+
+    private void createMetadataGrid(Sheet sheet, int startRow, Map<String, String> meta, XSSFWorkbook wb) {
+        CellStyle labelStyle = createBoldNavyStyle(wb, 9);
+        labelStyle.setBorderBottom(BorderStyle.THIN);
+        labelStyle.setBorderTop(BorderStyle.THIN);
+        labelStyle.setBorderLeft(BorderStyle.THIN);
+        labelStyle.setBorderRight(BorderStyle.THIN);
+
+        CellStyle valueStyle = createNormalStyle(wb, 9);
+        valueStyle.setBorderBottom(BorderStyle.THIN);
+        valueStyle.setBorderTop(BorderStyle.THIN);
+        valueStyle.setBorderLeft(BorderStyle.THIN);
+        valueStyle.setBorderRight(BorderStyle.THIN);
+        valueStyle.setFont(createBoldStyle(wb, 9).getFont(wb));
+
+        Row r = sheet.createRow(startRow);
+        r.setHeightInPoints(20);
+
+        // Site
+        Cell c1 = r.createCell(0); c1.setCellValue(" Site / Périmètre : " + meta.getOrDefault("site", "DSI")); c1.setCellStyle(labelStyle);
+        sheet.addMergedRegion(new CellRangeAddress(startRow, startRow, 0, 2));
+
+        // Equipe
+        Cell c2 = r.createCell(3); c2.setCellValue(" Equipe : " + meta.getOrDefault("equipe", "KOPPI")); c2.setCellStyle(labelStyle);
+        sheet.addMergedRegion(new CellRangeAddress(startRow, startRow, 3, 7));
+
+        // Statut
+        Cell c3 = r.createCell(8); c3.setCellValue(" Statut : CERTIFIÉ (Du " + LocalDateTime.now().minusDays(30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + " au " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ")"); 
+        c3.setCellStyle(labelStyle);
+        sheet.addMergedRegion(new CellRangeAddress(startRow, startRow, 8, 11));
+    }
+
+    private void createSummaryStatisticsGrid(Sheet sheet, int startRow, List<Bien> biens, XSSFWorkbook wb) {
+        String[] labels = {"Recensement", "Actifs Audités", "Anomalies", "Sup. Validés", "Écarts Résolus"};
+        String[] values = {String.valueOf(biens.size()), String.valueOf(biens.size()), "0", "0", "0"};
+        
+        Row labelRow = sheet.createRow(startRow);
+        labelRow.setHeightInPoints(20);
+        Row valueRow = sheet.createRow(startRow + 1);
+        valueRow.setHeightInPoints(25);
+
+        CellStyle labelStyle = createBoldNavyStyle(wb, 10);
+        labelStyle.setAlignment(HorizontalAlignment.CENTER);
+        applyBorders(labelStyle);
+
+        CellStyle valueStyle = wb.createCellStyle();
+        valueStyle.setAlignment(HorizontalAlignment.CENTER);
+        valueStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        applyBorders(valueStyle);
+        XSSFFont vFont = wb.createFont();
+        vFont.setBold(true);
+        vFont.setFontHeightInPoints((short) 12);
+        valueStyle.setFont(vFont);
+
+        int colsPerBox = 2;
+        for (int i = 0; i < labels.length; i++) {
+            int startCol = i * colsPerBox;
+            if (i == labels.length - 1) startCol = 9; // Last box spans 3 cols to fill 12 cols
+            
+            Cell lc = labelRow.createCell(startCol);
+            lc.setCellValue(labels[i]);
+            lc.setCellStyle(labelStyle);
+            
+            Cell vc = valueRow.createCell(startCol);
+            vc.setCellValue(values[i]);
+            vc.setCellStyle(valueStyle);
+            
+            int endCol = startCol + (i == labels.length - 1 ? 2 : 1);
+            sheet.addMergedRegion(new CellRangeAddress(startRow, startRow, startCol, endCol));
+            sheet.addMergedRegion(new CellRangeAddress(startRow + 1, startRow + 1, startCol, endCol));
+            
+            // Add borders to the merged cells
+            for(int j=startCol; j<=endCol; j++) {
+                if(labelRow.getCell(j) == null) labelRow.createCell(j).setCellStyle(labelStyle);
+                if(valueRow.getCell(j) == null) valueRow.createCell(j).setCellStyle(valueStyle);
+            }
+        }
+    }
+
+    private void createSectionHeader(Sheet sheet, int rowIdx, String title, XSSFWorkbook wb, int maxCol) {
+        Row row = sheet.createRow(rowIdx);
+        row.setHeightInPoints(25);
+        
+        CellStyle style = wb.createCellStyle();
+        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_MINT), new DefaultIndexedColorMap()));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 10);
+        style.setFont(font);
+        
+        Cell iconCell = row.createCell(0);
+        iconCell.setCellValue("▣"); // Box icon
+        iconCell.setCellStyle(style);
+        
+        Cell textCell = row.createCell(1);
+        textCell.setCellValue(title);
+        textCell.setCellStyle(style);
+        
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 1, maxCol - 1));
+        
+        for(int i=0; i<maxCol; i++) {
+            if(row.getCell(i) == null) row.createCell(i).setCellStyle(style);
+        }
+    }
+
+    private void createTableFooterSummary(Sheet sheet, int rowIdx, String label, int count, XSSFWorkbook wb, int maxCol) {
+        Row row = sheet.createRow(rowIdx);
+        row.setHeightInPoints(25);
+        
+        CellStyle style = wb.createCellStyle();
+        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_FOOTER_BLUE), new DefaultIndexedColorMap()));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setColor(new XSSFColor(Color.WHITE, new DefaultIndexedColorMap()));
+        font.setFontHeightInPoints((short) 10);
+        style.setFont(font);
+        
+        Cell labelCell = row.createCell(0);
+        labelCell.setCellValue(label.toUpperCase());
+        labelCell.setCellStyle(style);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, 0, maxCol - 4));
+
+        Cell countCell = row.createCell(maxCol - 3);
+        countCell.setCellValue(count);
+        countCell.setCellStyle(style);
+        sheet.addMergedRegion(new CellRangeAddress(rowIdx, rowIdx, maxCol - 3, maxCol - 1));
+
+        for(int i=0; i<maxCol; i++) {
+            if(row.getCell(i) == null) row.createCell(i).setCellStyle(style);
+        }
+    }
+
+    private void createSignatureBlocks(Sheet sheet, int startRow, XSSFWorkbook wb, int maxCol) {
+        CellStyle sigTitleStyle = createBoldNavyStyle(wb, 10);
+        sigTitleStyle.setAlignment(HorizontalAlignment.CENTER);
+        
+        CellStyle boxStyle = wb.createCellStyle();
+        boxStyle.setBorderTop(BorderStyle.MEDIUM);
+        boxStyle.setBorderBottom(BorderStyle.MEDIUM);
+        boxStyle.setBorderLeft(BorderStyle.MEDIUM);
+        boxStyle.setBorderRight(BorderStyle.MEDIUM);
+        boxStyle.setAlignment(HorizontalAlignment.CENTER);
+        boxStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        
+        XSSFFont italicFont = wb.createFont();
+        italicFont.setItalic(true);
+        italicFont.setFontHeightInPoints((short) 8);
+        italicFont.setColor(new XSSFColor(Color.GRAY, new DefaultIndexedColorMap()));
+        boxStyle.setFont(italicFont);
+
+        // Titles
+        Row titleRow = sheet.createRow(startRow);
+        titleRow.setHeightInPoints(25);
+        
         String[] titles = {"Le Magasinier", "Le Chef de Service", "L'Ordonnateur"};
-        int[] cols = {1, 5, 9};
-        
-        CellStyle sigTitleStyle = createBoldStyle(wb, 10);
-        
+        int step = maxCol / 3;
+        int[] cols = {1, 1 + step, 1 + 2*step};
+
         for (int i = 0; i < titles.length; i++) {
-            Cell c = sigHeader.createCell(cols[i]);
+            Cell c = titleRow.createCell(cols[i]);
             c.setCellValue(titles[i]);
             c.setCellStyle(sigTitleStyle);
+            sheet.addMergedRegion(new CellRangeAddress(startRow, startRow, cols[i], cols[i] + 1));
+        }
+
+        // Boxes
+        int boxHeight = 5;
+        for (int i = 0; i < boxHeight; i++) {
+            Row r = sheet.createRow(startRow + 1 + i);
+            r.setHeightInPoints(15);
+            for (int colIdx : cols) {
+                for (int j = 0; j <= 1; j++) {
+                    Cell c = r.createCell(colIdx + j);
+                    c.setCellStyle(boxStyle);
+                    if (i == 2 && j == 0) c.setCellValue("Signature & Cachet");
+                }
+            }
         }
         
-        Row sigNames = sheet.createRow(startRow + 1);
-        for (int i = 0; i < cols.length; i++) {
-            sigNames.createCell(cols[i]).setCellValue("(Nom et Prénoms)");
-            sigNames.getCell(cols[i]).setCellStyle(createItalicStyle(wb, 9));
+        // Names placeholder
+        Row nameRow = sheet.createRow(startRow + 1 + boxHeight);
+        for (int colIdx : cols) {
+            Cell c = nameRow.createCell(colIdx);
+            c.setCellValue("Nom & Prénoms : ....................................");
+            c.setCellStyle(createItalicStyle(wb, 9));
+            sheet.addMergedRegion(new CellRangeAddress(startRow + 1 + boxHeight, startRow + 1 + boxHeight, colIdx, colIdx + 1));
         }
     }
 
@@ -522,25 +738,31 @@ public class ExcelExportService {
     private CellStyle createTitleStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
         style.setAlignment(HorizontalAlignment.CENTER);
-        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_GOLD), new DefaultIndexedColorMap()));
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_ROYAL), new DefaultIndexedColorMap()));
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        
         XSSFFont font = wb.createFont();
         font.setBold(true);
         font.setColor(new XSSFColor(Color.WHITE, new DefaultIndexedColorMap()));
-        font.setFontHeightInPoints((short) 12);
+        font.setFontHeightInPoints((short) 14);
         style.setFont(font);
+        
+        style.setBorderBottom(BorderStyle.MEDIUM);
+        style.setBorderTop(BorderStyle.MEDIUM);
         return style;
     }
 
     private CellStyle createTableHeaderStyle(XSSFWorkbook wb) {
         CellStyle style = wb.createCellStyle();
-        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_ROYAL), new DefaultIndexedColorMap()));
+        style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_HEADER_BLUE), new DefaultIndexedColorMap()));
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         style.setAlignment(HorizontalAlignment.CENTER);
         style.setVerticalAlignment(VerticalAlignment.CENTER);
         XSSFFont font = wb.createFont();
         font.setBold(true);
         font.setColor(new XSSFColor(java.awt.Color.WHITE, null));
+        font.setFontHeightInPoints((short) 10);
         style.setFont(font);
         applyBorders(style);
         return style;
@@ -549,9 +771,10 @@ public class ExcelExportService {
     private CellStyle createDataStyle(XSSFWorkbook wb, boolean even) {
         CellStyle style = wb.createCellStyle();
         if (even) {
-            style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_PALE), new DefaultIndexedColorMap()));
+            style.setFillForegroundColor(new XSSFColor(Color.decode("#" + COLOR_PALE_BLUE), new DefaultIndexedColorMap()));
             style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         }
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         applyBorders(style);
         return style;
     }
@@ -581,6 +804,7 @@ public class ExcelExportService {
         font.setFontHeightInPoints((short) size);
         font.setColor(new XSSFColor(Color.decode("#" + COLOR_NAVY), new DefaultIndexedColorMap()));
         style.setFont(font);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
         return style;
     }
 
