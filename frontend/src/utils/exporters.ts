@@ -78,14 +78,33 @@ async function createStyledWorkbook(title: string, columns: any[], rows: any[], 
   // Ligne 3 — Sous-titre document
   // ... (construire selon chaque type de document)
   
+  // Ligne 2 : Poste Comptable / Institution
+  ws.mergeCells(`A2:${String.fromCharCode(65 + columns.length - 1)}2`);
+  const instCell = ws.getCell('A2');
+  instCell.value = user?.ministere || "MINISTÈRE DE L'ÉCONOMIE ET DES FINANCES";
+  instCell.font = { size: 10, italic: true, color: { argb: 'FF444444' } };
+  instCell.alignment = { horizontal: 'center' };
+
+  // Ligne 3 : Date de génération
+  ws.mergeCells(`A3:${String.fromCharCode(65 + columns.length - 1)}3`);
+  const dateCell = ws.getCell('A3');
+  dateCell.value = `Document généré le ${new Date().toLocaleDateString('fr-FR')} par PATRIS ERP`;
+  dateCell.font = { size: 9, color: { argb: 'FF888888' } };
+  dateCell.alignment = { horizontal: 'center' };
+
   // En-têtes colonnes
   columns.forEach((col, i) => {
     const cell = ws.getCell(5, i + 1);
     cell.value = col.header;
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + BLEU_COL } };
     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 9, name: 'Calibri' };
-    cell.alignment = { horizontal: 'center', wrapText: true };
-    cell.border = { top: { style: 'medium', color: { argb: 'FF1A4F7A' } }, bottom: { style: 'medium', color: { argb: 'FF1A4F7A' } }, left: { style: 'thin' }, right: { style: 'thin' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = { 
+      top: { style: 'medium', color: { argb: 'FF' + BLEU_INST } }, 
+      bottom: { style: 'medium', color: { argb: 'FF' + BLEU_INST } }, 
+      left: { style: 'thin', color: { argb: 'FFFFFFFF' } }, 
+      right: { style: 'thin', color: { argb: 'FFFFFFFF' } } 
+    };
     ws.getColumn(i + 1).width = col.width || 15;
   });
 
@@ -94,20 +113,49 @@ async function createStyledWorkbook(title: string, columns: any[], rows: any[], 
     const isEven = rowIdx % 2 === 0;
     columns.forEach((col, colIdx) => {
       const cell = ws.getCell(rowIdx + 6, colIdx + 1);
-      cell.value = row[col.key];
+      const val = row[col.key];
+      
+      // Formatting based on content type
+      if (typeof val === 'number') {
+        cell.value = val;
+        cell.numFmt = '#,##0';
+        cell.alignment = { horizontal: 'right' };
+      } else {
+        cell.value = val;
+        cell.alignment = { horizontal: col.align || 'left', vertical: 'middle', wrapText: true };
+      }
+
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFFFFFFF' : 'FF' + BLEU_PALE } };
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } }, left: { style: 'thin' }, right: { style: 'thin' } };
-      cell.font = { size: 9, name: 'Calibri' };
+      cell.border = { 
+        bottom: { style: 'thin', color: { argb: 'FFD9E1F2' } }, 
+        left: { style: 'thin', color: { argb: 'FFD9E1F2' } }, 
+        right: { style: 'thin', color: { argb: 'FFD9E1F2' } } 
+      };
+      cell.font = { size: 9, name: 'Calibri', color: { argb: 'FF333333' } };
     });
   });
 
-  // Ligne Total
-  const totalRow = ws.addRow([]);
-  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + BLEU_COL } };
-  totalRow.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  // Footer area (Signatures)
+  const lastDataRow = rows.length + 7;
+  const sigRow = lastDataRow + 2;
+  
+  const footerLabels = ["Le Comptable des Matières", "Le Gestionnaire du Patrimoine", "L'Ordonnateur"];
+  const colsPerSign = Math.floor(columns.length / 3);
 
-  // Signatures
-  // Ajouter 4 lignes vides + blocs de signature
+  footerLabels.forEach((label, i) => {
+    const startCol = (i * colsPerSign) + 1;
+    const endCol = startCol + colsPerSign - 1;
+    ws.mergeCells(sigRow, startCol, sigRow, endCol);
+    const cell = ws.getCell(sigRow, startCol);
+    cell.value = label;
+    cell.font = { bold: true, size: 10, color: { argb: 'FF1A3A6E' } };
+    cell.alignment = { horizontal: 'center' };
+    
+    // Line for signature
+    ws.mergeCells(sigRow + 4, startCol, sigRow + 4, endCol);
+    const lineCell = ws.getCell(sigRow + 4, startCol);
+    lineCell.border = { bottom: { style: 'thin', color: { argb: 'FF000000' } } };
+  });
 
   return wb;
 }
@@ -556,37 +604,73 @@ export function exportBordereauMutationExcel(
   saveWorkbook(workbook, filename);
 }
 
+export async function exportLivreJournalPremiumExcel(
+  biens: Array<Record<string, Primitive>>,
+  filename: string,
+  user?: ExportUser,
+  filters?: { exercice?: string; poste?: string }
+) {
+  const columns = [
+    { header: "FOLIO / N°", key: "folio", width: 12, align: 'center' },
+    { header: "DATE OPÉRATION", key: "date", width: 16, align: 'center' },
+    { header: "PIÈCE JUSTIFICATIVE", key: "piece", width: 20 },
+    { header: "DÉSIGNATION DES MATIÈRES", key: "designation", width: 35 },
+    { header: "UNITÉ", key: "unite", width: 10, align: 'center' },
+    { header: "QTE ENTRÉE", key: "qte", width: 12, align: 'right' },
+    { header: "VALEUR UNITAIRE", key: "prixUnitaire", width: 18, align: 'right' },
+    { header: "VALEUR TOTALE (CFA)", key: "valeurTotale", width: 22, align: 'right' },
+    { header: "ORIGINE / FOURNISSEUR", key: "origine", width: 25 },
+  ];
+
+  const rows = biens.map((bien, index) => ({
+    folio: index + 1,
+    date: formatDate(bien.dateAcquisition),
+    piece: bien.referenceFacture || bien.numFacture || "N/A",
+    designation: bien.designation,
+    unite: bien.unite || "U",
+    qte: Number(bien.quantite || 1),
+    prixUnitaire: Number(bien.valeur || 0),
+    valeurTotale: Number(bien.valeur || 0) * Number(bien.quantite || 1),
+    origine: bien.fournisseur || bien.vendeur || "INVENTAIRE INITIAL",
+  }));
+
+  const title = `Livre Journal des Immobilisations — EXERCICE ${filters?.exercice || new Date().getFullYear()}`;
+  const wb = await createStyledWorkbook(title, columns, rows, user);
+  
+  // Customization: Totals
+  const ws = wb.getWorksheet(title);
+  if (ws) {
+    const totalRowIdx = rows.length + 6;
+    const totalRow = ws.getRow(totalRowIdx);
+    
+    // Total label
+    ws.mergeCells(totalRowIdx, 1, totalRowIdx, 7);
+    const labelCell = ws.getCell(totalRowIdx, 1);
+    labelCell.value = "TOTAL GÉNÉRAL DES ENTRÉES DE L'EXERCICE";
+    labelCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3A6E' } };
+    labelCell.alignment = { horizontal: 'right' };
+
+    // Total value
+    const valCell = ws.getCell(totalRowIdx, 8);
+    const totalVal = rows.reduce((acc, r) => acc + r.valeurTotale, 0);
+    valCell.value = totalVal;
+    valCell.numFmt = '#,##0 "CFA"';
+    valCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    valCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC9A84C' } }; // Gold color for total
+    valCell.alignment = { horizontal: 'right' };
+  }
+
+  await downloadNativeXlsx(wb, filename);
+}
+
 export async function exportLivreJournalImmobilisationsExcel(
   biens: Array<Record<string, Primitive>>,
   filename: string,
   user?: ExportUser
 ) {
-  const columns = [
-    { header: "Ordre", key: "ordre", width: 10 },
-    { header: "Date", key: "date", width: 16 },
-    { header: "Référence", key: "reference", width: 18 },
-    { header: "Désignation", key: "designation", width: 32 },
-    { header: "Catégorie", key: "categorie", width: 20 },
-    { header: "Quantité entrée", key: "quantiteEntree", width: 16 },
-    { header: "Valeur entrée", key: "valeurEntree", width: 18 },
-    { header: "Service", key: "service", width: 24 },
-  ];
-
-  const rows = [...biens]
-    .sort((a, b) => String(a.dateAcquisition || "").localeCompare(String(b.dateAcquisition || "")))
-    .map((bien, index) => ({
-      ordre: index + 1,
-      date: formatDate(bien.dateAcquisition),
-      reference: bien.codeSousCategorie || bien.codeBien || bien.iup,
-      designation: bien.designation,
-      categorie: bien.categoriePrincipale || bien.categorie,
-      quantiteEntree: Number(bien.quantite || 1),
-      valeurEntree: Number(bien.valeur || 0),
-      service: bien.service || bien.localisation,
-    }));
-
-  const wb = await createStyledWorkbook("Livre Journal des Immobilisations", columns, rows, user);
-  await downloadNativeXlsx(wb, filename);
+  // Legacy alias calling the new premium version
+  return exportLivreJournalPremiumExcel(biens, filename, user);
 }
 
 export function exportLivreJournalFournituresExcel(
@@ -1116,14 +1200,6 @@ export async function exportCertificatInventaire(
   doc.text('Vérifiez l\'authenticité sur patris.gouv.tg', W-14, 292, { align: 'right' });
 
   doc.save(`Certificat_Inventaire_${campagne.nom || 'PATRIS'}_${new Date().getFullYear()}.pdf`);
-}
-
-export function exportLivreJournalPremiumExcel(
-  biens: Array<Record<string, Primitive>>,
-  filename: string,
-  user?: ExportUser
-) {
-  exportLivreJournalImmobilisationsExcel(biens, filename, user);
 }
 
 export async function exportGrandLivrePremiumExcel(

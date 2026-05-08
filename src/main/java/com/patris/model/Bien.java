@@ -64,6 +64,12 @@ public abstract class Bien {
     private String modeAcquisition;
     private String observation;
     private String photoUrl;
+    
+    // Champs comptables additionnels pour les annexes
+    private Double quantite;
+    private String unite;
+    private String fournisseur;
+    private String referenceFacture;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "bien_documents", joinColumns = @JoinColumn(name = "bien_id"))

@@ -14,11 +14,7 @@
   --premium-accent: #4f46e5;
 }
 
-.dark-mode {
-  --premium-glass-bg: rgba(15, 23, 42, 0.7);
-  --premium-glass-border: rgba(255, 255, 255, 0.1);
-  --premium-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-}
+
 
 .glass-card {
   background: var(--premium-glass-bg);

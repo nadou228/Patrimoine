@@ -12,6 +12,7 @@ import StocksPage from './pages/StocksPage';
 import UsersPage from './pages/UsersPage';
 import LoginPage from './pages/LoginPage';
 import AdminPage from './pages/AdminPage';
+import ReportsPage from './pages/ReportsPage';
 import { getCurrentUser } from './api/auth';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -45,6 +46,7 @@ function App() {
               <Route path="biens" element={<BiensPage />} />
               <Route path="affectations" element={<AffectationsPage />} />
               <Route path="inventaire" element={<InventairePage />} />
+              <Route path="rapports" element={<ReportsPage />} />
               <Route path="reforme" element={<ReformePage />} />
               <Route path="sinistres" element={<SinistresPage />} />
               <Route path="entretiens" element={<EntretiensPage />} />
