@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -43,24 +44,43 @@ public class UtilisateurService {
                     "Mot de passe invalide : envoyez un mot de passe en clair, le serveur applique le hachage BCrypt.");
         }
 
-        utilisateurRepository.findByUsername(utilisateur.getUsername()).ifPresent(u -> {
-            throw new RuntimeException("Ce nom d'utilisateur existe déjà.");
-        });
-        utilisateurRepository.findByEmail(utilisateur.getEmail()).ifPresent(u -> {
-            throw new RuntimeException("Cet email existe déjà.");
-        });
+        // 🛡️ Gestion intelligente et verbeuse des doublons
+        Optional<Utilisateur> existingByUsername = utilisateurRepository.findByUsername(utilisateur.getUsername());
+        if (existingByUsername.isPresent()) {
+            Utilisateur u = existingByUsername.get();
+            if (u.isArchived()) {
+                return reactivateAndUpdate(u, utilisateur);
+            }
+            throw new RuntimeException("Le nom d'utilisateur '" + utilisateur.getUsername() + "' est déjà utilisé par " + u.getNom());
+        }
+
+        Optional<Utilisateur> existingByEmail = utilisateurRepository.findByEmail(utilisateur.getEmail());
+        if (existingByEmail.isPresent()) {
+            Utilisateur u = existingByEmail.get();
+            if (u.isArchived()) {
+                return reactivateAndUpdate(u, utilisateur);
+            }
+            throw new RuntimeException("L'email '" + utilisateur.getEmail() + "' appartient déjà à " + u.getNom());
+        }
+
         if (utilisateur.getMatricule() != null && !utilisateur.getMatricule().isBlank()) {
-            utilisateurRepository.findByMatricule(utilisateur.getMatricule().trim()).ifPresent(u -> {
-                throw new RuntimeException("Ce matricule est déjà attribué.");
-            });
+            String m = utilisateur.getMatricule().trim();
+            Optional<Utilisateur> existingByMatricule = utilisateurRepository.findByMatricule(m);
+            if (existingByMatricule.isPresent()) {
+                Utilisateur u = existingByMatricule.get();
+                if (u.isArchived()) {
+                    return reactivateAndUpdate(u, utilisateur);
+                }
+                throw new RuntimeException("Le matricule '" + m + "' est déjà attribué à " + u.getNom());
+            }
         }
 
         long totalUsers = utilisateurRepository.count();
 
         if (totalUsers == 0) {
             utilisateur.setRole(roleRepository.findByCode("ADMIN").orElse(null));
-        } else if (utilisateur.getRole() == null) {
-            utilisateur.setRole(roleRepository.findByCode("AGENT_INVENTAIRE").orElse(null));
+        } else if (utilisateur.getRole() != null && utilisateur.getRole().getCode() != null) {
+            utilisateur.setRole(roleRepository.findByCode(utilisateur.getRole().getCode()).orElse(null));
         }
 
         if (utilisateur.getRole() == null) {
@@ -179,5 +199,26 @@ public class UtilisateurService {
         utilisateur.setArchived(true);
         utilisateur.setStatut(StatutUtilisateur.SUSPENDU);
         utilisateurRepository.save(utilisateur);
+    }
+
+    @Transactional
+    public Utilisateur reactivateAndUpdate(Utilisateur existing, Utilisateur newData) {
+        existing.setArchived(false);
+        existing.setStatut(StatutUtilisateur.ACTIF);
+        existing.setNom(newData.getNom());
+        existing.setPrenom(newData.getPrenom());
+        existing.setFonction(newData.getFonction());
+        existing.setEmail(newData.getEmail());
+        existing.setTelephone(newData.getTelephone());
+        if (newData.getRole() != null && newData.getRole().getCode() != null) {
+            existing.setRole(roleRepository.findByCode(newData.getRole().getCode()).orElse(existing.getRole()));
+        }
+        existing.setService(newData.getService());
+        existing.setMatricule(newData.getMatricule());
+        
+        // On remet à jour le mot de passe
+        existing.setPassword(passwordEncoder.encode(newData.getPassword()));
+        
+        return utilisateurRepository.save(existing);
     }
 }
