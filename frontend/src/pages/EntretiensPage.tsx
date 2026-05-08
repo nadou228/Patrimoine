@@ -14,6 +14,7 @@ import {
 import AnimatedNumber from "../components/AnimatedNumber";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from "../api/api";
+import MediaViewer from "../components/MediaViewer";
 
 type EntretienType = "PREVENTIF" | "CURATIF" | "REGLEMENTAIRE" | "CONTROLE";
 type EntretienStatut = "PLANIFIEE" | "EN_COURS" | "TERMINEE" | "EN_RETARD";
@@ -91,6 +92,7 @@ export default function EntretiensPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Entretien | null>(null);
+  const [viewerMedia, setViewerMedia] = useState<{ url: string; type: "image" | "document"; filename: string } | null>(null);
 
   const views = [
     { id: "PLANNING", label: "Planning Visuel", icon: <Calendar size={18} /> },
@@ -201,6 +203,16 @@ export default function EntretiensPage() {
 
   return (
     <div className="entretiens-module fade-in" style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh' }}>
+      <AnimatePresence>
+        {viewerMedia && (
+          <MediaViewer
+            url={viewerMedia.url}
+            type={viewerMedia.type}
+            filename={viewerMedia.filename}
+            onClose={() => setViewerMedia(null)}
+          />
+        )}
+      </AnimatePresence>
       
       {showForm ? (
         <div className="fade-in" style={{ maxWidth: '860px', margin: '0 auto' }}>
@@ -468,6 +480,26 @@ export default function EntretiensPage() {
 
                       <div className="aff-card-actions">
                         <button className="aff-action-btn" type="button" onClick={() => setSelected(item)}>👁️ Détails</button>
+                        
+                        {(item as any).rapportUrl && (
+                          <button 
+                            className="aff-action-btn" 
+                            type="button" 
+                            onClick={() => {
+                              const url = (item as any).rapportUrl;
+                              const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
+                              setViewerMedia({ 
+                                url: normalizeUrl(url), 
+                                type: isImage ? "image" : "document", 
+                                filename: `Document - ${item.bien?.designation || "Entretien"}` 
+                              });
+                            }}
+                            title="Voir le document attaché"
+                          >
+                            <FileText size={14} style={{ marginRight: 4 }} /> Doc.
+                          </button>
+                        )}
+
                         {item.statut !== "TERMINEE" && (
                           <button className="aff-action-btn btn-success" type="button" onClick={() => void closeEntretien(item)}>✅ Clôturer</button>
                         )}
@@ -523,6 +555,25 @@ export default function EntretiensPage() {
                       <div className="aff-card-actions">
                         <button className="aff-action-btn btn-primary" type="button" onClick={() => { updateForm("bien", item.bien || null); updateForm("type", (item.type as EntretienType) || "PREVENTIF"); setShowForm(true); }}>🛠️ Régulariser</button>
                         <button className="aff-action-btn" type="button" onClick={() => setSelected(item)}>👁️ Détails</button>
+                        
+                        {(item as any).rapportUrl && (
+                          <button 
+                            className="aff-action-btn" 
+                            type="button" 
+                            onClick={() => {
+                              const url = (item as any).rapportUrl;
+                              const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
+                              setViewerMedia({ 
+                                url: normalizeUrl(url), 
+                                type: isImage ? "image" : "document", 
+                                filename: `Document - ${item.bien?.designation || "Entretien"}` 
+                              });
+                            }}
+                            title="Voir le document"
+                          >
+                            <FileText size={14} style={{ marginRight: 4 }} /> Doc.
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -605,6 +656,26 @@ export default function EntretiensPage() {
                       {selected.description || selected.observation || "Aucune description fournie."}
                     </p>
                   </div>
+
+                  {(selected as any).rapportUrl && (
+                    <div style={{ marginTop: '20px' }}>
+                      <button 
+                        className="primary-premium" 
+                        style={{ width: '100%', height: '48px', gap: '10px' }}
+                        onClick={() => {
+                          const url = (selected as any).rapportUrl;
+                          const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
+                          setViewerMedia({ 
+                            url: normalizeUrl(url), 
+                            type: isImage ? "image" : "document", 
+                            filename: `Document - ${selected.bien?.designation || "Entretien"}` 
+                          });
+                        }}
+                      >
+                        <FileText size={18} /> Voir le document attaché
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
