@@ -292,28 +292,31 @@ export default function ReformePage() {
           onClose={() => setViewerUrl(null)} 
         />
       )}
-      <header className="page-header-modern">
-        <div className="header-meta">
-          <span className="badge-pill-glow">Sortie définitive du registre</span>
-          <h1>Réforme du patrimoine</h1>
+      <div className="aff-header-premium glass-card" style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
+          <div>
+            <span className="badge-pill-glow">SORTIE DÉFINITIVE DU REGISTRE</span>
+            <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1e293b', margin: '8px 0' }}>Réforme du patrimoine</h1>
+            <p style={{ color: '#64748b', fontSize: '1.1rem' }}>Gestion des procédures de déclassement, rebut et cession des actifs</p>
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+             <button 
+                className={`pill-filter ${view === "LIST" ? "active" : ""}`} 
+                onClick={() => setView("LIST")}
+                style={{ height: 60, padding: '0 24px' }}
+              >
+                <History size={18} /> Registre
+             </button>
+             <button 
+                className="primary-premium" 
+                onClick={() => setView("FORM")} 
+                style={{ height: 60, padding: '0 32px', fontSize: '1.1rem' }}
+              >
+                <PlusCircle size={20} /> Nouvelle réforme
+             </button>
+          </div>
         </div>
-        <div className="toolbar-filters">
-          <button
-            className={`pill-filter ${view === "LIST" ? "active" : ""}`}
-            onClick={() => setView("LIST")}
-          >
-            <History size={16} />
-            Registre & Historique
-          </button>
-          <button
-            className={`pill-filter ${view === "FORM" ? "active" : ""}`}
-            onClick={() => setView("FORM")}
-          >
-            <PlusCircle size={16} />
-            Nouvelle réforme
-          </button>
-        </div>
-      </header>
+      </div>
 
       {/* KPI BANNER */}
       <div className="affectation-kpi-banner">

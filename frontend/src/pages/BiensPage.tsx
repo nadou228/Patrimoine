@@ -241,7 +241,9 @@ const formatMoney = (value?: number) => `${Math.round(value || 0).toLocaleString
 const getFullUrl = (url?: string) => {
   if (!url) return "";
   if (url.startsWith("http")) return url;
-  return `http://localhost:8082${url.startsWith('/') ? '' : '/'}${url}`;
+  // Utilisation de la constante API_BASE_URL importée pour plus de robustesse
+  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 const getAttachments = (docs?: string | string[]) => {
@@ -576,26 +578,26 @@ export default function BiensPage() {
     const nextErrors: FormErrors = {};
     if (!form.categoriePrincipale) nextErrors.categoriePrincipale = "Choisissez une categorie principale.";
     if (!form.codeSousCategorie) nextErrors.codeSousCategorie = "Choisissez une famille puis une sous-categorie.";
-    if (!form.designation.trim()) nextErrors.designation = "La designation est obligatoire.";
+    if (!form.designation?.trim()) nextErrors.designation = "La designation est obligatoire.";
     if (!form.dateAcquisition) nextErrors.dateAcquisition = "La date d'acquisition est obligatoire.";
     if (form.dateAcquisition && form.dateAcquisition > today) nextErrors.dateAcquisition = "La date d'acquisition ne peut pas etre dans le futur.";
     if (!form.valeur || form.valeur <= 0) nextErrors.valeur = "La valeur d'acquisition est obligatoire.";
-    if (!form.modeAcquisition.trim()) nextErrors.modeAcquisition = "Le mode d'acquisition est obligatoire.";
-    if (!form.localisation.trim()) nextErrors.localisation = "La localisation precise est obligatoire.";
+    if (!(form.modeAcquisition || "").trim()) nextErrors.modeAcquisition = "Le mode d'acquisition est obligatoire.";
+    if (!(form.localisation || "").trim()) nextErrors.localisation = "La localisation precise est obligatoire.";
 
     if (form.categoriePrincipale !== "IMMOBILIER" && (!form.quantite || form.quantite < 1)) {
       nextErrors.quantite = "La quantite doit etre au minimum egale a 1.";
     }
-    if (form.categoriePrincipale === "IMMOBILIER" && !form.coordonneesGps.trim()) {
+    if (form.categoriePrincipale === "IMMOBILIER" && !(form.coordonneesGps || "").trim()) {
       nextErrors.coordonneesGps = "Les coordonnees GPS sont obligatoires pour l'immobilier.";
     }
-    if (form.categoriePrincipale === "IMMOBILIER" && !form.titreFoncier.trim()) {
+    if (form.categoriePrincipale === "IMMOBILIER" && !(form.titreFoncier || "").trim()) {
       nextErrors.titreFoncier = "Le titre foncier est obligatoire pour l'immobilier.";
     }
-    if (form.categoriePrincipale === "IMMOBILIER" && !form.superficie.trim()) {
+    if (form.categoriePrincipale === "IMMOBILIER" && !(form.superficie || "").trim()) {
       nextErrors.superficie = "La superficie est obligatoire pour l'immobilier.";
     }
-    if (form.categoriePrincipale === "MATERIEL_ROULANT" && !form.immatriculation.trim()) {
+    if (form.categoriePrincipale === "MATERIEL_ROULANT" && !(form.immatriculation || "").trim()) {
       nextErrors.immatriculation = "L'immatriculation est obligatoire.";
     }
     if (
@@ -810,19 +812,36 @@ export default function BiensPage() {
   };
 
   const editBien = (bien: Bien) => {
+    // Extraction intelligente des données de nomenclature si elles sont imbriquées (objet nomenclature)
+    const nomenclature = (bien as any).nomenclature;
+    
     setForm({
       ...EMPTY_FORM,
       ...bien,
       id: bien.id,
       categorie: (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory,
       categoriePrincipale: (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory,
+      
+      // MAPPING CRITIQUE : Nomenclature et classification
+      nomenclatureCode: (bien as any).nomenclatureCode || nomenclature?.code || "",
+      codeSousCategorie: bien.codeSousCategorie || nomenclature?.code || "",
+      sousCategorie: bien.sousCategorie || nomenclature?.intitule || nomenclature?.libelle || "",
+      codeFamille: bien.codeFamille || nomenclature?.famille || "",
+      familleCatalogue: bien.familleCatalogue || nomenclature?.famille || "",
+      
+      // Coordonnées et dates
       coordonneesGps: bien.coordonneesGps || bien.coordonneeGps || "",
       documentsUrls: bien.documentsUrls || [],
       dateAcquisition: bien.dateAcquisition || today,
+      modeAcquisition: bien.modeAcquisition || "ACHAT", // FALLBACK pour éviter l'erreur de validation
+      
       // Garantir que toutes les valeurs de type string ne sont jamais null/undefined
       designation: bien.designation ?? "",
       localisation: bien.localisation ?? "",
-      service: bien.service ?? "",
+      
+      // Mapping du service (objet ou string)
+      service: typeof bien.service === 'object' ? ((bien.service as any).nomService || (bien.service as any).nom || (bien.service as any).code || "") : (bien.service ?? ""),
+      
       observation: bien.observation ?? "",
       specificationsTechniques: (bien as any).specificationsTechniques ?? "",
       titreFoncier: (bien as any).titreFoncier ?? "",
@@ -840,8 +859,9 @@ export default function BiensPage() {
       finGarantie: (bien as any).finGarantie ?? "",
       dateProchaineVisiteTechnique: (bien as any).dateProchaineVisiteTechnique ?? "",
       numInventaire: (bien as any).numInventaire ?? "",
-      photoUrl: bien.photoUrl ?? "",
-      nomenclatureCode: (bien as any).nomenclatureCode ?? "",
+      
+      // STRATÉGIE IMAGE : Supporte photoUrl ou photo
+      photoUrl: bien.photoUrl || (bien as any).photo || "",
     });
     setView("form");
     setActiveStep(1);

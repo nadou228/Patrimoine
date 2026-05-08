@@ -209,28 +209,31 @@ export default function SinistresPage() {
         />
       )}
 
-      <header className="page-header-modern">
-        <div className="header-meta">
-          <span className="badge-pill-glow" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "rgba(239,68,68,0.1)" }}>Sécurité & Assurance</span>
-          <h1>Sinistres & Incidents</h1>
+      <div className="aff-header-premium glass-card" style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
+          <div>
+            <span className="badge-pill-glow" style={{ color: '#ef4444', borderColor: '#fecaca', background: '#fef2f2' }}>SÉCURITÉ & ASSURANCE</span>
+            <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1e293b', margin: '8px 0' }}>Sinistres & Incidents</h1>
+            <p style={{ color: '#64748b', fontSize: '1.1rem' }}>Gestion des déclarations, expertises et indemnisations du patrimoine</p>
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+             <button 
+                className={`pill-filter ${view === "LIST" ? "active" : ""}`} 
+                onClick={() => setView("LIST")}
+                style={{ height: 60, padding: '0 24px' }}
+              >
+                <Shield size={18} /> Registre
+             </button>
+             <button 
+                className="primary-premium" 
+                onClick={() => { setView("FORM"); setForm(EMPTY_FORM); }} 
+                style={{ height: 60, padding: '0 32px', fontSize: '1.1rem', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', borderColor: 'transparent' }}
+              >
+                <PlusCircle size={20} /> Déclarer un sinistre
+             </button>
+          </div>
         </div>
-        <div className="toolbar-filters">
-          <button
-            className={`pill-filter ${view === "LIST" ? "active" : ""}`}
-            onClick={() => setView("LIST")}
-          >
-            <Shield size={16} />
-            Registre & Assurance
-          </button>
-          <button
-            className={`pill-filter ${view === "FORM" ? "active" : ""}`}
-            onClick={() => { setView("FORM"); setForm(EMPTY_FORM); }}
-          >
-            <PlusCircle size={16} />
-            Déclarer un sinistre
-          </button>
-        </div>
-      </header>
+      </div>
 
       {/* KPI BANNER */}
       {view === "LIST" && (
