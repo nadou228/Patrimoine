@@ -13,7 +13,9 @@ import {
   retournerAffectation,
   updateAffectation,
   validerAffectation,
+  deleteAffectation,
 } from "../api/api";
+import { Trash2 } from "lucide-react";
 import { Bien, updateBienStatus } from "../api/biens";
 import { getCurrentUser } from "../api/auth";
 import BienSelector from "../components/BienSelector";
@@ -117,6 +119,12 @@ const asAffectationList = (value: unknown): Affectation[] => {
   return value.filter((item): item is Affectation => typeof item === "object" && item !== null && "id" in item);
 };
 
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return `http://localhost:8082${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const normalizeValidationStatus = (value?: Affectation["statutValidation"]) => {
   if (value === "VALIDÉ") return "VALIDE";
   if (value === "TRANSFÉRÉ") return "TRANSFERE";
@@ -149,6 +157,8 @@ export default function AffectationsPage() {
   const [returnModal, setReturnModal] = useState<ReturnModal>(null);
   const [timelineData, setTimelineData] = useState<TimelineEntry[]>([]);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerType, setViewerType] = useState<"image" | "pdf" | null>(null);
 
   const loadData = async () => {
     const [affectationsResponse, servicesResponse] = await Promise.all([
@@ -369,6 +379,18 @@ export default function AffectationsPage() {
     }
   };
 
+  const handleDelete = async (item: Affectation) => {
+    if (!item.id) return;
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette affectation ? Cette action est irréversible.")) return;
+    try {
+      await deleteAffectation(item.id);
+      showToast({ type: "success", title: "Affectation supprimée" });
+      await loadData();
+    } catch (error) {
+      showToast({ type: "error", title: "Erreur lors de la suppression" });
+    }
+  };
+
   const showHistory = async (bienId?: number | null) => {
     if (!bienId) return;
     const history = await getMouvementsByBien(bienId).catch(() => []);
@@ -409,8 +431,14 @@ export default function AffectationsPage() {
   return (
     <div className="module-container fade-in" style={{ padding: "28px" }}>
       {showTimeline ? <MouvementTimeline mouvements={timelineData as never} onClose={() => setShowTimeline(false)} /> : null}
+      {viewerUrl ? (
+        <div className="modal-overlay" onClick={() => setViewerUrl(null)}>
+           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '80%', height: '80%', padding: 0 }}>
+             {viewerType === 'image' ? <img src={viewerUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <iframe src={viewerUrl} style={{ width: '100%', height: '100%' }} />}
+           </div>
+        </div>
+      ) : null}
 
-      {/* PAGE HEADER */}
       <header className="page-header-premium" style={{ marginBottom: 28 }}>
         <div className="header-meta">
           <span className="badge-pill-glow">Traçabilité & Détention</span>
@@ -418,7 +446,7 @@ export default function AffectationsPage() {
           <p className="header-subtitle">Suivi en temps réel des mouvements de biens et affectations aux services</p>
         </div>
         {view === "LIST" ? (
-          <button className="primary" type="button" onClick={() => setView("FORM")}>
+          <button className="primary-premium" type="button" onClick={() => setView("FORM")} style={{ background: "var(--primary)", color: "white", padding: "10px 20px", borderRadius: "8px", fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}>
             ＋ Nouvelle affectation
           </button>
         ) : (
@@ -574,8 +602,8 @@ export default function AffectationsPage() {
                 </Field>
               </div>
 
-              <button type="submit" className="primary" disabled={saving} style={{ marginTop: 8 }}>
-                {saving ? "⏳ Enregistrement..." : form.id ? "💾 Mettre à jour" : "✅ Valider l'affectation"}
+              <button type="submit" className="primary-premium" disabled={saving} style={{ width: "100%", marginTop: "2rem", display: "flex", justifyContent: "center", gap: "8px", alignItems: "center", padding: "14px", fontSize: "16px", borderRadius: "12px", background: "var(--primary)", color: "white", fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}>
+                {saving ? "⏳ Enregistrement..." : form.id ? "💾 Mettre à jour l'affectation" : "✅ Valider l'affectation"}
               </button>
             </form>
           </div>
@@ -604,12 +632,29 @@ export default function AffectationsPage() {
               const statut = normalizeValidationStatus(item.statutValidation);
               return (
                 <div className="aff-card" key={item.id}>
-                  <div className="aff-card-header">
-                    <div>
-                      <span className="aff-card-iup">{item.bien?.iup || "N/A"}</span>
-                      <p className="aff-card-designation" style={{ marginTop: 6 }}>{item.bien?.designation || "Bien non renseigné"}</p>
+                  <div className="aff-card-header" style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                    <div style={{ width: "48px", height: "48px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}>
+                      {item.bien?.photoUrl ? (
+                        <img 
+                          src={getFullUrl(item.bien.photoUrl)} 
+                          alt="Bien" 
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>';
+                          }}
+                        />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>📦</div>
+                      )}
                     </div>
-                    <span className={`aff-status-pill status-${statut.toLowerCase()}`}>{statut}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <span className="aff-card-iup">{item.bien?.iup || "N/A"}</span>
+                        <span className={`aff-status-pill status-${statut.toLowerCase()}`}>{statut}</span>
+                      </div>
+                      <p className="aff-card-designation" style={{ marginTop: 4 }}>{item.bien?.designation || "Bien non renseigné"}</p>
+                    </div>
                   </div>
 
                   <div className="aff-card-meta">
@@ -637,6 +682,11 @@ export default function AffectationsPage() {
                       type="button"
                       onClick={() => exportBordereauMutationExcel(item as Record<string, string | number | boolean | null | undefined>, `BM_${item.id}.xlsx`)}
                     >📊 XLS</button>
+                    {canValidate && (
+                      <button className="aff-action-btn" type="button" onClick={() => void handleDelete(item)} style={{ color: "#ef4444" }}>
+                        <Trash2 size={14} style={{ marginRight: 4 }} /> Supprimer
+                      </button>
+                    )}
                   </div>
                 </div>
               );

@@ -238,10 +238,20 @@ const CATEGORY_META: Record<MainCategory, { label: string; description: string; 
 
 const formatMoney = (value?: number) => `${Math.round(value || 0).toLocaleString("fr-FR")} FCFA`;
 
-const normalizeUrl = (url?: string) => {
+const getFullUrl = (url?: string) => {
   if (!url) return "";
-  return url.startsWith("http") ? url : `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  if (url.startsWith("http")) return url;
+  return `http://localhost:8082${url.startsWith('/') ? '' : '/'}${url}`;
 };
+
+const getAttachments = (docs?: string | string[]) => {
+  if (!docs) return [];
+  if (Array.isArray(docs)) return docs;
+  if (typeof docs === "string") return docs.split(",");
+  return [];
+};
+
+const normalizeUrl = (url?: string) => getFullUrl(url);
 
 const serviceName = (service: ServiceOption) => service.nomService || service.nom || service.code || "";
 
@@ -1071,25 +1081,30 @@ export default function BiensPage() {
                         </div>
                       )}
                       
-                      {bien.documentsUrls && bien.documentsUrls.length > 0 && (
-                        <div 
-                          className="asset-docs-badge" 
-                          title={`${bien.documentsUrls.length} document(s) joint(s)`} 
-                          style={{ top: 16, left: 16, cursor: 'pointer', zIndex: 20 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const docUrl = bien.documentsUrls![0];
-                            const isImage = docUrl.match(/\.(jpg|jpeg|png|webp)$/i);
-                            setViewerMedia({ 
-                              url: normalizeUrl(docUrl), 
-                              type: isImage ? "image" : "document", 
-                              filename: `Document - ${bien.designation}` 
-                            });
-                          }}
-                        >
-                          <FileText size={16} />
-                        </div>
-                      )}
+                      {(() => {
+                        const allDocs = getAttachments(bien.documentsUrls || (bien as any).piecesJointes);
+                        if (allDocs.length === 0) return null;
+                        
+                        return (
+                          <div 
+                            className="asset-docs-badge-premium" 
+                            title={`${allDocs.length} document(s) joint(s)`} 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const docUrl = allDocs[0];
+                              const isImage = docUrl.match(/\.(jpg|jpeg|png|webp)$/i);
+                              setViewerMedia({ 
+                                url: getFullUrl(docUrl), 
+                                type: isImage ? "image" : "document", 
+                                filename: `Document - ${bien.designation}` 
+                              });
+                            }}
+                          >
+                            <FileText size={16} />
+                            <span className="docs-count">{allDocs.length}</span>
+                          </div>
+                        );
+                      })()}
 
                       <div className="asset-status-overlay">
                         <span className={`status-pill ${bien.etat?.toLowerCase() || ""}`}>

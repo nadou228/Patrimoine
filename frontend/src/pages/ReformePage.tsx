@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { annulerReforme, createReforme, getReformes, validerReforme } from "../api/api";
+import { annulerReforme, createReforme, getReformes, validerReforme, deleteReforme } from "../api/api";
 import { Bien, updateBien, updateBienStatus } from "../api/biens";
 import BienSelector from "../components/BienSelector";
 import FileUpload from "../components/FileUpload";
@@ -8,8 +8,9 @@ import { useToast } from "../contexts/ToastContext";
 import AnimatedNumber from "../components/AnimatedNumber";
 import {
   Archive, History, PlusCircle, CheckCircle2,
-  Download, XCircle, FileMinus, Info
+  Download, XCircle, FileMinus, Info, Eye, Trash2
 } from "lucide-react";
+import MediaViewer from "../components/MediaViewer";
 type TypeReforme = "MISE_AU_REBUT" | "VENTE_CESSION" | "TRANSFERT_INTER_MINISTERE" | "DON" | "PERTE_SINISTRE";
 type StatutValidation = "EN_ATTENTE_VALIDATION" | "EN_ATTENTE" | "VALIDE" | "VALIDÉ" | "ANNULE" | "ANNULÉ";
 
@@ -29,6 +30,7 @@ type Reforme = {
   statutValidation?: StatutValidation;
   statut?: string;
   agent?: string;
+  rapportTechniqueUrl?: string;
 };
 
 type ReformeForm = {
@@ -68,6 +70,12 @@ const asReformes = (value: unknown): Reforme[] => {
   return value.filter((item): item is Reforme => typeof item === "object" && item !== null && "id" in item);
 };
 
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return `http://localhost:8082${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const formatMoney = (value?: number) => `${Math.round(value || 0).toLocaleString("fr-FR")} FCFA`;
 
 const normalizeReformeStatus = (item: Reforme) => {
@@ -100,6 +108,14 @@ export default function ReformePage() {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState("TOUS");
   const [period, setPeriod] = useState({ from: "", to: "" });
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerType, setViewerType] = useState<"image" | "pdf">("pdf");
+
+  const openViewer = (url: string) => {
+    const isImage = url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
+    setViewerType(isImage ? "image" : "pdf");
+    setViewerUrl(url);
+  };
 
   const loadData = async () => {
     const response = await getReformes().catch(() => []);
@@ -224,6 +240,18 @@ export default function ReformePage() {
     }
   };
 
+  const handleDelete = async (item: Reforme) => {
+    if (!item.id) return;
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette réforme ? Cette action est irréversible.")) return;
+    try {
+      await deleteReforme(item.id);
+      showToast({ type: "success", title: "Réforme supprimée avec succès" });
+      await loadData();
+    } catch (error) {
+      showToast({ type: "error", title: "Erreur lors de la suppression" });
+    }
+  };
+
   const exportCsv = () => {
     const rows = filtered.map((item) => [
       item.bien?.iup || "",
@@ -256,6 +284,14 @@ export default function ReformePage() {
 
   return (
     <div className="dashboard-container reforme-page-shell fade-in">
+      {viewerUrl && (
+        <MediaViewer 
+          url={viewerUrl} 
+          type={viewerType} 
+          filename="Dossier de réforme" 
+          onClose={() => setViewerUrl(null)} 
+        />
+      )}
       <header className="page-header-modern">
         <div className="header-meta">
           <span className="badge-pill-glow">Sortie définitive du registre</span>
@@ -279,41 +315,49 @@ export default function ReformePage() {
         </div>
       </header>
 
-      <div className="stats-dashboard">
-        <div className="stat-card-premium">
-          <span className="stat-label">Total réformes</span>
-          <span className="stat-value"><AnimatedNumber value={stats.total} /></span>
-          <p className="stat-hint">Dossiers créés</p>
+      {/* KPI BANNER */}
+      <div className="affectation-kpi-banner">
+        <div className="aff-kpi-card kpi-total">
+          <div className="aff-kpi-icon">📦</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value"><AnimatedNumber value={stats.total} /></span>
+            <span className="aff-kpi-label">Total réformes</span>
+          </div>
         </div>
-        <div className="stat-card-premium">
-          <span className="stat-label">En attente</span>
-          <span className="stat-value text-warning"><AnimatedNumber value={stats.pending} /></span>
-          <p className="stat-hint">À valider</p>
+        <div className="aff-kpi-card kpi-valide">
+          <div className="aff-kpi-icon">✅</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value"><AnimatedNumber value={stats.validated} /></span>
+            <span className="aff-kpi-label">Validées</span>
+          </div>
         </div>
-        <div className="stat-card-premium">
-          <span className="stat-label">Validées</span>
-          <span className="stat-value text-success"><AnimatedNumber value={stats.validated} /></span>
-          <p className="stat-hint">Sorties effectives</p>
+        <div className="aff-kpi-card kpi-attente">
+          <div className="aff-kpi-icon">⏳</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value"><AnimatedNumber value={stats.pending} /></span>
+            <span className="aff-kpi-label">En attente</span>
+          </div>
         </div>
-        <div className="stat-card-premium">
-          <span className="stat-label">Annulées</span>
-          <span className="stat-value text-danger"><AnimatedNumber value={stats.canceled} /></span>
-          <p className="stat-hint">Dossiers rejetés</p>
+        <div className="aff-kpi-card kpi-transfer" style={{ background: "linear-gradient(135deg,#fef2f2,#fee2e2)", borderColor: "#fca5a5" }}>
+          <div className="aff-kpi-icon" style={{ color: "#ef4444", background: "rgba(239,68,68,0.15)" }}>❌</div>
+          <div className="aff-kpi-body">
+            <span className="aff-kpi-value" style={{ color: "#b91c1c" }}><AnimatedNumber value={stats.canceled} /></span>
+            <span className="aff-kpi-label" style={{ color: "#b91c1c" }}>Annulées</span>
+          </div>
         </div>
       </div>
 
       {view === "FORM" ? (
-        <div className="dashboard-shell-grid" style={{ gridTemplateColumns: '1fr' }}>
-          <section className="glass-card premium-card">
-            <div className="card-header-premium">
-              <div className="icon-box-premium">
-                <FileMinus size={20} />
-              </div>
-              <div>
-                <h3>Procédure de sortie</h3>
-                <p className="card-subtitle">Retrait définitif de l'inventaire actif</p>
-              </div>
+        <div className="aff-form-wrapper fade-in">
+          <div className="aff-form-hero">
+            <div className="aff-form-hero-icon">🗑️</div>
+            <div>
+              <h2>Procédure de sortie</h2>
+              <p>Sélection du bien, type de réforme et évaluation de la valeur résiduelle</p>
             </div>
+          </div>
+          
+          <div className="aff-form-body">
 
             <form className="form-content-premium" onSubmit={submit}>
               <div className="form-group-modern" style={{ gridColumn: "span 2", marginBottom: "1rem" }}>
@@ -402,122 +446,157 @@ export default function ReformePage() {
                 </Field>
               </div>
 
-              <button className="primary-premium" type="submit" disabled={saving} style={{ width: "100%", marginTop: "2rem" }}>
+              <button className="primary-premium" type="submit" disabled={saving} style={{ width: "100%", marginTop: "2rem", display: "flex", justifyContent: "center", gap: "8px", alignItems: "center", padding: "14px", fontSize: "16px", borderRadius: "12px", background: "var(--primary)", color: "white", fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}>
                 {saving ? (
-                  <>Patientez...</>
+                  <>⏳ Patientez...</>
                 ) : (
                   <>
-                    <PlusCircle size={18} />
+                    <PlusCircle size={20} />
                     Soumettre le dossier de réforme
                   </>
                 )}
               </button>
             </form>
-          </section>
+          </div>
         </div>
       ) : (
-        <div className="dashboard-shell-grid" style={{ gridTemplateColumns: '1fr' }}>
-          <section className="glass-card premium-card">
-            <div className="card-header-premium" style={{ flexWrap: "wrap", gap: "16px" }}>
-              <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                <div className="icon-box-premium">
-                  <Archive size={20} />
-                </div>
-                <div>
-                  <h3>Registre des réformes</h3>
-                  <p className="card-subtitle">Historique et suivi des dossiers</p>
-                </div>
-              </div>
-
-              <div className="gallery-toolbar" style={{ marginLeft: "auto", border: "none", padding: 0, background: "transparent", marginBottom: 0 }}>
-                <div className="search-box-premium" style={{ maxWidth: 200 }}>
-                  <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", color: "inherit", padding: "8px" }}>
-                    <option value="TOUS">Tous types</option>
-                    <option value="MISE_AU_REBUT">Mise au rebut</option>
-                    <option value="VENTE_CESSION">Vente / Cession</option>
-                    <option value="TRANSFERT_INTER_MINISTERE">Transfert inter-ministères</option>
-                    <option value="DON">Don</option>
-                    <option value="PERTE_SINISTRE">Perte / Sinistre</option>
-                  </select>
-                </div>
-                <div className="search-box-premium" style={{ padding: "4px 12px" }}>
-                  <input type="date" value={period.from} onChange={(e) => setPeriod(cur => ({ ...cur, from: e.target.value }))} style={{ width: "auto" }} title="Du" />
-                  <span style={{ color: "var(--text-muted)" }}>-</span>
-                  <input type="date" value={period.to} onChange={(e) => setPeriod(cur => ({ ...cur, to: e.target.value }))} style={{ width: "auto" }} title="Au" />
-                </div>
-                <button type="button" className="btn-export" onClick={exportCsv} style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", height: "100%" }}>
-                  <Download size={16} />
-                  Excel
-                </button>
-              </div>
+        /* ===== LIST VIEW ===== */
+        <div className="affectation-list-wrapper fade-in">
+          <div className="affectation-list-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center", justifyContent: "space-between" }}>
+            <h2>📋 Registre des réformes ({filtered.length})</h2>
+            
+            <div style={{ display: 'flex', gap: '8px', width: 'auto', flexWrap: "nowrap", alignItems: "center" }}>
+               <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ width: 'auto', minWidth: '150px', border: "1px solid #e2e8f0", background: "#fff", outline: "none", padding: "8px 12px", borderRadius: "8px", color: "#475569", fontWeight: 500, height: "40px" }}>
+                  <option value="TOUS">Tous types</option>
+                  <option value="MISE_AU_REBUT">Mise au rebut</option>
+                  <option value="VENTE_CESSION">Vente / Cession</option>
+                  <option value="TRANSFERT_INTER_MINISTERE">Transfert inter-ministères</option>
+                  <option value="DON">Don</option>
+                  <option value="PERTE_SINISTRE">Perte / Sinistre</option>
+               </select>
+               <input type="date" value={period.from} onChange={(e) => setPeriod(cur => ({ ...cur, from: e.target.value }))} style={{ width: 'auto', border: "1px solid #e2e8f0", padding: "8px 12px", borderRadius: "8px", height: "40px" }} title="Du" />
+               <input type="date" value={period.to} onChange={(e) => setPeriod(cur => ({ ...cur, to: e.target.value }))} style={{ width: 'auto', border: "1px solid #e2e8f0", padding: "8px 12px", borderRadius: "8px", height: "40px" }} title="Au" />
+               <button type="button" className="btn-export" onClick={exportCsv} style={{ width: 'auto', height: "40px", padding: "0 16px", display: "flex", alignItems: "center", gap: "6px", background: "#f8fafc", cursor: "pointer", whiteSpace: "nowrap" }}>
+                 <Download size={16} /> Excel
+               </button>
             </div>
+          </div>
 
-            <div style={{ padding: "0 24px 24px" }} className="table-responsive">
-              <table className="patris-table">
-                <thead>
-                  <tr>
-                    <th>IUP</th>
-                    <th>Désignation</th>
-                    <th>Type</th>
-                    <th>Date sortie</th>
-                    <th>VNC</th>
-                    <th>Statut</th>
-                    <th>Agent</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
-                        Aucune réforme ne correspond à ces critères.
-                      </td>
-                    </tr>
-                  ) : filtered.map((item) => (
-                    <tr key={item.id}>
-                      <td className="monospace"><strong>{item.bien?.iup || "N/A"}</strong></td>
-                      <td>{item.bien?.designation || "Bien inconnu"}</td>
-                      <td><span className="badge-outline">{item.typeReforme}</span></td>
-                      <td>{item.dateSortie || item.dateReforme ? new Date(item.dateSortie || item.dateReforme || "").toLocaleDateString("fr-FR") : "-"}</td>
-                      <td>{formatMoney(item.valeurResiduelle)}</td>
-                      <td>
-                        <span className={`status-badge status-${String(normalizeReformeStatus(item)).toLowerCase()}`}>
-                          {normalizeReformeStatus(item)}
+          <div className="affectation-cards-grid">
+            {filtered.length === 0 ? (
+              <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                <p style={{ fontWeight: 600 }}>Aucune réforme trouvée pour ces critères</p>
+              </div>
+            ) : filtered.map((item) => {
+              const statut = normalizeReformeStatus(item);
+              const isPending = statut === "EN_ATTENTE_VALIDATION";
+              const isCanceled = statut === "ANNULEE" || statut === "ANNULÉ";
+              
+              let statusClass = "status-en_attente";
+              if (statut === "VALIDE" || statut === "VALIDÉ") statusClass = "status-valide";
+              if (isCanceled) statusClass = "status-transfere"; // Reusing the red-ish style from transfer for annulé
+              
+              const firstJustificatif = item.rapportTechniqueUrl;
+
+              return (
+                <div className="aff-card" key={item.id}>
+                  <div className="aff-card-header" style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                    <div style={{ width: "48px", height: "48px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}>
+                      {item.bien?.photoUrl ? (
+                        <img 
+                          src={getFullUrl(item.bien.photoUrl)} 
+                          alt="Bien" 
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>';
+                          }}
+                        />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>📦</div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <span className="aff-card-iup">{item.bien?.iup || "N/A"}</span>
+                        <span className={`aff-status-pill ${statusClass}`}>
+                          {statut === "EN_ATTENTE_VALIDATION" ? "EN ATTENTE" : statut}
                         </span>
-                      </td>
-                      <td>{item.agent || "-"}</td>
-                      <td>
-                        <div className="table-actions">
-                          {normalizeReformeStatus(item) === "EN_ATTENTE_VALIDATION" && (
-                            <>
-                              <button
-                                type="button"
-                                className="action-btn-mini text-success"
-                                title="Valider la réforme"
-                                disabled={actionLoadingId === item.id}
-                                onClick={() => void validateReforme(item)}
-                              >
-                                <CheckCircle2 size={16} />
-                              </button>
-                              <button
-                                type="button"
-                                className="action-btn-mini text-danger"
-                                title="Annuler la réforme"
-                                disabled={actionLoadingId === item.id}
-                                onClick={() => void cancelReforme(item)}
-                              >
-                                <XCircle size={16} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                      </div>
+                      <p className="aff-card-designation" style={{ marginTop: 4 }}>{item.bien?.designation || "Bien non renseigné"}</p>
+                    </div>
+                  </div>
+
+                  <div className="aff-card-meta">
+                    <div className="aff-meta-row">
+                      <span>🏷️</span><strong>Type</strong>{item.typeReforme || "—"}
+                    </div>
+                    <div className="aff-meta-row">
+                      <span>💰</span><strong>VNC</strong>{formatMoney(item.valeurResiduelle)}
+                    </div>
+                    <div className="aff-meta-row">
+                      <span>📅</span><strong>Date</strong>{item.dateSortie || item.dateReforme ? new Date(item.dateSortie || item.dateReforme || "").toLocaleDateString("fr-FR") : "—"}
+                    </div>
+                    {firstJustificatif && (
+                      <div className="aff-meta-row" style={{ gridColumn: "1/-1", marginTop: "4px" }}>
+                        <span>📎</span><strong>Dossier joint</strong>
+                        <button 
+                           type="button" 
+                           onClick={() => openViewer(getFullUrl(firstJustificatif))} 
+                           className="btn-export" 
+                           style={{ padding: "4px 10px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px", background: "rgba(59,130,246,0.1)", color: "#2563eb", border: "1px solid rgba(59,130,246,0.2)" }}
+                        >
+                           <Eye size={14} /> Lire le document
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="aff-card-actions">
+                    {isPending ? (
+                      <>
+                        <button 
+                          className="aff-action-btn btn-success" 
+                          type="button" 
+                          disabled={actionLoadingId === item.id}
+                          onClick={() => void validateReforme(item)}
+                        >
+                          ✅ Valider
+                        </button>
+                        <button 
+                          className="aff-action-btn btn-danger" 
+                          type="button" 
+                          disabled={actionLoadingId === item.id}
+                          onClick={() => void cancelReforme(item)}
+                        >
+                          ❌ Annuler
+                        </button>
+                      </>
+                    ) : (
+                      <button 
+                        className="aff-action-btn" 
+                        type="button" 
+                        style={{ opacity: 0.7, cursor: "default" }}
+                        disabled
+                      >
+                        🔒 Dossier clôturé
+                      </button>
+                    )}
+                    <button 
+                      className="aff-action-btn" 
+                      type="button" 
+                      onClick={() => void handleDelete(item)} 
+                      style={{ color: "#ef4444" }}
+                      title="Supprimer la réforme"
+                    >
+                      <Trash2 size={14} style={{ marginRight: 4 }} /> Supprimer
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

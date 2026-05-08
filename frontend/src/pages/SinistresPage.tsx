@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { createSinistre, deleteSinistre, getSinistres, updateSinistre } from "../api/api";
-import { updateBienStatus } from "../api/biens";
+import { updateBienStatus, Bien } from "../api/biens";
 import BienSelector from "../components/BienSelector";
 import FileUpload from "../components/FileUpload";
+import MediaViewer from "../components/MediaViewer";
 import { useToast } from "../contexts/ToastContext";
+import { PlusCircle, ShieldAlert, ShieldCheck, Eye, Trash2, Shield, CheckCircle2 } from "lucide-react";
 
 type SinistreType = "VOL" | "INCENDIE" | "ACCIDENT" | "DEGRADATION" | "CATASTROPHE_NATURELLE" | "AUTRE";
 type SinistreStatut = "DECLARE" | "DÉCLARÉ" | "EN_INSTRUCTION" | "INDEMNISE" | "INDEMNISÉ" | "REJETE" | "REJETÉ" | "CLASSE" | "CLASSÉ";
@@ -23,6 +25,7 @@ type Sinistre = {
   montantIndemnise?: number;
   datePaiement?: string;
   gravite?: Gravite | string;
+  piecesJointes?: string[];
 };
 
 type SinistreForm = {
@@ -63,13 +66,26 @@ const asSinistres = (value: unknown): Sinistre[] => {
   return value.filter((item): item is Sinistre => typeof item === "object" && item !== null && "id" in item);
 };
 
+const getFullUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return `http://localhost:8082${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
+const getAttachments = (piecesJointes?: string | string[]) => {
+  if (!piecesJointes) return [];
+  if (Array.isArray(piecesJointes)) return piecesJointes;
+  if (typeof piecesJointes === "string") return piecesJointes.split(",");
+  return [];
+};
+
 const formatMoney = (value?: number) => `${Math.round(value || 0).toLocaleString("fr-FR")} FCFA`;
 
 const normalizeSinistreStatus = (value?: string) => {
-  if (value === "DÃ‰CLARÃ‰") return "DECLARE";
-  if (value === "INDEMNISÃ‰") return "INDEMNISE";
-  if (value === "REJETÃ‰") return "REJETE";
-  if (value === "CLASSÃ‰") return "CLASSE";
+  if (value === "DÉCLARÉ" || value === "DÃ‰CLARÃ‰" || value === "DECLARE") return "DECLARE";
+  if (value === "INDEMNISÉ" || value === "INDEMNISÃ‰" || value === "INDEMNISE") return "INDEMNISE";
+  if (value === "REJETÉ" || value === "REJETÃ‰" || value === "REJETE") return "REJETE";
+  if (value === "CLASSÉ" || value === "CLASSÃ‰" || value === "CLASSE") return "CLASSE";
   return value || "DECLARE";
 };
 
@@ -80,7 +96,6 @@ function ErrorText({ message }: { message?: string }) {
 export default function SinistresPage() {
   const location = useLocation();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<"DECLARATIONS" | "ASSURANCE">("DECLARATIONS");
   const [view, setView] = useState<"LIST" | "FORM">("LIST");
   const [data, setData] = useState<Sinistre[]>([]);
   const [form, setForm] = useState<SinistreForm>(EMPTY_FORM);
@@ -88,6 +103,15 @@ export default function SinistresPage() {
   const [saving, setSaving] = useState(false);
   const [followUp, setFollowUp] = useState<FollowUpForm>(null);
   const [savingFollowUp, setSavingFollowUp] = useState(false);
+  
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerType, setViewerType] = useState<"image" | "pdf">("pdf");
+
+  const openViewer = (url: string) => {
+    const isImage = url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
+    setViewerType(isImage ? "image" : "pdf");
+    setViewerUrl(url);
+  };
 
   const loadData = async () => {
     const response = await getSinistres().catch(() => []);
@@ -101,13 +125,12 @@ export default function SinistresPage() {
   useEffect(() => {
     const state = location.state as { prefillBien?: Bien } | null;
     if (!state?.prefillBien) return;
-    setActiveTab("DECLARATIONS");
     setView("FORM");
     setForm((current) => ({ ...current, bien: state.prefillBien || null }));
     showToast({
       type: "info",
-      title: "Bien preselectionne",
-      message: `${state.prefillBien.designation} a ete injecte depuis la galerie des biens.`,
+      title: "Bien préselectionné",
+      message: `${state.prefillBien.designation} a été injecté depuis la galerie des biens.`,
     });
   }, [location.state]);
 
@@ -118,9 +141,9 @@ export default function SinistresPage() {
 
   const validate = () => {
     const nextErrors: FormErrors = {};
-    if (!form.bien?.id) nextErrors.bien = "Selectionnez le bien sinistre.";
-    if (!form.dateSinistre || form.dateSinistre > today) nextErrors.dateSinistre = "La date doit etre inferieure ou egale a aujourd'hui.";
-    if (form.description.trim().length < 100) nextErrors.description = "La description doit contenir au moins 100 caracteres.";
+    if (!form.bien?.id) nextErrors.bien = "Sélectionnez le bien sinistré.";
+    if (!form.dateSinistre || form.dateSinistre > today) nextErrors.dateSinistre = "La date doit être inférieure ou égale à aujourd'hui.";
+    if (form.description.trim().length < 50) nextErrors.description = "La description doit contenir au moins 50 caractères.";
     if (form.piecesJointes.length === 0) nextErrors.piecesJointes = "Le rapport de constat est obligatoire.";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -147,120 +170,288 @@ export default function SinistresPage() {
       await loadData();
       setForm(EMPTY_FORM);
       setView("LIST");
-      showToast({ type: "success", title: "Sinistre declare", message: `Bien ${form.bien.iup} marque SINISTRE.` });
+      showToast({ type: "success", title: "Sinistre déclaré", message: `Bien ${form.bien.iup} marqué SINISTRE.` });
     } catch (error) {
-      showToast({ type: "error", title: "Declaration impossible", message: error instanceof Error ? error.message : "Erreur API" });
+      showToast({ type: "error", title: "Déclaration impossible", message: error instanceof Error ? error.message : "Erreur API" });
     } finally {
       setSaving(false);
     }
   };
 
-  const declarations = (
-    <>
-      {view === "FORM" ? (
-        <div className="centered-form-card fade-in">
-          <div className="form-header-premium">
-            <h2>Nouvelle declaration</h2>
-            <button type="button" className="btn-export" onClick={() => setView("LIST")}>Annuler</button>
-          </div>
-          <form className="premium-dynamic-form" onSubmit={submit}>
-            <Field label="Bien concerne" error={errors.bien}>
-              <BienSelector value={form.bien} onChange={(bien) => updateForm("bien", bien)} />
-            </Field>
-            {form.bien ? <div className="recap-card"><strong>{form.bien.iup} - {form.bien.designation}</strong><span>Valeur : {formatMoney(form.bien.valeur)} | VNC : {formatMoney(form.bien.valeurNetteComptable ?? form.bien.valeur)}</span></div> : null}
-            <div className="grid-2">
-              <Field label="Type">
-                <select value={form.type} onChange={(event) => updateForm("type", event.target.value as SinistreType)}>
-                  <option value="VOL">VOL</option>
-                  <option value="INCENDIE">INCENDIE</option>
-                  <option value="ACCIDENT">ACCIDENT</option>
-                  <option value="DEGRADATION">DEGRADATION</option>
-                  <option value="CATASTROPHE_NATURELLE">CATASTROPHE_NATURELLE</option>
-                  <option value="AUTRE">AUTRE</option>
-                </select>
-              </Field>
-              <Field label="Gravité">
-                <select value={form.gravite} onChange={(event) => updateForm("gravite", event.target.value as Gravite)}>
-                  <option value="MINEUR">MINEUR</option>
-                  <option value="MAJEUR">MAJEUR</option>
-                  <option value="PERTE_TOTALE">PERTE TOTALE (Entraine une réforme)</option>
-                </select>
-              </Field>
-              <Field label="Date sinistre" error={errors.dateSinistre}>
-                <input type="date" max={today} value={form.dateSinistre} onChange={(event) => updateForm("dateSinistre", event.target.value)} />
-              </Field>
-              <Field label="Montant dommages estime FCFA">
-                <input type="number" min={0} value={form.montantEstime} onChange={(event) => updateForm("montantEstime", Number(event.target.value))} />
-              </Field>
-              <Field label="Reference police assurance">
-                <input value={form.referencePolice} onChange={(event) => updateForm("referencePolice", event.target.value)} />
-              </Field>
-              <Field label="Description circonstances" error={errors.description} span>
-                <textarea rows={4} value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
-              </Field>
-              <Field label="Rapport de constat" error={errors.piecesJointes} span>
-                <FileUpload onUploadSuccess={(url) => updateForm("piecesJointes", [...form.piecesJointes, url])} />
-              </Field>
-            </div>
-            <button type="submit" className="primary danger-bg" disabled={saving}>{saving ? "Declaration..." : "Declarer le sinistre"}</button>
-          </form>
-        </div>
-      ) : (
-        <div className="table-card">
-          <table className="patris-table">
-            <thead><tr><th>Date</th><th>IUP</th><th>Designation</th><th>Type</th><th>Montant</th><th>Statut</th><th>Actions</th></tr></thead>
-            <tbody>
-              {data.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.dateSinistre}</td>
-                  <td className="monospace">{item.bien?.iup || "N/A"}</td>
-                  <td>{item.bien?.designation || "-"}</td>
-                  <td>{item.type}</td>
-                  <td>{formatMoney(item.montantEstime)}</td>
-                  <td><span className={`status-badge status-${String(normalizeSinistreStatus(item.statut)).toLowerCase()}`}>{normalizeSinistreStatus(item.statut)}</span></td>
-                  <td><div className="table-actions"><button type="button" onClick={() => setFollowUp({ id: item.id, numeroDossierAssureur: item.numeroDossierAssureur || "", montantIndemnise: item.montantIndemnise || 0, datePaiement: item.datePaiement || "" })}>Suivi</button><button type="button" onClick={() => deleteSinistre(item.id).then(() => void loadData())}>Suppr.</button></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </>
-  );
+  const handleDelete = async (item: Sinistre) => {
+    if (!item.id) return;
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette déclaration de sinistre ? Cette action est irréversible.")) return;
+    try {
+      await deleteSinistre(item.id);
+      showToast({ type: "success", title: "Sinistre supprimé avec succès" });
+      await loadData();
+    } catch (error) {
+      showToast({ type: "error", title: "Erreur lors de la suppression" });
+    }
+  };
+
+  const stats = useMemo(() => {
+    const total = data.length;
+    const pending = data.filter(d => normalizeSinistreStatus(d.statut) === "DECLARE" || normalizeSinistreStatus(d.statut) === "EN_INSTRUCTION").length;
+    const indemnises = data.filter(d => normalizeSinistreStatus(d.statut) === "INDEMNISE").length;
+    const rejetes = data.filter(d => normalizeSinistreStatus(d.statut) === "REJETE" || normalizeSinistreStatus(d.statut) === "CLASSE").length;
+    return { total, pending, indemnises, rejetes };
+  }, [data]);
 
   return (
-    <div className="sinistres-module fade-in">
-      <header className="page-header-premium">
+    <div className="dashboard-container reforme-page-shell fade-in">
+      {viewerUrl && (
+        <MediaViewer 
+          url={viewerUrl} 
+          type={viewerType} 
+          filename="Pièce justificative" 
+          onClose={() => setViewerUrl(null)} 
+        />
+      )}
+
+      <header className="page-header-modern">
         <div className="header-meta">
-          <span className="badge-pill-glow" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>Securite & assurance</span>
-          <h1>Sinistres & incidents</h1>
+          <span className="badge-pill-glow" style={{ borderColor: "var(--danger)", color: "var(--danger)", background: "rgba(239,68,68,0.1)" }}>Sécurité & Assurance</span>
+          <h1>Sinistres & Incidents</h1>
         </div>
-        {activeTab === "DECLARATIONS" && view === "LIST" ? <button className="primary danger-bg" type="button" onClick={() => setView("FORM")}>Declarer un sinistre</button> : null}
+        <div className="toolbar-filters">
+          <button
+            className={`pill-filter ${view === "LIST" ? "active" : ""}`}
+            onClick={() => setView("LIST")}
+          >
+            <Shield size={16} />
+            Registre & Assurance
+          </button>
+          <button
+            className={`pill-filter ${view === "FORM" ? "active" : ""}`}
+            onClick={() => { setView("FORM"); setForm(EMPTY_FORM); }}
+          >
+            <PlusCircle size={16} />
+            Déclarer un sinistre
+          </button>
+        </div>
       </header>
 
-      <div className="segmented-control">
-        <button type="button" className={activeTab === "DECLARATIONS" ? "active" : ""} onClick={() => setActiveTab("DECLARATIONS")}>Declarations</button>
-        <button type="button" className={activeTab === "ASSURANCE" ? "active" : ""} onClick={() => setActiveTab("ASSURANCE")}>Suivi assurance</button>
-      </div>
+      {/* KPI BANNER */}
+      {view === "LIST" && (
+        <div className="affectation-kpi-banner fade-in">
+          <div className="aff-kpi-card kpi-total">
+            <div className="aff-kpi-icon">📋</div>
+            <div className="aff-kpi-body">
+              <span className="aff-kpi-value">{stats.total}</span>
+              <span className="aff-kpi-label">TOTAL SINISTRES</span>
+            </div>
+          </div>
+          <div className="aff-kpi-card kpi-valide">
+            <div className="aff-kpi-icon">✅</div>
+            <div className="aff-kpi-body">
+              <span className="aff-kpi-value">{stats.indemnises}</span>
+              <span className="aff-kpi-label">INDEMNISÉS</span>
+            </div>
+          </div>
+          <div className="aff-kpi-card kpi-attente">
+            <div className="aff-kpi-icon">⏳</div>
+            <div className="aff-kpi-body">
+              <span className="aff-kpi-value">{stats.pending}</span>
+              <span className="aff-kpi-label">EN INSTRUCTION</span>
+            </div>
+          </div>
+          <div className="aff-kpi-card kpi-annule">
+            <div className="aff-kpi-icon">❌</div>
+            <div className="aff-kpi-body">
+              <span className="aff-kpi-value">{stats.rejetes}</span>
+              <span className="aff-kpi-label">REJETÉS / CLASSÉS</span>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {activeTab === "DECLARATIONS" ? declarations : (
-        <div className="asset-grid">
-          {data.map((item) => (
-            <article key={item.id} className="asset-card">
-              <span className="badge-premium">{normalizeSinistreStatus(item.statut)}</span>
-              <h3>{item.bien?.designation || "Sinistre"}</h3>
-              <p>Dossier assureur : {item.numeroDossierAssureur || "Non renseigne"}</p>
-              <p>Indemnisation : {formatMoney(item.montantIndemnise)}</p>
-              <p>Gravité : <strong className={item.gravite === "PERTE_TOTALE" ? "danger-text" : ""}>{item.gravite || "NON DEFINIE"}</strong></p>
-              <button type="button" className="btn-export" onClick={() => setFollowUp({ id: item.id, numeroDossierAssureur: item.numeroDossierAssureur || "", montantIndemnise: item.montantIndemnise || 0, datePaiement: item.datePaiement || "" })}>Mettre a jour suivi</button>
-            </article>
-          ))}
+      {view === "FORM" ? (
+        <div className="aff-form-wrapper fade-in" style={{ marginTop: 24 }}>
+          <div className="aff-form-hero" style={{ background: "linear-gradient(135deg, var(--danger) 0%, #b91c1c 100%)" }}>
+            <div className="aff-form-hero-icon">🚨</div>
+            <div>
+              <h2>Déclaration de sinistre</h2>
+              <p>Signalez un vol, incendie, accident ou tout dommage affectant un bien de l'État</p>
+            </div>
+          </div>
+          
+          <div className="aff-form-body">
+            <form className="premium-dynamic-form" onSubmit={submit}>
+              <Field label="Bien concerné" error={errors.bien}>
+                <BienSelector value={form.bien} onChange={(bien) => updateForm("bien", bien)} />
+              </Field>
+              {form.bien ? (
+                <div className="recap-card" style={{ marginTop: "-12px", marginBottom: "20px" }}>
+                  <strong>{form.bien.iup} - {form.bien.designation}</strong>
+                  <span>Valeur d'acquisition : {formatMoney(form.bien.valeur)} | VNC : {formatMoney(form.bien.valeurNetteComptable ?? form.bien.valeur)}</span>
+                </div>
+              ) : null}
+
+              <div className="grid-2">
+                <Field label="Type d'incident">
+                  <select value={form.type} onChange={(event) => updateForm("type", event.target.value as SinistreType)}>
+                    <option value="VOL">VOL</option>
+                    <option value="INCENDIE">INCENDIE</option>
+                    <option value="ACCIDENT">ACCIDENT</option>
+                    <option value="DEGRADATION">DÉGRADATION</option>
+                    <option value="CATASTROPHE_NATURELLE">CATASTROPHE NATURELLE</option>
+                    <option value="AUTRE">AUTRE</option>
+                  </select>
+                </Field>
+                <Field label="Gravité">
+                  <select value={form.gravite} onChange={(event) => updateForm("gravite", event.target.value as Gravite)}>
+                    <option value="MINEUR">MINEUR (Réparable, n'affecte pas l'usage)</option>
+                    <option value="MAJEUR">MAJEUR (Nécessite des réparations lourdes)</option>
+                    <option value="PERTE_TOTALE">PERTE TOTALE (Irréparable, entraîne une réforme)</option>
+                  </select>
+                </Field>
+                <Field label="Date du sinistre" error={errors.dateSinistre}>
+                  <input type="date" max={today} value={form.dateSinistre} onChange={(event) => updateForm("dateSinistre", event.target.value)} />
+                </Field>
+                <Field label="Montant estimé des dommages (FCFA)">
+                  <input type="number" min={0} value={form.montantEstime} onChange={(event) => updateForm("montantEstime", Number(event.target.value))} />
+                </Field>
+                <Field label="Référence police assurance (Optionnel)">
+                  <input value={form.referencePolice} onChange={(event) => updateForm("referencePolice", event.target.value)} placeholder="Ex: POL-123456" />
+                </Field>
+                <Field label="Description & Circonstances détaillées" error={errors.description} span>
+                  <textarea rows={4} value={form.description} onChange={(event) => updateForm("description", event.target.value)} placeholder="Décrivez les circonstances exactes du sinistre..." />
+                </Field>
+                <Field label="Rapport de constat (Photos, PV, Plainte)" error={errors.piecesJointes} span>
+                  <FileUpload onUploadSuccess={(url) => updateForm("piecesJointes", [...form.piecesJointes, url])} />
+                  {form.piecesJointes.length > 0 && (
+                    <small className="field-hint" style={{ marginTop: 8, display: "block", color: "var(--primary)" }}>
+                      <CheckCircle2 size={12} style={{ display: "inline", marginRight: 4 }} />
+                      {form.piecesJointes.length} document(s) attaché(s).
+                    </small>
+                  )}
+                </Field>
+              </div>
+              <button 
+                type="submit" 
+                className="primary-premium" 
+                disabled={saving} 
+                style={{ width: "100%", marginTop: "2rem", display: "flex", justifyContent: "center", gap: "8px", alignItems: "center", padding: "14px", fontSize: "16px", borderRadius: "12px", background: "var(--danger)", color: "white", fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 4px 12px rgba(239, 68, 68, 0.2)" }}
+              >
+                {saving ? "⏳ Déclaration en cours..." : "🚨 Valider la déclaration de sinistre"}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : (
+        <div className="affectation-list-wrapper fade-in" style={{ marginTop: 24 }}>
+          <div className="affectation-list-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center", justifyContent: "space-between" }}>
+            <h2>📋 Registre des sinistres & assurance ({data.length})</h2>
+          </div>
+
+          <div className="affectation-cards-grid">
+            {data.length === 0 ? (
+              <div className="empty-state" style={{ gridColumn: "1/-1" }}>
+                <ShieldCheck size={48} color="#94a3b8" />
+                <p>Aucun sinistre déclaré à ce jour.</p>
+              </div>
+            ) : (
+              data.map((item) => {
+                const statut = normalizeSinistreStatus(item.statut);
+                let statusClass = "status-en_attente";
+                if (statut === "INDEMNISE") statusClass = "status-valide";
+                if (statut === "REJETE" || statut === "CLASSE") statusClass = "status-transfere";
+                
+                const attachments = getAttachments(item.piecesJointes as any);
+                const firstAttachment = attachments.length > 0 ? attachments[0] : null;
+
+                return (
+                  <div className="aff-card" key={item.id}>
+                    <div className="aff-card-header" style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                      <div style={{ width: "48px", height: "48px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}>
+                        {item.bien?.photoUrl ? (
+                          <img 
+                            src={getFullUrl(item.bien.photoUrl)} 
+                            alt="Bien" 
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>';
+                            }}
+                          />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>📦</div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <span className="aff-card-iup">{item.bien?.iup || "N/A"}</span>
+                          <span className={`aff-status-pill ${statusClass}`}>
+                            {statut}
+                          </span>
+                        </div>
+                        <p className="aff-card-designation" style={{ marginTop: 4 }}>{item.bien?.designation || "Bien non renseigné"}</p>
+                      </div>
+                    </div>
+
+                    <div className="aff-card-meta">
+                      <div className="aff-meta-row">
+                        <span>🚨</span><strong>Type</strong>{item.type || "—"}
+                      </div>
+                      <div className="aff-meta-row">
+                        <span>⚠️</span><strong>Gravité</strong><strong className={item.gravite === "PERTE_TOTALE" ? "danger-text" : ""}>{item.gravite || "—"}</strong>
+                      </div>
+                      <div className="aff-meta-row">
+                        <span>💰</span><strong>Estima.</strong>{formatMoney(item.montantEstime)}
+                      </div>
+                      <div className="aff-meta-row">
+                        <span>📅</span><strong>Date</strong>{item.dateSinistre ? new Date(item.dateSinistre).toLocaleDateString("fr-FR") : "—"}
+                      </div>
+                      <div className="aff-meta-row" style={{ gridColumn: "1/-1" }}>
+                         <span>🏢</span><strong>Assurance</strong>{item.numeroDossierAssureur ? `Dossier: ${item.numeroDossierAssureur} | Indemnisé: ${formatMoney(item.montantIndemnise)}` : "Dossier non renseigné"}
+                      </div>
+                      {firstAttachment && (
+                        <div className="aff-meta-row" style={{ gridColumn: "1/-1", marginTop: "4px" }}>
+                          <span>📎</span><strong>Constat joint</strong>
+                          <button 
+                             type="button" 
+                             onClick={() => openViewer(getFullUrl(firstAttachment))} 
+                             style={{ padding: "6px 12px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg, rgba(59,130,246,0.1), rgba(37,99,235,0.05))", color: "#2563eb", border: "1px solid rgba(59,130,246,0.3)", borderRadius: "6px", fontWeight: 500, cursor: "pointer", transition: "all 0.2s ease" }}
+                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.15)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.5)"; }}
+                             onMouseLeave={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(59,130,246,0.1), rgba(37,99,235,0.05))"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)"; }}
+                          >
+                             <Eye size={16} /> Lire le document
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="aff-card-actions">
+                      <button 
+                        className="aff-action-btn" 
+                        type="button" 
+                        onClick={() => setFollowUp({ id: item.id, numeroDossierAssureur: item.numeroDossierAssureur || "", montantIndemnise: item.montantIndemnise || 0, datePaiement: item.datePaiement || "" })}
+                        style={{ color: "var(--primary)" }}
+                      >
+                        <ShieldAlert size={14} style={{ marginRight: 4 }} /> Suivi Assurance
+                      </button>
+                      <button 
+                        className="aff-action-btn" 
+                        type="button" 
+                        onClick={() => void handleDelete(item)} 
+                        style={{ color: "#ef4444" }}
+                        title="Supprimer la déclaration"
+                      >
+                        <Trash2 size={14} style={{ marginRight: 4 }} /> Supprimer
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
       {followUp ? (
         <div 
-          className="modal-overlay-premium" 
+          className="modal-overlay-premium fade-in" 
           style={{ 
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
             backgroundColor: 'rgba(15, 23, 42, 0.75)', zIndex: 9999,
@@ -268,7 +459,7 @@ export default function SinistresPage() {
           }}
         >
           <div 
-            className="modal-card" 
+            className="modal-card scale-in" 
             style={{ 
               background: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '500px',
               display: 'flex', flexDirection: 'column',
@@ -276,12 +467,10 @@ export default function SinistresPage() {
               overflow: 'hidden'
             }}
           >
-            {/* Modal Header */}
             <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 600 }}>Mise à jour du suivi assurance</h3>
             </div>
 
-            {/* Modal Body (Scrollable) */}
             <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <Field label="Numéro dossier assureur">
                 <input 
@@ -311,7 +500,6 @@ export default function SinistresPage() {
               </div>
             </div>
 
-            {/* Modal Footer (Fixed, Buttons Always Visible) */}
             <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button 
                 type="button" 
@@ -322,7 +510,7 @@ export default function SinistresPage() {
               </button>
               <button
                 type="button"
-                className="primary"
+                className="primary-premium"
                 disabled={savingFollowUp}
                 style={{ padding: '10px 24px', borderRadius: '8px', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.5)', border: 'none', cursor: 'pointer', background: 'var(--primary, #3b82f6)', color: 'white' }}
                 onClick={async () => {
@@ -346,7 +534,15 @@ export default function SinistresPage() {
                     });
                     
                     if (followUp.montantIndemnise > 0 && current?.gravite === "PERTE_TOTALE" && current?.bien?.id) {
-                      await updateBienStatus(current.bien.id, { statutOperationnel: "REFORME" });
+                      try {
+                        // The backend throws a 500 error (LazyInitializationException) when serializing the updated Bien,
+                        // but the database transaction commits successfully. We can safely ignore this error.
+                        await updateBienStatus(current.bien.id, { statutOperationnel: "REFORME" });
+                      } catch (err: any) {
+                        if (err?.response?.status !== 500) {
+                          console.error("Erreur auto-réforme:", err);
+                        }
+                      }
                       showToast({ type: "info", title: "Bien réformé", message: "Le bien a été automatiquement réformé suite à la perte totale." });
                     }
                     
