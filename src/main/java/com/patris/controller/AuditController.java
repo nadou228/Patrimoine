@@ -15,13 +15,13 @@ public class AuditController {
     private final AuditLogRepository repository;
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public List<AuditLog> findAll() {
         return repository.findAll();
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public void delete(@PathVariable("id") Long id) {
         repository.deleteById(id);
     }

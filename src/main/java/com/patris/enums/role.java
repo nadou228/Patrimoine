@@ -2,6 +2,7 @@ package com.patris.enums;
 
 public enum role {
 
+    SUPERADMIN,
     ADMIN,
 
     AGENT_INVENTAIRE,

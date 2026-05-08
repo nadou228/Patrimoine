@@ -44,6 +44,11 @@ public class Affectation {
     private String ministere;
     private String posteComptable;
     private String detenteurA;
+    
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "affectation_documents", joinColumns = @JoinColumn(name = "affectation_id"))
+    @Column(name = "document_url")
+    private java.util.List<String> documentsUrls = new java.util.ArrayList<>();
 
     public Affectation(Beneficiaire beneficiaire, String fonction, LocalDateTime dateAffectation, Bien bien, Services services) {
         this.beneficiaire = beneficiaire;

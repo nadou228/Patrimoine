@@ -65,28 +65,28 @@ public class SecurityConfig {
 
                 // ADMIN SYSTEME
                 .requestMatchers("/admin/**")
-                    .hasRole("ADMIN")
+                    .hasAnyRole("ADMIN","SUPERADMIN")
 
                 // MODULE BIENS (IMMOBILIER / MOBILIER / ROULEMENT)
                 .requestMatchers(HttpMethod.GET, "/api/biens/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
 
                 .requestMatchers(HttpMethod.POST, "/api/biens/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","MAGASINIER","RESPONSABLE_PARC_AUTOMOBILE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","MAGASINIER","RESPONSABLE_PARC_AUTOMOBILE")
 
                 .requestMatchers(HttpMethod.PUT, "/api/biens/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
 
                 .requestMatchers(HttpMethod.DELETE, "/api/biens/**")
-                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","RESPONSABLE_PATRIMOINE")
 
                 // DASHBOARD
                 .requestMatchers("/api/dashboard/**")
-                    .hasAnyRole("ADMIN","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
+                    .hasAnyRole("ADMIN","SUPERADMIN","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
 
                 // MODULE UTILISATEURS
                 .requestMatchers(HttpMethod.GET, "/api/utilisateurs/**")
-                    .hasAnyRole("ADMIN", "GESTIONNAIRE_TECHNIQUE", "RESPONSABLE_PATRIMOINE", "AGENT_INVENTAIRE", "AUDITEUR", "ELU")
+                    .hasAnyRole("ADMIN", "SUPERADMIN", "GESTIONNAIRE_TECHNIQUE", "RESPONSABLE_PATRIMOINE", "AGENT_INVENTAIRE", "AUDITEUR", "ELU")
 
                 // STOCKS
                 .requestMatchers(HttpMethod.GET, "/api/stocks/**")
@@ -95,45 +95,45 @@ public class SecurityConfig {
                     .authenticated()
 
                 .requestMatchers(HttpMethod.POST, "/api/stocks/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE")
 
                 .requestMatchers(HttpMethod.PUT, "/api/stocks/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE")
 
                 .requestMatchers(HttpMethod.DELETE, "/api/stocks/**")
-                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","RESPONSABLE_PATRIMOINE")
 
                 // AUDIT & LOGS
                 .requestMatchers("/api/audit/**")
-                    .hasAnyRole("ADMIN","AUDITEUR")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AUDITEUR")
 
                 // INVENTAIRES CERTIFIES
                 .requestMatchers(HttpMethod.GET, "/api/inventaires/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","ELU","AUDITEUR")
 
                 .requestMatchers(HttpMethod.POST, "/api/inventaires/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
 
                 .requestMatchers(HttpMethod.PUT, "/api/inventaires/**")
-                    .hasAnyRole("ADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AGENT_INVENTAIRE","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
 
                 // REFORME / SORTIE
                 .requestMatchers(HttpMethod.GET, "/api/reformes/**")
-                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","AUDITEUR")
+                    .hasAnyRole("ADMIN","SUPERADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER","AUDITEUR")
 
                 .requestMatchers(HttpMethod.POST, "/api/reformes/**")
-                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER")
+                    .hasAnyRole("ADMIN","SUPERADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER")
 
                 .requestMatchers(HttpMethod.PUT, "/api/reformes/**")
-                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER")
+                    .hasAnyRole("ADMIN","SUPERADMIN","RESPONSABLE_PATRIMOINE","RESPONSABLE_FINANCIER")
 
                 .requestMatchers(HttpMethod.DELETE, "/api/reformes/**")
-                    .hasAnyRole("ADMIN","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","RESPONSABLE_PATRIMOINE")
 
 
                 // AUTRES ENDPOINTS API
                 .requestMatchers("/api/**")
-                    .hasAnyRole("ADMIN","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
+                    .hasAnyRole("ADMIN","SUPERADMIN","GESTIONNAIRE_TECHNIQUE","RESPONSABLE_PATRIMOINE")
 
 
                 // TOUT LE RESTE

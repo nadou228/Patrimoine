@@ -1114,8 +1114,8 @@ export default function BiensPage() {
                               const docUrl = allDocs[0];
                               const isImage = docUrl.match(/\.(jpg|jpeg|png|webp)$/i);
                               setViewerMedia({ 
-                                url: getFullUrl(docUrl), 
-                                type: isImage ? "image" : "document", 
+                                url: normalizeUrl(docUrl), 
+                                type: isImage ? "image" : "pdf", 
                                 filename: `Document - ${bien.designation}` 
                               });
                             }}
@@ -1315,7 +1315,7 @@ export default function BiensPage() {
                       <input 
                         className="premium-input" 
                         placeholder="Ex: Ordinateur Portable HP EliteBook"
-                        value={form.designation} 
+                        value={form.designation || ""} 
                         onChange={(event) => updateField("designation", event.target.value)} 
                       />
                     </Field>
@@ -1323,7 +1323,7 @@ export default function BiensPage() {
                       <input 
                         className="premium-input"
                         placeholder="Ex: Bureau 204, 2ème étage"
-                        value={form.localisation} 
+                        value={form.localisation || ""} 
                         onChange={(event) => updateField("localisation", event.target.value)} 
                       />
                     </Field>
@@ -1343,7 +1343,7 @@ export default function BiensPage() {
                   </h3>
                   <div className="form-grid-premium">
                     <Field label="Date d'acquisition" error={errors.dateAcquisition}>
-                      <input type="date" className="premium-input" value={form.dateAcquisition} onChange={(event) => updateField("dateAcquisition", event.target.value)} />
+                      <input type="date" className="premium-input" value={form.dateAcquisition || ""} onChange={(event) => updateField("dateAcquisition", event.target.value)} />
                     </Field>
                     <Field label="Mode d'acquisition" error={errors.modeAcquisition}>
                       <select className="premium-input" value={form.modeAcquisition} onChange={(event) => updateField("modeAcquisition", event.target.value)}>
@@ -1365,7 +1365,7 @@ export default function BiensPage() {
                     </Field>
                     <Field label="Coordonnées GPS" error={errors.coordonneesGps}>
                       <div className="field-inline">
-                        <input className="premium-input" placeholder="Latitude, Longitude" value={form.coordonneesGps} onChange={(event) => updateField("coordonneesGps", event.target.value)} />
+                        <input className="premium-input" placeholder="Latitude, Longitude" value={form.coordonneesGps || ""} onChange={(event) => updateField("coordonneesGps", event.target.value)} />
                         <button type="button" className="btn-export glass-card" style={{ whiteSpace: 'nowrap' }} onClick={captureGps}>Capturer GPS</button>
                       </div>
                     </Field>
@@ -1844,6 +1844,40 @@ export default function BiensPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* MEDIA & DOCUMENTS SECTION */}
+                  {(historyPanel.bien.photoUrl || (historyPanel.bien.documentsUrls && historyPanel.bien.documentsUrls.length > 0)) && (
+                    <div style={{ marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
+                      <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 12, display: 'block' }}>Fichiers joints & Médias</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12 }}>
+                        {historyPanel.bien.photoUrl && (
+                            <div 
+                              onClick={() => setViewerMedia({ url: normalizeUrl(historyPanel.bien.photoUrl!), type: 'image', filename: 'Photo Principale' })}
+                              style={{ height: 90, borderRadius: 12, background: `url(${normalizeUrl(historyPanel.bien.photoUrl)}) center/cover`, border: '1px solid #e2e8f0', cursor: 'pointer', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                            >
+                               <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 4px', background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 10, fontWeight: 700, textAlign: 'center', backdropFilter: 'blur(4px)' }}>
+                                  Photo Principale
+                               </div>
+                            </div>
+                        )}
+                        {historyPanel.bien.documentsUrls && historyPanel.bien.documentsUrls.map((url, i) => {
+                          const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
+                          return (
+                            <div 
+                              key={i} 
+                              onClick={() => setViewerMedia({ url: normalizeUrl(url), type: isImage ? 'image' : 'pdf', filename: `Document ${i + 1}` })}
+                              style={{ height: 90, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                              onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                            >
+                              <FileText size={24} color="var(--primary)" style={{ opacity: 0.8 }} />
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#334155' }}>Document {i + 1}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1929,8 +1963,8 @@ function SpecificFields({
           Champs spécifiques Immobilier
         </h3>
         <div className="form-grid-premium">
-          <Field label="Titre foncier" error={errors.titreFoncier}><input className="premium-input" value={form.titreFoncier} onChange={(event) => updateField("titreFoncier", event.target.value)} /></Field>
-          <Field label="Superficie m2" error={errors.superficie}><input className="premium-input" value={form.superficie} onChange={(event) => updateField("superficie", event.target.value)} /></Field>
+          <Field label="Titre foncier" error={errors.titreFoncier}><input className="premium-input" value={form.titreFoncier || ""} onChange={(event) => updateField("titreFoncier", event.target.value)} /></Field>
+          <Field label="Superficie m2" error={errors.superficie}><input className="premium-input" value={form.superficie || ""} onChange={(event) => updateField("superficie", event.target.value)} /></Field>
           <Field label="Statut juridique">
             <select className="premium-input" value={form.statutJuridique} onChange={(event) => updateField("statutJuridique", event.target.value)}>
               {["PROPRIETE_ETAT", "PROPRIETE_PRIVEE", "DOMAINE_PUBLIC", "BAIL"].map((item) => <option key={item}>{item}</option>)}
@@ -1955,15 +1989,15 @@ function SpecificFields({
           Champs spécifiques Matériel Roulant
         </h3>
         <div className="form-grid-premium">
-          <Field label="Immatriculation" error={errors.immatriculation}><input className="premium-input" value={form.immatriculation} onChange={(event) => updateField("immatriculation", event.target.value.toUpperCase())} /></Field>
-          <Field label="Numéro châssis" error={errors.numChassis}><input className="premium-input" value={form.numChassis} onChange={(event) => updateField("numChassis", event.target.value)} /></Field>
-          <Field label="Marque" error={errors.marque}><input className="premium-input" value={form.marque} onChange={(event) => updateField("marque", event.target.value)} /></Field>
-          <Field label="Modèle" error={errors.modele}><input className="premium-input" value={form.modele} onChange={(event) => updateField("modele", event.target.value)} /></Field>
-          <Field label="Puissance fiscale"><input className="premium-input" value={form.puissanceFiscale} onChange={(event) => updateField("puissanceFiscale", event.target.value)} /></Field>
-          <Field label="Type boîte"><input className="premium-input" value={form.typeBoite} onChange={(event) => updateField("typeBoite", event.target.value)} /></Field>
-          <Field label="Type carburant"><input className="premium-input" value={form.typeCarburant} onChange={(event) => updateField("typeCarburant", event.target.value)} /></Field>
-          <Field label="Charge utile"><input className="premium-input" value={form.chargeUtile} onChange={(event) => updateField("chargeUtile", event.target.value)} /></Field>
-          <Field label="Date prochaine visite technique" error={errors.dateProchaineVisiteTechnique}><input className="premium-input" type="date" value={form.dateProchaineVisiteTechnique} onChange={(event) => updateField("dateProchaineVisiteTechnique", event.target.value)} /></Field>
+          <Field label="Immatriculation" error={errors.immatriculation}><input className="premium-input" value={form.immatriculation || ""} onChange={(event) => updateField("immatriculation", event.target.value.toUpperCase())} /></Field>
+          <Field label="Numéro châssis" error={errors.numChassis}><input className="premium-input" value={form.numChassis || ""} onChange={(event) => updateField("numChassis", event.target.value)} /></Field>
+          <Field label="Marque" error={errors.marque}><input className="premium-input" value={form.marque || ""} onChange={(event) => updateField("marque", event.target.value)} /></Field>
+          <Field label="Modèle" error={errors.modele}><input className="premium-input" value={form.modele || ""} onChange={(event) => updateField("modele", event.target.value)} /></Field>
+          <Field label="Puissance fiscale"><input className="premium-input" value={form.puissanceFiscale || ""} onChange={(event) => updateField("puissanceFiscale", event.target.value)} /></Field>
+          <Field label="Type boîte"><input className="premium-input" value={form.typeBoite || ""} onChange={(event) => updateField("typeBoite", event.target.value)} /></Field>
+          <Field label="Type carburant"><input className="premium-input" value={form.typeCarburant || ""} onChange={(event) => updateField("typeCarburant", event.target.value)} /></Field>
+          <Field label="Charge utile"><input className="premium-input" value={form.chargeUtile || ""} onChange={(event) => updateField("chargeUtile", event.target.value)} /></Field>
+          <Field label="Date prochaine visite technique" error={errors.dateProchaineVisiteTechnique}><input className="premium-input" type="date" value={form.dateProchaineVisiteTechnique || ""} onChange={(event) => updateField("dateProchaineVisiteTechnique", event.target.value)} /></Field>
         </div>
       </div>
     );

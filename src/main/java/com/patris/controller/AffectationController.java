@@ -34,18 +34,30 @@ public class AffectationController {
     }
 
     @PostMapping
-    public ResponseEntity<Affectation> create(@RequestBody AffectationDto dto) {
-        return ResponseEntity.ok(service.saveFromDto(dto));
+    public ResponseEntity<?> create(@RequestBody AffectationDto dto) {
+        try {
+            return ResponseEntity.ok(service.saveFromDto(dto));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur lors de la création: " + e.getMessage());
+        }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Affectation> update(@PathVariable Long id, @RequestBody AffectationDto dto) {
-        return ResponseEntity.ok(service.updateFromDto(id, dto));
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody AffectationDto dto) {
+        try {
+            return ResponseEntity.ok(service.updateFromDto(id, dto));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur lors de la mise à jour: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{id}/valider")
-    public ResponseEntity<Affectation> valider(@PathVariable Long id, @RequestParam String validator) {
-        return ResponseEntity.ok(service.validerAffectation(id, validator));
+    public ResponseEntity<?> valider(@PathVariable Long id, @RequestParam String validator) {
+        try {
+            return ResponseEntity.ok(service.validerAffectation(id, validator));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur lors de la validation: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{id}/rejeter")

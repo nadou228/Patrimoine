@@ -16,6 +16,7 @@ public final class RolePermissionBootstrap {
 
     public static Set<Permission> getPermissionsForRole(role userRole) {
         switch (userRole) {
+            case SUPERADMIN:
             case ADMIN:
                 return EnumSet.allOf(Permission.class);
 

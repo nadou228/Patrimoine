@@ -20,7 +20,7 @@ public class UtilisateurController {
      * Vérifie que le filtre de sécurité autorise bien le rôle ADMIN sur cet endpoint de test.
      */
     @GetMapping("/test")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<String> testAdmin() {
         return ResponseEntity.ok("Accès autorisé : rôle ADMIN");
     }
@@ -46,7 +46,7 @@ public class UtilisateurController {
      * Liste complète des utilisateurs (administration).
      */
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<?> getAllUsers(@RequestParam(required = false) String matricule) {
         if (matricule != null && !matricule.isBlank()) {
             try {
@@ -62,7 +62,7 @@ public class UtilisateurController {
      * Détail d'un utilisateur.
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<Utilisateur> getUser(@PathVariable Long id) {
         return ResponseEntity.ok(utilisateurService.findById(id));
     }
@@ -71,7 +71,7 @@ public class UtilisateurController {
      * Mise à jour du profil, du rôle et du statut (sans réinitialisation de mot de passe).
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<Utilisateur> updateUser(@PathVariable Long id, @RequestBody Utilisateur data) {
         return ResponseEntity.ok(utilisateurService.updateProfile(id, data));
     }
@@ -80,7 +80,7 @@ public class UtilisateurController {
      * Suppression physique du compte (une suppression logique sera introduite en phase ultérieure).
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<String> deleteUser(@PathVariable Long id) {
         try {
             utilisateurService.deleteUser(id);

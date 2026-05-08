@@ -38,8 +38,8 @@ public class AdminUtilisateurController {
     private final AuditService auditService;
 
     @GetMapping({"/utilisateurs", "/users"})
-    @PreAuthorize("hasAuthority('ADMIN_SYSTEM')")
-    public List<Utilisateur> listUsers() {
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN') or hasAuthority('ADMIN_SYSTEM')")
+    public List<Utilisateur> getAll() {
         return utilisateurService.getAllUsers();
     }
 
@@ -63,14 +63,7 @@ public class AdminUtilisateurController {
     @PreAuthorize("hasAuthority('ADMIN_SYSTEM')")
     public ResponseEntity<Utilisateur> changeRole(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String code = body.get("code");
-        if (code == null || code.isBlank()) {
-            throw new IllegalArgumentException("Le code de rôle est requis.");
-        }
-        Role role = roleRepository.findByCode(code)
-                .orElseThrow(() -> new RuntimeException("Rôle introuvable : " + code));
-        Utilisateur u = utilisateurService.findById(id);
-        u.setRole(role);
-        Utilisateur saved = utilisateurService.save(u);
+        Utilisateur saved = utilisateurService.changeRole(id, code);
         auditService.save("UTILISATEUR_ROLE", "Utilisateur", id, "role=" + code);
         return ResponseEntity.ok(saved);
     }
@@ -82,33 +75,31 @@ public class AdminUtilisateurController {
         if (newPassword == null || newPassword.isBlank()) {
             throw new IllegalArgumentException("Le mot de passe est requis.");
         }
-        Utilisateur user = utilisateurService.findById(id);
-        if (passwordEncoder.matches(newPassword, user.getPassword())) {
-            throw new IllegalArgumentException("Le nouveau mot de passe doit être différent de l'ancien.");
-        }
-        user.setPassword(passwordEncoder.encode(newPassword));
-        utilisateurService.save(user);
+        utilisateurService.resetPassword(id, newPassword);
         auditService.save("UTILISATEUR_RESET_MDP", "Utilisateur", id, null);
         return ResponseEntity.ok(Map.of("message", "Mot de passe réinitialisé."));
     }
 
     @PutMapping({"/utilisateurs/{id}/toggle-statut", "/users/{id}/toggle-active"})
-    @PreAuthorize("hasAuthority('ADMIN_SYSTEM')")
-    public ResponseEntity<Utilisateur> toggleStatut(@PathVariable Long id) {
-        Utilisateur user = utilisateurService.findById(id);
-        if (user.getStatut() == StatutUtilisateur.ACTIF) {
-            rejectSelfSuspend(id);
-            user.setStatut(StatutUtilisateur.SUSPENDU);
-        } else {
-            user.setStatut(StatutUtilisateur.ACTIF);
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN') or hasAuthority('ADMIN_SYSTEM')")
+    public ResponseEntity<?> toggleStatut(@PathVariable Long id) {
+        try {
+            Utilisateur user = utilisateurService.findById(id);
+            if (user.getStatut() == StatutUtilisateur.ACTIF) {
+                rejectSelfSuspend(id);
+            }
+            Utilisateur saved = utilisateurService.toggleStatut(id);
+            auditService.save("UTILISATEUR_TOGGLE_STATUT", "Utilisateur", id, "statut=" + saved.getStatut());
+            return ResponseEntity.ok(saved);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Bad Request", "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Bad Request", "message", e.getMessage() != null ? e.getMessage() : "Erreur inconnue"));
         }
-        Utilisateur saved = utilisateurService.save(user);
-        auditService.save("UTILISATEUR_TOGGLE_STATUT", "Utilisateur", id, "statut=" + saved.getStatut());
-        return ResponseEntity.ok(saved);
     }
 
     @GetMapping({"/utilisateurs/{id}/activite", "/users/{id}/activite"})
-    @PreAuthorize("hasAuthority('ADMIN_SYSTEM')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN') or hasAuthority('ADMIN_SYSTEM')")
     public List<Map<String, Object>> activite(@PathVariable Long id) {
         Utilisateur u = utilisateurService.findById(id);
         List<Map<String, Object>> out = new ArrayList<>();

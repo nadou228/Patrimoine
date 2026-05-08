@@ -239,16 +239,25 @@ public class BienController {
     }
 
     @PutMapping("/{id}/statut")
-    public ResponseEntity<Bien> updateStatut(
+    public ResponseEntity<?> updateStatut(
         @PathVariable Long id,
-        @RequestBody Map<String, Object> payload,
-        Authentication authentication
+        @RequestBody Map<String, Object> payload
     ) {
-        String acteur = authentication != null ? authentication.getName() : "systeme";
-        String statut = payload.get("statutOperationnel") != null ? String.valueOf(payload.get("statutOperationnel")) : null;
-        String service = payload.get("service") != null ? String.valueOf(payload.get("service")) : null;
-        Bien updated = bienService.changerStatut(id, statut, service, acteur);
-        return ResponseEntity.ok(updated);
+        try {
+            org.springframework.security.core.Authentication authentication = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            String acteur = (authentication != null && authentication.isAuthenticated()) ? authentication.getName() : "systeme";
+            String statut = payload.get("statutOperationnel") != null ? String.valueOf(payload.get("statutOperationnel")) : null;
+            String service = payload.get("service") != null ? String.valueOf(payload.get("service")) : null;
+            Bien updated = bienService.changerStatut(id, statut, service, acteur);
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            log.error("Erreur lors du changement de statut pour le bien {}", id, e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Internal Server Error");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     @PostMapping("/generate-iup")

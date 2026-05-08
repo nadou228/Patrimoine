@@ -33,19 +33,19 @@ public class CategoriePatrimoineController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<CategoriePatrimoine> create(@RequestBody CategoriePatrimoine category) {
         return ResponseEntity.ok(service.create(category));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<CategoriePatrimoine> update(@PathVariable Long id, @RequestBody CategoriePatrimoine category) {
         return ResponseEntity.ok(service.update(id, category));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.noContent().build();

@@ -88,8 +88,9 @@ const AdminPage: React.FC = () => {
         title: "Statut mis à jour", 
         message: `L'utilisateur est maintenant ${updated.statut.toLowerCase()}.` 
       });
-    } catch (error) {
-      showToast({ type: "error", title: "Erreur", message: "Échec de la modification du statut." });
+    } catch (error: any) {
+      const msg = error.response?.data?.message || "Échec de la modification du statut.";
+      showToast({ type: "error", title: "Action impossible", message: msg });
     }
   };
 

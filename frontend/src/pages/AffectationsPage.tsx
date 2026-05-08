@@ -15,7 +15,8 @@ import {
   validerAffectation,
   deleteAffectation,
 } from "../api/api";
-import { Trash2 } from "lucide-react";
+import { Trash2, FileText } from "lucide-react";
+import MediaViewer from "../components/MediaViewer";
 import { Bien, updateBienStatus } from "../api/biens";
 import { getCurrentUser } from "../api/auth";
 import BienSelector from "../components/BienSelector";
@@ -39,6 +40,7 @@ type Affectation = {
   signatureUrl?: string;
   ministere?: string;
   posteComptable?: string;
+  documentsUrls?: string[];
 };
 
 type AffectationForm = {
@@ -57,6 +59,7 @@ type AffectationForm = {
   dateAffectation: string;
   motif: string;
   signatureUrl: string;
+  documentsUrls: string[];
 };
 
 type ReturnModal = {
@@ -97,6 +100,7 @@ const EMPTY_FORM: AffectationForm = {
   dateAffectation: today,
   motif: "",
   signatureUrl: "",
+  documentsUrls: [],
 };
 
 const EMPTY_SERVICE: ServiceForm = {
@@ -157,8 +161,7 @@ export default function AffectationsPage() {
   const [returnModal, setReturnModal] = useState<ReturnModal>(null);
   const [timelineData, setTimelineData] = useState<TimelineEntry[]>([]);
   const [showTimeline, setShowTimeline] = useState(false);
-  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
-  const [viewerType, setViewerType] = useState<"image" | "pdf" | null>(null);
+  const [viewerMedia, setViewerMedia] = useState<{ url: string; type: 'image' | 'pdf'; filename: string } | null>(null);
 
   const loadData = async () => {
     const [affectationsResponse, servicesResponse] = await Promise.all([
@@ -282,6 +285,13 @@ export default function AffectationsPage() {
     if (!validateForm()) return;
     if (!form.bien?.id) return;
 
+    console.log("Submitting Affectation Payload:", {
+      bien: String(form.bien.id),
+      detenteur: beneficiaryLabel(),
+      service: form.service,
+      documentsUrls: form.documentsUrls,
+    });
+
     const payload: AffectationPayload = {
       bien: String(form.bien.id),
       bienId: form.bien.id,
@@ -293,6 +303,7 @@ export default function AffectationsPage() {
       signatureUrl: form.signatureUrl,
       typeBeneficiaire: form.beneficiaryMode,
       responsableReception: form.responsableReception,
+      documentsUrls: form.documentsUrls,
     };
 
     try {
@@ -409,6 +420,7 @@ export default function AffectationsPage() {
       dateAffectation: item.dateAffectation ? item.dateAffectation.slice(0, 10) : today,
       motif: item.motif || "",
       signatureUrl: item.signatureUrl || "",
+      documentsUrls: item.documentsUrls || [],
     });
     setView("FORM");
   };
@@ -431,13 +443,14 @@ export default function AffectationsPage() {
   return (
     <div className="module-container fade-in" style={{ padding: "28px" }}>
       {showTimeline ? <MouvementTimeline mouvements={timelineData as never} onClose={() => setShowTimeline(false)} /> : null}
-      {viewerUrl ? (
-        <div className="modal-overlay" onClick={() => setViewerUrl(null)}>
-           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '80%', height: '80%', padding: 0 }}>
-             {viewerType === 'image' ? <img src={viewerUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : <iframe src={viewerUrl} style={{ width: '100%', height: '100%' }} />}
-           </div>
-        </div>
-      ) : null}
+      {viewerMedia && (
+        <MediaViewer 
+          url={viewerMedia.url} 
+          type={viewerMedia.type} 
+          filename={viewerMedia.filename} 
+          onClose={() => setViewerMedia(null)} 
+        />
+      )}
 
       <header className="page-header-premium" style={{ marginBottom: 28 }}>
         <div className="header-meta">
@@ -596,6 +609,21 @@ export default function AffectationsPage() {
                 </Field>
                 <Field label="Bordereau signé">
                   <FileUpload onUploadSuccess={(url) => updateForm("signatureUrl", url)} />
+                  {form.signatureUrl && (
+                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="badge-pill-glow" onClick={() => setViewerMedia({ url: getFullUrl(form.signatureUrl), type: form.signatureUrl?.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image' : 'pdf', filename: 'Signature' })} style={{ cursor: 'pointer' }}>👁️ Voir signature</span>
+                    </div>
+                  )}
+                </Field>
+                <Field label="Documents joints (PV, Rapport...)">
+                  <FileUpload onUploadSuccess={(url) => setForm(prev => ({ ...prev, documentsUrls: [...prev.documentsUrls, url] }))} />
+                  {form.documentsUrls.length > 0 && (
+                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {form.documentsUrls.map((url, i) => (
+                        <span key={i} className="badge-pill-glow" onClick={() => setViewerMedia({ url: getFullUrl(url), type: url.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image' : 'pdf', filename: `Doc ${i+1}` })} style={{ cursor: 'pointer', fontSize: 10 }}>Doc {i+1}</span>
+                      ))}
+                    </div>
+                  )}
                 </Field>
                 <Field label="Motif" error={errors.motif} span>
                   <textarea rows={3} value={form.motif} onChange={(e) => updateForm("motif", e.target.value)} placeholder="Motif de l'affectation ou du transfert..." />
@@ -647,6 +675,30 @@ export default function AffectationsPage() {
                       ) : (
                         <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>📦</div>
                       )}
+
+                      {/* Badge documents style BiensPage */}
+                      {((item.documentsUrls && item.documentsUrls.length > 0) || item.signatureUrl) && (
+                        <div 
+                          className="asset-docs-badge-premium" 
+                          style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(255,255,255,0.9)', padding: '2px 6px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = item.documentsUrls?.[0] || item.signatureUrl;
+                            if (url) {
+                              setViewerMedia({ 
+                                url: getFullUrl(url), 
+                                type: url.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image' : 'pdf', 
+                                filename: `Document - ${item.bien?.designation || 'Affectation'}` 
+                              });
+                            }
+                          }}
+                        >
+                          <FileText size={12} color="var(--primary)" />
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary)' }}>
+                            {(item.documentsUrls?.length || 0) + (item.signatureUrl ? 1 : 0)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -667,6 +719,33 @@ export default function AffectationsPage() {
                     <div className="aff-meta-row">
                       <span>📅</span><strong>Date</strong>{item.dateAffectation ? new Date(item.dateAffectation).toLocaleDateString("fr-FR") : "—"}
                     </div>
+                    {item.documentsUrls && item.documentsUrls.length > 0 && (
+                      <div className="aff-meta-row">
+                        <span>📎</span><strong>Documents</strong>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {item.documentsUrls.map((url, idx) => (
+                            <button 
+                              key={idx}
+                              type="button"
+                              className="badge-pill-glow" 
+                              style={{ padding: '2px 8px', fontSize: 10, cursor: 'pointer' }}
+                              onClick={() => setViewerMedia({ url: getFullUrl(url), type: url.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image' : 'pdf', filename: `Document ${idx+1}` })}
+                            >Doc {idx + 1}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {item.signatureUrl && (
+                      <div className="aff-meta-row">
+                        <span>✍️</span><strong>Signature</strong>
+                        <button 
+                          type="button"
+                          className="badge-pill-glow" 
+                          style={{ padding: '2px 8px', fontSize: 10, cursor: 'pointer', borderColor: 'var(--success)' }}
+                          onClick={() => setViewerMedia({ url: getFullUrl(item.signatureUrl!), type: item.signatureUrl!.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image' : 'pdf', filename: 'Signature' })}
+                        >Voir</button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="aff-card-actions">

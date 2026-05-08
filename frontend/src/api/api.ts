@@ -60,6 +60,7 @@ export type AffectationPayload = {
   signatureUrl?: string;
   typeBeneficiaire?: string;
   responsableReception?: string;
+  documentsUrls?: string[];
 };
 
 export type RetourAffectationPayload = {

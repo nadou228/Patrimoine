@@ -65,6 +65,11 @@ public class AffectationService {
         affectation.setMinistere(dto.getMinistere());
         affectation.setPosteComptable(dto.getPosteComptable());
         affectation.setDetenteurA(dto.getDetenteurA());
+        affectation.setSignatureUrl(dto.getSignatureUrl());
+        if (dto.getDocumentsUrls() != null) {
+            affectation.getDocumentsUrls().clear();
+            affectation.getDocumentsUrls().addAll(dto.getDocumentsUrls());
+        }
 
         return repository.save(affectation);
     }
@@ -147,6 +152,10 @@ public class AffectationService {
         if (dto.getMinistere() != null) affectation.setMinistere(dto.getMinistere());
         if (dto.getPosteComptable() != null) affectation.setPosteComptable(dto.getPosteComptable());
         if (dto.getDetenteurA() != null) affectation.setDetenteurA(dto.getDetenteurA());
+        if (dto.getDocumentsUrls() != null) {
+            affectation.getDocumentsUrls().clear();
+            affectation.getDocumentsUrls().addAll(dto.getDocumentsUrls());
+        }
 
         String nouvelleVal = "{\"fonction\":\"" + affectation.getFonction() + "\", \"ministere\":\"" + affectation.getMinistere() + "\"}";
         auditService.save("AFFECTATION_MODIFIEE", "Affectation", id, "Mise à jour de l'affectation", ancienneVal, nouvelleVal);

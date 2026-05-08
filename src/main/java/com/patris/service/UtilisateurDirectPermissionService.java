@@ -9,6 +9,8 @@ import com.patris.repository.UtilisateurPermissionRepository;
 import com.patris.repository.UtilisateurRepository;
 import com.patris.audit.AuditService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,20 @@ public class UtilisateurDirectPermissionService {
     private final EffectivePermissionService effectivePermissionService;
     private final AuditService auditService;
 
+    private boolean isCurrentSuperAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPERADMIN"));
+    }
+
+    private void assertCanManageTarget(Utilisateur utilisateur, String action) {
+        if (utilisateur.getRole() != null
+                && "SUPERADMIN".equals(utilisateur.getRole().getCode())
+                && !isCurrentSuperAdmin()) {
+            throw new RuntimeException("Seul un SUPERADMIN peut " + action + " un compte SUPERADMIN.");
+        }
+    }
+
     @Transactional
     public void applyDirectPermission(Long utilisateurId, String permissionCode, boolean accordee, String motif,
                                      String acteurAdmin) {
@@ -38,6 +54,7 @@ public class UtilisateurDirectPermissionService {
 
         Utilisateur u = utilisateurRepository.findById(utilisateurId)
                 .orElseThrow(() -> new RuntimeException("Utilisateur introuvable."));
+        assertCanManageTarget(u, "modifier les permissions de");
 
         UtilisateurPermission up = utilisateurPermissionRepository
                 .findByUtilisateur_IdAndPermissionCode(utilisateurId, permissionCode)
@@ -63,6 +80,9 @@ public class UtilisateurDirectPermissionService {
 
     @Transactional
     public void removeDirectPermission(Long utilisateurId, String permissionCode) {
+        Utilisateur u = utilisateurRepository.findById(utilisateurId)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable."));
+        assertCanManageTarget(u, "modifier les permissions de");
         utilisateurPermissionRepository.deleteByUtilisateur_IdAndPermissionCode(utilisateurId, permissionCode);
         auditService.save("PERMISSION_DIRECTE_SUPPRIMEE", "Utilisateur", utilisateurId, permissionCode);
     }

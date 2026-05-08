@@ -38,6 +38,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(org.springframework.security.access.AccessDeniedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Accès refusé");
+        body.put("message", "Vous n'avez pas les permissions nécessaires pour cette action.");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAll(Exception ex) {
         // Log deep details for debugging

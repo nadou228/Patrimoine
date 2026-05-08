@@ -11,17 +11,32 @@ import java.io.IOException;
 import java.util.List;
 
 // Apache POI for Excel
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import com.lowagie.text.*;
+import com.lowagie.text.Document;
+import com.lowagie.text.Element;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.Rectangle;
 import com.lowagie.text.Font;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfWriter;
 import com.lowagie.text.PageSize;
 import java.awt.Color;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import org.apache.poi.ss.util.CellRangeAddress;
 
 @Service
 @RequiredArgsConstructor
@@ -131,34 +146,40 @@ public class ReportingService {
      * @return Les données Excel en tant que tableau d'octets.
      */
     public byte[] generateBienExcelReport(String sheetName) throws IOException {
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet(sheetName);
             sheet.setDisplayGridlines(false);
 
-            // Styles (Simplified from ExcelExportService for autonomy)
+            // Styles Premium
             CellStyle headerStyle = workbook.createCellStyle();
-            headerStyle.setFillForegroundColor(IndexedColors.ROYAL_BLUE.getIndex());
+            headerStyle.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
             headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             headerStyle.setAlignment(HorizontalAlignment.CENTER);
-            Font hFont = workbook.createFont();
+            headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            org.apache.poi.ss.usermodel.Font hFont = workbook.createFont();
             hFont.setBold(true);
+            hFont.setFontHeightInPoints((short) 11);
             hFont.setColor(IndexedColors.WHITE.getIndex());
             headerStyle.setFont(hFont);
+            applyStandardBorders(headerStyle);
 
-            CellStyle dataStyle = workbook.createCellStyle();
-            dataStyle.setBorderBottom(BorderStyle.THIN);
-            dataStyle.setBorderTop(BorderStyle.THIN);
-            dataStyle.setBorderLeft(BorderStyle.THIN);
-            dataStyle.setBorderRight(BorderStyle.THIN);
+            CellStyle evenRowStyle = workbook.createCellStyle();
+            evenRowStyle.setFillForegroundColor(IndexedColors.PALE_BLUE.getIndex());
+            evenRowStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            applyStandardBorders(evenRowStyle);
+
+            CellStyle oddRowStyle = workbook.createCellStyle();
+            applyStandardBorders(oddRowStyle);
 
             // Header
             Row headerRow = sheet.createRow(0);
-            headerRow.setHeightInPoints(25);
+            headerRow.setHeightInPoints(30);
             String[] headers = {"IUP", "Désignation", "Catégorie", "Valeur (CFA)", "VNC (CFA)", "Date Acquisition"};
             for (int i = 0; i < headers.length; i++) {
                 Cell cell = headerRow.createCell(i);
                 cell.setCellValue(headers[i]);
                 cell.setCellStyle(headerStyle);
-                sheet.setColumnWidth(i, 20 * 256);
+                sheet.setColumnWidth(i, 22 * 256);
             }
 
             // Data
@@ -166,15 +187,18 @@ public class ReportingService {
             int rowNum = 1;
             for (Bien bien : biens) {
                 Row row = sheet.createRow(rowNum++);
+                row.setHeightInPoints(20);
+                CellStyle currentStyle = (rowNum % 2 == 0) ? evenRowStyle : oddRowStyle;
+
                 row.createCell(0).setCellValue(bien.getIup());
                 row.createCell(1).setCellValue(bien.getDesignation());
                 row.createCell(2).setCellValue(bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : "N/A");
                 row.createCell(3).setCellValue(bien.getValeur());
                 row.createCell(4).setCellValue(bien.getValeurNetteComptable() != null ? bien.getValeurNetteComptable() : 0.0);
                 row.createCell(5).setCellValue(bien.getDateAcquisition() != null ? bien.getDateAcquisition().toString() : "-");
-                
+
                 for (int i = 0; i < headers.length; i++) {
-                    row.getCell(i).setCellStyle(dataStyle);
+                    row.getCell(i).setCellStyle(currentStyle);
                 }
             }
             sheet.setAutoFilter(new CellRangeAddress(0, rowNum - 1, 0, headers.length - 1));
@@ -185,6 +209,13 @@ public class ReportingService {
         } catch (Exception e) {
             throw new IOException("Erreur lors de la génération du rapport Excel", e);
         }
+    }
+
+    private void applyStandardBorders(CellStyle style) {
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
     }
 
     // Méthodes pour générer les documents spécifiques (BAM, BMM, PV, Livre Journal) viendront ici

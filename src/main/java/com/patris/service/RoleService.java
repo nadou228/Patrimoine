@@ -5,6 +5,8 @@ import com.patris.model.Role;
 import com.patris.repository.PermissionRepository;
 import com.patris.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,18 @@ public class RoleService {
 
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+
+    private boolean isCurrentSuperAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPERADMIN"));
+    }
+
+    private void assertCanManageRole(String code, String action) {
+        if ("SUPERADMIN".equals(code) && !isCurrentSuperAdmin()) {
+            throw new RuntimeException("Seul un SUPERADMIN peut " + action + " le role SUPERADMIN.");
+        }
+    }
 
     public List<Role> findAll() {
         return roleRepository.findAll();
@@ -35,6 +49,7 @@ public class RoleService {
 
     @Transactional
     public Role updateRoleMetadataByCode(String code, String libelle, String description) {
+        assertCanManageRole(code, "modifier");
         Role role = findByCode(code);
         if (libelle != null) {
             role.setLibelle(libelle);
@@ -53,6 +68,7 @@ public class RoleService {
 
     @Transactional
     public void deactivateRoleByCode(String code) {
+        assertCanManageRole(code, "désactiver");
         Role role = findByCode(code);
         if (role.isSystemRole()) {
             throw new RuntimeException("Impossible de désactiver un rôle système.");
@@ -67,6 +83,10 @@ public class RoleService {
 
     @Transactional
     public Role createRole(Role role) {
+        if (role.getCode() == null || role.getCode().isBlank()) {
+            throw new RuntimeException("Le code du role est requis.");
+        }
+        assertCanManageRole(role.getCode(), "créer");
         if (roleRepository.findByCode(role.getCode()).isPresent()) {
             throw new RuntimeException("Un rôle avec ce code existe déjà");
         }
@@ -76,11 +96,11 @@ public class RoleService {
     @Transactional
     public Role updatePermissions(Long roleId, Set<String> permissionCodes) {
         Role role = findById(roleId);
+        assertCanManageRole(role.getCode(), "modifier les permissions du");
         Set<Permission> permissions = permissionCodes.stream()
                 .map(code -> permissionRepository.findByCode(code)
                         .orElseThrow(() -> new RuntimeException("Permission introuvable : " + code)))
                 .collect(Collectors.toSet());
-        
         role.setPermissions(permissions);
         return roleRepository.save(role);
     }
@@ -88,6 +108,7 @@ public class RoleService {
     @Transactional
     public void deleteRole(Long id) {
         Role role = findById(id);
+        assertCanManageRole(role.getCode(), "supprimer");
         if (role.isSystemRole()) {
             throw new RuntimeException("Impossible de supprimer un rôle système");
         }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUsers, createUser, deleteUser } from '../api/api';
+import { getCurrentUser } from '../api/auth';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useToast } from '../contexts/ToastContext';
 import { 
@@ -32,6 +33,7 @@ interface User {
 
 // Mapping des rôles frontend vers backend
 const ROLES_MAPPING: { [key: string]: string } = {
+  'SUPERADMIN': 'SUPERADMIN',
   'ADMIN': 'ADMIN',
   'AGENT_INVENTAIRE': 'AGENT_INVENTAIRE',
   'GESTIONNAIRE_TECHNIQUE': 'GESTIONNAIRE_TECHNIQUE',
@@ -43,6 +45,7 @@ const ROLES_MAPPING: { [key: string]: string } = {
 };
 
 const ROLE_LABELS: { [key: string]: { label: string; icon: string } } = {
+  'SUPERADMIN': { label: '👑 Super Administrateur', icon: '👑' },
   'ADMIN': { label: '🔑 Administrateur Système', icon: '🔑' },
   'AGENT_INVENTAIRE': { label: '📋 Agent d\'Inventaire', icon: '📋' },
   'GESTIONNAIRE_TECHNIQUE': { label: '🛠️ Gestionnaire Technique', icon: '🛠️' },
@@ -62,6 +65,10 @@ const UsersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
+
+  const currentUser = getCurrentUser();
+  const isSuperAdmin = currentUser?.role === 'SUPERADMIN';
+
 
   const stats = React.useMemo(() => {
     const total = data.length;
@@ -290,7 +297,9 @@ const UsersPage: React.FC = () => {
                 style={{ marginLeft: 8 }}
               >
                 <option value="ALL">Autres rôles...</option>
-                {Object.keys(ROLES_MAPPING).map(r => (
+                {Object.keys(ROLES_MAPPING)
+                  .filter(r => r !== 'SUPERADMIN' || isSuperAdmin)
+                  .map(r => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>
@@ -447,7 +456,9 @@ const UsersPage: React.FC = () => {
                 <div className="full-span">
                   <label className="field-label-modern">Rôle & Privilèges Système</label>
                   <select className="premium-input" value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
-                    {Object.entries(ROLE_LABELS).map(([code, info]) => (
+                    {Object.entries(ROLE_LABELS)
+                      .filter(([code]) => code !== 'SUPERADMIN' || isSuperAdmin)
+                      .map(([code, info]) => (
                       <option key={code} value={code}>{info.label}</option>
                     ))}
                   </select>

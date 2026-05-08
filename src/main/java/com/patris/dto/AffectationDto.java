@@ -14,6 +14,8 @@ public class AffectationDto {
     private String ministere;
     private String posteComptable;
     private String detenteurA;
+    private String signatureUrl;
+    private java.util.List<String> documentsUrls;
 
     public AffectationDto() {}
 
@@ -58,4 +60,10 @@ public class AffectationDto {
     public void setPosteComptable(String posteComptable) { this.posteComptable = posteComptable; }
     public String getDetenteurA() { return detenteurA; }
     public void setDetenteurA(String detenteurA) { this.detenteurA = detenteurA; }
+    
+    public String getSignatureUrl() { return signatureUrl; }
+    public void setSignatureUrl(String signatureUrl) { this.signatureUrl = signatureUrl; }
+    
+    public java.util.List<String> getDocumentsUrls() { return documentsUrls; }
+    public void setDocumentsUrls(java.util.List<String> documentsUrls) { this.documentsUrls = documentsUrls; }
 }
