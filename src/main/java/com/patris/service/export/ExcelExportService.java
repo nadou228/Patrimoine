@@ -786,7 +786,9 @@ public class ExcelExportService {
         style.setFont(font);
         
         style.setBorderBottom(BorderStyle.MEDIUM);
-        style.setBottomBorderColor(new XSSFColor(Color.decode("#" + COLOR_GOLD_ACCENT), new DefaultIndexedColorMap()));
+        if (style instanceof XSSFCellStyle) {
+            ((XSSFCellStyle) style).setBottomBorderColor(new XSSFColor(Color.decode("#" + COLOR_GOLD_ACCENT), new DefaultIndexedColorMap()));
+        }
         applyBorders(style);
         return style;
     }
