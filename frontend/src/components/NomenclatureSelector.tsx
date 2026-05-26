@@ -20,6 +20,10 @@ interface NomenclatureSelectorProps {
   onSelect: (article: ArticleOption) => void;
   disabled?: boolean;
   className?: string;
+  /** Code article pour pré-remplir en mode édition */
+  initialCode?: string;
+  /** Libellé article pour affichage immédiat pendant la résolution */
+  initialLabel?: string;
 }
 
 const API = "http://localhost:8082/api/v1";
@@ -42,10 +46,10 @@ const DEFAULT_LEVELS = [
 
 const FAMILY_ROOTS: Record<string, string[]> = {
   IMMOBILIER: ["22", "23"],
-  MOBILIER: ["244", "245"],
-  INFORMATIQUE: ["243"],
-  MATERIEL_ROULANT: ["242"],
-  MATERIEL_TECHNIQUE: ["241"],
+  MOBILIER: ["241"],
+  INFORMATIQUE: ["242"],
+  MATERIEL_ROULANT: ["243", "245"],
+  MATERIEL_TECHNIQUE: ["244"],
   INCORPORELS: ["20", "21"],
   OEUVRES_COLLECTIONS: ["248"],
   CHEPTELS: ["247"],
@@ -167,7 +171,7 @@ function CascadeDropdown({ step, label, color, bg, value, onChange, options, dis
   );
 }
 
-export default function NomenclatureSelector({ partie, family, onSelect, disabled = false, className = "" }: NomenclatureSelectorProps) {
+export default function NomenclatureSelector({ partie, family, onSelect, disabled = false, className = "", initialCode, initialLabel }: NomenclatureSelectorProps) {
   const [comptes,    setComptes]    = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [familles,   setFamilles]   = useState<any[]>([]);
@@ -189,7 +193,45 @@ export default function NomenclatureSelector({ partie, family, onSelect, disable
   const [lA, setLA]  = useState(false);
 
   const [chosen, setChosen] = useState<ArticleOption | null>(null);
+  const [resolving, setResolving] = useState(false);
   const progress = [compte, categorie, famille, article].filter(Boolean).length * 25;
+
+  // ── Auto-résolution du code initial (mode édition) ──────────────────────
+  useEffect(() => {
+    if (!initialCode) return;
+    setResolving(true);
+    // 1. Chercher l'article par son code exact via l'API search
+    const p: Record<string, string> = { q: initialCode, limit: "5" };
+    if (partie) p.partie = partie;
+    fetchNom<ArticleOption>("search", p)
+      .then(async (results) => {
+        const found = results.find(r => r.code === initialCode) || results[0];
+        if (!found) return;
+        // 2. Mettre à jour l'article sélectionné (chosen)
+        setChosen(found);
+        // 3. Résoudre la chaîne : compte → catégorie → famille
+        const cpt = found.compte_principal;
+        setCompte(cpt);
+        // Charger catégories pour ce compte
+        const cats = await fetchNom<any>("categories", { compte: cpt });
+        setCategories(cats);
+        const cat = found.categorie;
+        setCategorie(cat);
+        // Charger familles
+        const fams = await fetchNom<any>("familles", { compte: cpt, categorie: cat });
+        setFamilles(fams);
+        const fam = found.famille;
+        setFamille(fam);
+        // Charger articles
+        const arts = await fetchNom<ArticleOption>("articles", { compte: cpt, categorie: cat, famille: fam });
+        setArticles(arts);
+        setArticle(found.code);
+      })
+      .catch(console.error)
+      .finally(() => setResolving(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCode]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     setLC(true);
@@ -218,6 +260,8 @@ export default function NomenclatureSelector({ partie, family, onSelect, disable
   const getStepBg = (stepIdx: number) => DEFAULT_LEVELS[stepIdx].bg;
 
   useEffect(() => {
+    // Ne pas réinitialiser si une résolution initiale est en cours
+    if (resolving) return;
     setCategorie(""); setFamille(""); setArticle(""); setCategories([]); setFamilles([]); setArticles([]);
     if (!compte) return;
     setLCat(true);
@@ -225,6 +269,7 @@ export default function NomenclatureSelector({ partie, family, onSelect, disable
   }, [compte]);
 
   useEffect(() => {
+    if (resolving) return;
     setFamille(""); setArticle(""); setFamilles([]); setArticles([]);
     if (!categorie) return;
     setLF(true);
@@ -232,6 +277,7 @@ export default function NomenclatureSelector({ partie, family, onSelect, disable
   }, [categorie]);
 
   useEffect(() => {
+    if (resolving) return;
     setArticle(""); setArticles([]);
     if (!famille) return;
     setLA(true);
@@ -273,6 +319,11 @@ export default function NomenclatureSelector({ partie, family, onSelect, disable
             <div style={{ fontSize: 16, fontWeight: 800 }}>
               Classification {partie === "A" ? "Immobilisations" : partie === "B" ? "Stocks" : "Générale"}
             </div>
+            {resolving && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, opacity: 0.8 }}>
+                <Loader2 size={11} className="animate-spin" /> Chargement de la nomenclature…
+              </div>
+            )}
           </div>
           {chosen && (
             <button type="button" onClick={reset}

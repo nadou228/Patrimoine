@@ -14,6 +14,7 @@ import {
   updateBien,
   validateImmatriculation,
   validateIup,
+  getBienById,
 } from "../api/biens";
 import { API_BASE_URL, getServices } from "../api/api";
 import CategorieTreeSelect from "../components/CategorieTreeSelect";
@@ -25,6 +26,7 @@ import { exportGrandLivrePremiumExcel, exportLivreJournalPremiumExcel, exportPdf
 import NomenclatureSelector from "../components/NomenclatureSelector";
 import MediaViewer, { MediaType } from "../components/MediaViewer";
 import AnimatedNumber from "../components/AnimatedNumber";
+import AssetDetailDrawer from "../components/AssetDetailDrawer";
 import { QRCodeCanvas } from "qrcode.react";
 import { 
   Sparkles, Search, CheckCircle2, ChevronRight, X, Loader2, 
@@ -280,7 +282,8 @@ const toPayload = (form: BienForm): BienPayload => ({
   ...form,
   codeCategorie: form.categoriePrincipale || form.categorie,
   categorie: form.categoriePrincipale || form.categorie,
-  nomenclature: form.nomenclatureCode ? { code: form.nomenclatureCode } : undefined,
+  // Map nomenclature code to appropriate field
+  ...(form.nomenclatureCode ? { codeSousCategorie: form.nomenclatureCode } : {}),
   type:
     form.categoriePrincipale === "IMMOBILIER"
       ? "IMMOBILIER"
@@ -687,7 +690,7 @@ export default function BiensPage() {
       updateField("iup", result.iup);
       setIupMeta({
         prefixe: result.prefixe || "IMM",
-        categorie: result.categorie || result.nomenclature || code,
+        categorie: result.categorie || code,
         annee: result.annee || new Date(form.dateAcquisition || today).getFullYear(),
         sequence: result.sequence || result.iup.split("-")[3] || "000001",
       });
@@ -811,61 +814,88 @@ export default function BiensPage() {
     }
   };
 
-  const editBien = (bien: Bien) => {
-    // Extraction intelligente des données de nomenclature si elles sont imbriquées (objet nomenclature)
-    const nomenclature = (bien as any).nomenclature;
-    
-    setForm({
-      ...EMPTY_FORM,
-      ...bien,
-      id: bien.id,
-      categorie: (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory,
-      categoriePrincipale: (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory,
-      
-      // MAPPING CRITIQUE : Nomenclature et classification
-      nomenclatureCode: (bien as any).nomenclatureCode || nomenclature?.code || "",
-      codeSousCategorie: bien.codeSousCategorie || nomenclature?.code || "",
-      sousCategorie: bien.sousCategorie || nomenclature?.intitule || nomenclature?.libelle || "",
-      codeFamille: bien.codeFamille || nomenclature?.famille || "",
-      familleCatalogue: bien.familleCatalogue || nomenclature?.famille || "",
-      
-      // Coordonnées et dates
-      coordonneesGps: bien.coordonneesGps || bien.coordonneeGps || "",
-      documentsUrls: bien.documentsUrls || [],
-      dateAcquisition: bien.dateAcquisition || today,
-      modeAcquisition: bien.modeAcquisition || "ACHAT", // FALLBACK pour éviter l'erreur de validation
-      
-      // Garantir que toutes les valeurs de type string ne sont jamais null/undefined
-      designation: bien.designation ?? "",
-      localisation: bien.localisation ?? "",
-      
-      // Mapping du service (objet ou string)
-      service: typeof bien.service === 'object' ? ((bien.service as any).nomService || (bien.service as any).nom || (bien.service as any).code || "") : (bien.service ?? ""),
-      
-      observation: bien.observation ?? "",
-      specificationsTechniques: (bien as any).specificationsTechniques ?? "",
-      titreFoncier: (bien as any).titreFoncier ?? "",
-      superficie: (bien as any).superficie ?? "",
-      numSerie: (bien as any).numSerie ?? "",
-      fabricant: (bien as any).fabricant ?? "",
-      marque: (bien as any).marque ?? "",
-      modele: (bien as any).modele ?? "",
-      immatriculation: (bien as any).immatriculation ?? "",
-      numChassis: (bien as any).numChassis ?? "",
-      puissanceFiscale: (bien as any).puissanceFiscale ?? "",
-      chargeUtile: (bien as any).chargeUtile ?? "",
-      typeBoite: (bien as any).typeBoite ?? "MANUELLE",
-      typeCarburant: (bien as any).typeCarburant ?? "ESSENCE",
-      finGarantie: (bien as any).finGarantie ?? "",
-      dateProchaineVisiteTechnique: (bien as any).dateProchaineVisiteTechnique ?? "",
-      numInventaire: (bien as any).numInventaire ?? "",
-      
-      // STRATÉGIE IMAGE : Supporte photoUrl ou photo
-      photoUrl: bien.photoUrl || (bien as any).photo || "",
-    });
-    setView("form");
-    setActiveStep(1);
-    setMaxStep(2);
+  const editBien = async (bienItem: Bien) => {
+    if (!bienItem.id) return;
+    try {
+      // Fetch full entity from backend to ensure no fields are missing
+      const bien = await getBienById(bienItem.id);
+      const nomenclature = (bien as any).nomenclature;
+
+      setForm({
+        ...EMPTY_FORM,
+        ...bien,
+        id: bien.id,
+        categorie: (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory,
+        categoriePrincipale: (bien.categoriePrincipale || bien.categorie || "MOBILIER") as MainCategory,
+
+        // Nomenclature & classification
+        nomenclatureCode: (bien as any).nomenclatureCode || nomenclature?.code || "",
+        codeSousCategorie: bien.codeSousCategorie || nomenclature?.code || "",
+        sousCategorie: bien.sousCategorie || nomenclature?.intitule || nomenclature?.libelle || "",
+        codeFamille: bien.codeFamille || nomenclature?.famille || "",
+        familleCatalogue: bien.familleCatalogue || nomenclature?.famille || "",
+
+        // Coordonnées et dates
+        coordonneesGps: bien.coordonneesGps || bien.coordonneeGps || "",
+        documentsUrls: bien.documentsUrls || [],
+        dateAcquisition: bien.dateAcquisition || today,
+        modeAcquisition: bien.modeAcquisition || "ACHAT",
+
+        // Champs de texte — garantir qu'ils ne sont jamais null/undefined
+        designation: bien.designation ?? "",
+        localisation: bien.localisation ?? "",
+        observation: bien.observation ?? "",
+        specificationsTechniques: (bien as any).specificationsTechniques ?? "",
+
+        // Service (peut être objet ou string selon le backend)
+        service: typeof bien.service === 'object'
+          ? ((bien.service as any).nomService || (bien.service as any).nom || (bien.service as any).code || "")
+          : (bien.service ?? ""),
+
+        // Champs immobilier
+        titreFoncier: bien.titreFoncier ?? "",
+        superficie: bien.superficie ?? "",
+
+        // Champs matériel roulant
+        immatriculation: bien.immatriculation ?? "",
+        numChassis: bien.numChassis ?? "",
+        marque: bien.marque ?? "",
+        modele: bien.modele ?? "",
+        puissanceFiscale: bien.puissanceFiscale ?? "",
+        chargeUtile: bien.chargeUtile ?? "",
+        typeBoite: bien.typeBoite || "MANUELLE",
+        typeCarburant: bien.typeCarburant || "ESSENCE",
+        dateProchaineVisiteTechnique: bien.dateProchaineVisiteTechnique ?? "",
+
+        // Champs mobilier / équipement
+        numSerie: bien.numSerie ?? "",
+        fabricant: bien.fabricant ?? "",
+        finGarantie: bien.finGarantie ?? "",
+        numInventaire: bien.numInventaire ?? "",
+
+        // Photo
+        photoUrl: bien.photoUrl || (bien as any).photo || "",
+
+        // Champs comptables
+        valeur: bien.valeur ?? 0,
+        tauxAmortissement: bien.tauxAmortissement ?? 0,
+        dureeVie: bien.dureeVie ?? 0,
+        dureeAmortissement: bien.dureeAmortissement ?? 0,
+        valeurNetteComptable: bien.valeurNetteComptable ?? 0,
+        amortissementCumule: bien.amortissementCumule ?? 0,
+      });
+
+      setView("form");
+      setActiveStep(1);
+      setMaxStep(2);
+    } catch (err: any) {
+      console.error("Erreur chargement bien pour modification:", err);
+      showToast({
+        type: "error",
+        title: "Erreur de chargement",
+        message: "Impossible de charger les données du bien : " + (err.response?.data?.message || err.message),
+      });
+    }
   };
 
   const askDelete = (bien: Bien) => {
@@ -1079,7 +1109,7 @@ export default function BiensPage() {
                 const catIcon = CATEGORY_META[category]?.icon || <LayoutGrid size={48} strokeWidth={1} style={{ opacity: 0.2 }} />;
                 const catIconSmall = CATEGORY_META[category]?.icon || <LayoutGrid size={14} />;
                 const affected = !!bien.service;
-                const mainImage = (bien.photoUrl || bien.photo) ? normalizeUrl(bien.photoUrl || bien.photo) : null;
+                const mainImage = bien.photoUrl ? normalizeUrl(bien.photoUrl) : null;
                 const vnc = bien.valeurNetteComptable ?? bien.valeur;
                 const isConfirmingDelete = confirmation?.bienId === bien.id;
 
@@ -1126,10 +1156,37 @@ export default function BiensPage() {
                         );
                       })()}
 
-                      <div className="asset-status-overlay">
-                        <span className={`status-pill ${bien.etat?.toLowerCase() || ""}`}>
-                          {bien.etat || "ACTIF"}
+                      <div className="asset-status-overlay" style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end', top: '12px', right: '12px', bottom: 'auto', left: 'auto' }}>
+                        <span className={`status-pill ${bien.etat?.toLowerCase() || ""}`} style={{ fontSize: '10px', padding: '4px 8px' }}>
+                          {bien.etat || "NEUF"}
                         </span>
+                        {(() => {
+                          const isAffecte = !!bien.service;
+                          const statutOp = bien.statutOperationnel || 'ACTIF';
+                          return (
+                            <>
+                              {isAffecte ? (
+                                <span style={{ background: 'rgba(99, 102, 241, 0.9)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                  <CheckCircle2 size={10} style={{ display: 'inline', marginRight: 4, marginBottom: -1 }} /> AFFECTÉ
+                                </span>
+                              ) : (
+                                <span style={{ background: 'rgba(226, 232, 240, 0.9)', color: '#475569', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                  NON AFFECTÉ
+                                </span>
+                              )}
+                              {statutOp === 'EN_MAINTENANCE' && (
+                                <span style={{ background: 'rgba(245, 158, 11, 0.9)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                  🛠 EN MAINTENANCE
+                                </span>
+                              )}
+                              {statutOp === 'REFORME' && (
+                                <span style={{ background: 'rgba(239, 68, 68, 0.9)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                  ⛔ RÉFORMÉ
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -1150,7 +1207,7 @@ export default function BiensPage() {
                         <div className="detail-item">
                           <span className="detail-label">Statut</span>
                           <span className="detail-value">
-                            {affected ? `Affecté : ${typeof bien.service === 'object' ? (bien.service.nomService || bien.service.nom || bien.service.code) : bien.service}` : "Libre"}
+                            {affected ? `Affecté : ${bien.service}` : "Libre"}
                           </span>
                         </div>
                       </div>
@@ -1273,33 +1330,49 @@ export default function BiensPage() {
                   </h3>
                   <ErrorText message={errors.categoriePrincipale} />
 
-                  <div className="full-span" style={{ marginTop: 24 }}>
-                    <div className="selected-family-badge" style={{ background: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color + '22', border: `1px solid ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.color}` }}>
-                      <span style={{ color: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color }}>
-                        {CATEGORY_META[form.categoriePrincipale as MainCategory]?.icon}
-                      </span>
-                      <strong>Famille : {CATEGORY_META[form.categoriePrincipale as MainCategory]?.label}</strong>
-                      <button type="button" onClick={() => setActiveStep(0)} className="change-family-btn">Changer</button>
-                    </div>
+                    <div className="full-span" style={{ marginTop: 24 }}>
+                      <div className="selected-family-badge" style={{ background: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color + '22', border: `1px solid ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.color}` }}>
+                        <span style={{ color: CATEGORY_META[form.categoriePrincipale as MainCategory]?.color }}>
+                          {CATEGORY_META[form.categoriePrincipale as MainCategory]?.icon}
+                        </span>
+                        <strong>Famille : {CATEGORY_META[form.categoriePrincipale as MainCategory]?.label}</strong>
+                        <button type="button" onClick={() => setActiveStep(0)} className="change-family-btn">Changer</button>
+                      </div>
 
-                    <div style={{ marginTop: 20 }}>
-                      <label className="field-label-modern">Rechercher dans la nomenclature {CATEGORY_META[form.categoriePrincipale as MainCategory]?.label}</label>
-                      <NomenclatureSelector
-                        partie="A"
-                        family={form.categoriePrincipale}
-                        onSelect={(article) => {
-                          setForm((cur) => ({
-                            ...cur,
-                            nomenclatureCode: article.code,
-                            codeSousCategorie: article.code,
-                            sousCategorie: article.intitule,
-                            codeFamille: article.famille,
-                            familleCatalogue: article.famille,
-                            designation: cur.designation || article.intitule,
-                          }));
-                          setErrors((cur) => ({ ...cur, codeSousCategorie: undefined, designation: undefined }));
-                        }}
-                      />
+                      {form.id && form.sousCategorie && (
+                        <div style={{ marginTop: 16, padding: 16, background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <CheckCircle2 size={20} color="var(--primary)" />
+                          <div>
+                            <div style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase' }}>Nomenclature Actuelle</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                              {form.nomenclatureCode || form.codeSousCategorie} — {form.sousCategorie}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 20 }}>
+                        <label className="field-label-modern">
+                          {form.id ? "Remplacer la nomenclature (Optionnel)" : `Rechercher dans la nomenclature ${CATEGORY_META[form.categoriePrincipale as MainCategory]?.label}`}
+                        </label>
+                        <NomenclatureSelector
+                          partie="A"
+                          family={form.categoriePrincipale}
+                          initialCode={form.id ? (form.nomenclatureCode || form.codeSousCategorie || undefined) : undefined}
+                          initialLabel={form.id ? (form.sousCategorie || undefined) : undefined}
+                          onSelect={(article) => {
+                            setForm((cur) => ({
+                              ...cur,
+                              nomenclatureCode: article.code,
+                              codeSousCategorie: article.code,
+                              sousCategorie: article.intitule,
+                              codeFamille: article.famille,
+                              familleCatalogue: article.famille,
+                              designation: cur.designation || article.intitule,
+                            }));
+                            setErrors((cur) => ({ ...cur, codeSousCategorie: undefined, designation: undefined }));
+                          }}
+                        />
                     </div>
                   </div>
                 </div>
@@ -1758,169 +1831,12 @@ export default function BiensPage() {
       )}
 
       {historyPanel && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          zIndex: 10000, 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          padding: 20
-        }}>
-          <div className="side-panel-overlay" style={{ position: 'absolute' }} onClick={() => setHistoryPanel(null)} />
-          <aside className="side-panel" style={{ position: 'relative' }}>
-            {/* Header Modal Style */}
-            <div style={{ padding: '32px 32px 20px', background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>{historyPanel.bien.designation}</h2>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <code style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 800, background: 'rgba(5, 150, 222, 0.05)', padding: '2px 8px', borderRadius: 6 }}>{historyPanel.bien.iup || "SANS IUP"}</code>
-                    <span style={{ fontSize: 13, color: '#94a3b8' }}>•</span>
-                    <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>{historyPanel.bien.service || "Service non renseigné"}</span>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setHistoryPanel(null)}
-                  style={{ width: 40, height: 40, borderRadius: 14, border: 'none', background: '#f8fafc', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            {/* Onglets compacts */}
-            <div style={{ display: 'flex', gap: 24, padding: '0 32px', background: '#ffffff', borderBottom: '1px solid #f8fafc' }}>
-              {['Détails', 'Historique'].map((tab) => {
-                const isActive = (tab === 'Historique' && historyPanel.view === 'history') || (tab === 'Détails' && (!historyPanel.view || historyPanel.view === 'details'));
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => setHistoryPanel({ ...historyPanel, view: tab === 'Historique' ? 'history' : 'details' })}
-                    style={{
-                      padding: '14px 0',
-                      background: 'none',
-                      border: 'none',
-                      borderBottom: isActive ? '3px solid var(--primary)' : '3px solid transparent',
-                      color: isActive ? 'var(--primary)' : '#94a3b8',
-                      fontSize: 14,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {tab}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="side-panel-content" style={{ flex: 1, overflowY: 'auto', padding: '32px' }}>
-              {(!historyPanel.view || historyPanel.view === 'details') ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div style={{ padding: 20, background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', border: '1px solid #e2e8f0', borderRadius: 24 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                      <div>
-                        <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 6, display: 'block' }}>Valeur d'origine</span>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{formatMoney(historyPanel.bien.valeur)}</div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 6, display: 'block' }}>VNC Actuelle</span>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--success)' }}>{formatMoney(historyPanel.bien.valeurNetteComptable ?? historyPanel.bien.valeur)}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 32px' }}>
-                    {[
-                      { label: 'Catégorie Principale', value: historyPanel.bien.categoriePrincipale },
-                      { label: 'État Physique', value: historyPanel.bien.etatPhysique },
-                      { label: 'Statut Comptable', value: historyPanel.bien.statutComptable },
-                      { label: 'Affectation Actuelle', value: historyPanel.bien.localisation },
-                    ].map((item, i) => item.value && (
-                      <div key={i}>
-                        <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 4, display: 'block' }}>{item.label}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* MEDIA & DOCUMENTS SECTION */}
-                  {(historyPanel.bien.photoUrl || (historyPanel.bien.documentsUrls && historyPanel.bien.documentsUrls.length > 0)) && (
-                    <div style={{ marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-                      <span style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, marginBottom: 12, display: 'block' }}>Fichiers joints & Médias</span>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12 }}>
-                        {historyPanel.bien.photoUrl && (
-                            <div 
-                              onClick={() => setViewerMedia({ url: normalizeUrl(historyPanel.bien.photoUrl!), type: 'image', filename: 'Photo Principale' })}
-                              style={{ height: 90, borderRadius: 12, background: `url(${normalizeUrl(historyPanel.bien.photoUrl)}) center/cover`, border: '1px solid #e2e8f0', cursor: 'pointer', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                            >
-                               <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 4px', background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 10, fontWeight: 700, textAlign: 'center', backdropFilter: 'blur(4px)' }}>
-                                  Photo Principale
-                               </div>
-                            </div>
-                        )}
-                        {historyPanel.bien.documentsUrls && historyPanel.bien.documentsUrls.map((url, i) => {
-                          const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
-                          return (
-                            <div 
-                              key={i} 
-                              onClick={() => setViewerMedia({ url: normalizeUrl(url), type: isImage ? 'image' : 'pdf', filename: `Document ${i + 1}` })}
-                              style={{ height: 90, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-                              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
-                              onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                            >
-                              <FileText size={24} color="var(--primary)" style={{ opacity: 0.8 }} />
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#334155' }}>Document {i + 1}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  {historyPanel.loading ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 70, borderRadius: 16 }} />)}
-                    </div>
-                  ) : historyPanel.entries.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-                      <p style={{ fontSize: 14 }}>Aucun événement trouvé.</p>
-                    </div>
-                  ) : (
-                    historyPanel.entries.map((entry, idx) => (
-                      <div key={idx} style={{ display: 'flex', gap: 16, padding: 16, borderRadius: 16, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)', marginTop: 4, flexShrink: 0, boxShadow: '0 0 10px var(--primary-glow)' }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <span style={{ fontSize: 11, fontWeight: 900, color: 'var(--primary)', textTransform: 'uppercase' }}>{entry.typeEvenement}</span>
-                            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{entry.date ? new Date(entry.date).toLocaleDateString('fr-FR') : "N/C"}</span>
-                          </div>
-                          <p style={{ margin: 0, fontSize: 14, color: '#334155', lineHeight: 1.5, fontWeight: 500 }}>{entry.description}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '24px 32px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 12 }}>
-              <button 
-                className="primary-premium" 
-                style={{ flex: 1, height: 52, borderRadius: 16, fontSize: 14, fontWeight: 800 }}
-                onClick={() => {
-                  setHistoryPanel(null);
-                  editBien(historyPanel.bien);
-                }}
-              >
-                Modifier les informations
-              </button>
-            </div>
-          </aside>
-        </div>
+        <AssetDetailDrawer 
+          historyPanel={historyPanel} 
+          setHistoryPanel={setHistoryPanel} 
+          editBien={editBien} 
+          setViewerMedia={setViewerMedia} 
+        />
       )}
 
       {viewerMedia && (
