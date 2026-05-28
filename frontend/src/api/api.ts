@@ -116,6 +116,48 @@ export type DashboardStatsResponse = {
   prochainesMaintenance: DashboardMaintenanceAlert[];
   alertesStock: DashboardStockAlert[];
   activiteRecente: DashboardActivity[];
+  coutEntretienAnnuel: number;
+  ecartInventaireComptabilite: number;
+  tauxVetusteGlobal: number;
+  repartitionCategories: { name: string; count: number; value: number }[];
+  evolutionMensuelle: { label: string; value: number }[];
+};
+
+export type PagedResponse<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+  first: boolean;
+  last: boolean;
+};
+
+export type AuditLogDto = {
+  id: number;
+  action?: string;
+  entite?: string;
+  entiteId?: number;
+  username?: string;
+  utilisateurLogin?: string;
+  utilisateurNom?: string;
+  ipAdresse?: string;
+  dateAction?: string;
+  detail?: string;
+  details?: string;
+  ancienneValeur?: string;
+  nouvelleValeur?: string;
+};
+
+export type DashboardEvolutionPoint = {
+  label: string;
+  value: number;
+};
+
+export type DashboardCategoryDistribution = {
+  name: string;
+  count: number;
+  value: number;
 };
 
 // ====== SINISTRES — /api/sinistres ======
@@ -202,9 +244,17 @@ export const createService = (data: ServicePayload) => api.post('/services', dat
 // ====== AUDIT — /api/audit ======
 export const getAuditLogs = () => api.get('/audit').then(r => r.data);
 export const deleteAuditLog = (id: number) => api.delete(`/audit/${id}`);
+export const getPagedAuditLogs = (params?: Record<string, string | number | undefined>) => api.get('/audit/logs', { params }).then(r => r.data as PagedResponse<AuditLogDto>);
+export const exportAuditLogsExcel = (params?: Record<string, string | number | undefined>) => api.get('/audit/export/excel', { params, responseType: 'blob' }).then(r => r.data as Blob);
+export const rollbackAuditAction = (id: number) => api.post(`/audit/rollback/${id}`).then(r => r.data);
+export const hardDeleteAuditAction = (id: number) => api.delete(`/audit/hard-delete/${id}`).then(r => r.data);
 
 // ====== DASHBOARD — /api/dashboard ======
 export const getDashboardStats = () => api.get('/dashboard/stats').then(r => r.data as DashboardStatsResponse);
+export const getDashboardEvolutionMensuelle = () => api.get('/dashboard/evolution-mensuelle').then(r => r.data as DashboardEvolutionPoint[]);
+export const getDashboardRepartitionCategories = () => api.get('/dashboard/repartition-categories').then(r => r.data as DashboardCategoryDistribution[]);
+export const getDashboardTopAlertes = () => api.get('/dashboard/top-alertes').then(r => r.data as DashboardMaintenanceAlert[]);
+
 
 // ====== NOMENCLATURE — /api/v1/nomenclature ======
 export const getNomenclatureComptes = (params?: any) => api.get('/v1/nomenclature/comptes', { params }).then(r => r.data);
@@ -212,5 +262,9 @@ export const getNomenclatureCategories = (params?: any) => api.get('/v1/nomencla
 export const getNomenclatureFamilles = (params?: any) => api.get('/v1/nomenclature/familles', { params }).then(r => r.data);
 export const getNomenclatureArticles = (params?: any) => api.get('/v1/nomenclature/articles', { params }).then(r => r.data);
 export const searchNomenclature = (q: string, params?: any) => api.get('/v1/nomenclature/search', { params: { q, ...params } }).then(r => r.data);
+
+// ====== BACKUP / PRA ======
+export const getBackups = () => api.get('/admin/backups').then(r => r.data);
+export const createBackup = (type: string = "manual") => api.post(`/admin/backups/now?type=${type}`).then(r => r.data);
 
 export default api;

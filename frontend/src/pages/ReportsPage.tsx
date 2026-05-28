@@ -54,10 +54,10 @@ const ReportsPage: React.FC = () => {
       link.click();
       link.remove();
       
-      showToast("Document généré avec succès", "success");
+      showToast({ type: "success", title: "Document généré avec succès" });
     } catch (error) {
       console.error(error);
-      showToast("Erreur lors de la génération du document", "error");
+      showToast({ type: "error", title: "Erreur lors de la génération du document" });
     } finally {
       setLoadingDoc(null);
     }

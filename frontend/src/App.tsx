@@ -13,6 +13,7 @@ import UsersPage from './pages/UsersPage';
 import LoginPage from './pages/LoginPage';
 import AdminPage from './pages/AdminPage';
 import ReportsPage from './pages/ReportsPage';
+import AuditPage from './pages/AuditPage';
 import { getCurrentUser } from './api/auth';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -47,6 +48,7 @@ function App() {
               <Route path="affectations" element={<AffectationsPage />} />
               <Route path="inventaire" element={<InventairePage />} />
               <Route path="rapports" element={<ReportsPage />} />
+              <Route path="audit" element={<AuditPage />} />
               <Route path="reforme" element={<ReformePage />} />
               <Route path="sinistres" element={<SinistresPage />} />
               <Route path="entretiens" element={<EntretiensPage />} />

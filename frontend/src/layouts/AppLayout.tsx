@@ -35,7 +35,7 @@ const AppLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getCurrentUser();
-  const { hasPermission, loading, permissions } = usePermissions();
+  const { hasPermission, hasAnyRole, loading, permissions } = usePermissions();
   const [operationsOpen, setOperationsOpen] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
 
@@ -54,6 +54,7 @@ const AppLayout: React.FC = () => {
     { path: "/biens", label: "Gestion des biens", requiredPermission: "READ_BIENS", icon: <Package size={20} /> },
     { path: "/stocks", label: "Stocks", requiredPermission: "READ_STOCKS", icon: <Warehouse size={20} /> },
     { path: "/inventaire", label: "Inventaire", requiredPermission: "READ_INVENTAIRES", icon: <ClipboardList size={20} /> },
+    { path: "/audit", label: "Journal d'Audit", requiredPermission: "READ_AUDIT", icon: <Shield size={20} /> },
     { path: "/rapports", label: "États & Annexes", requiredPermission: "VIEW_DASHBOARD", icon: <FileSpreadsheet size={20} /> },
     { path: "/affectations", label: "Affectations", requiredPermission: "READ_AFFECTATIONS", icon: <ArrowLeftRight size={20} />, inOperations: true },
     { path: "/reforme", label: "Reforme", requiredPermission: "READ_REFORMES", icon: <Trash2 size={20} />, inOperations: true },
@@ -63,7 +64,11 @@ const AppLayout: React.FC = () => {
     { path: "/admin", label: "Système", requiredPermission: "ADMIN_SYSTEM", icon: <Shield size={20} /> },
   ], []);
 
-  const visibleItems = navItems.filter(item => hasPermission(item.requiredPermission));
+  const visibleItems = navItems.filter(item =>
+    item.path === "/audit"
+      ? hasPermission(item.requiredPermission) || hasAnyRole("ADMIN", "SUPERADMIN", "AUDITEUR", "RESPONSABLE_PATRIMOINE")
+      : hasPermission(item.requiredPermission)
+  );
   const primaryItems = visibleItems.filter(item => !item.inOperations && item.path !== "/utilisateurs" && item.path !== "/admin");
   const operationItems = visibleItems.filter(item => item.inOperations);
   const adminItems = visibleItems.filter(item => item.path === "/utilisateurs" || item.path === "/admin");

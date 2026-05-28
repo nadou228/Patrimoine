@@ -15,7 +15,12 @@ public record DashboardStatsDTO(
     long mouvementsThisMois,
     List<DashboardAlerteBienDTO> prochainesMaintenance,
     List<DashboardAlerteStockDTO> alertesStock,
-    List<DashboardActiviteDTO> activiteRecente
+    List<DashboardActiviteDTO> activiteRecente,
+    double coutEntretienAnnuel,
+    double ecartInventaireComptabilite,
+    double tauxVetusteGlobal,
+    List<CategoryDistributionDTO> repartitionCategories,
+    List<EvolutionMensuelleDTO> evolutionMensuelle
 ) {
     public record DashboardAlerteBienDTO(
         Long id,
@@ -46,4 +51,16 @@ public record DashboardStatsDTO(
         String timestamp,
         String details
     ) {}
+
+    public record CategoryDistributionDTO(
+        String name,
+        long count,
+        double value
+    ) {}
+
+    public record EvolutionMensuelleDTO(
+        String label,
+        double value
+    ) {}
 }
+

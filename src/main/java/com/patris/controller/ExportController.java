@@ -22,6 +22,7 @@ public class ExportController {
 
     private final ExcelExportService excelExportService;
     private final BienRepository bienRepository;
+    private final com.patris.audit.AuditService auditService;
 
     @GetMapping("/oem")
     @PreAuthorize("hasAuthority('VIEW_DASHBOARD')")
@@ -39,6 +40,7 @@ public class ExportController {
         byte[] excelContent = excelExportService.generateOEM(biens, metadata);
 
         String filename = "OEM_Patrimoine_2024.xlsx";
+        auditService.save("EXPORT", "REPORT", null, "Génération Ordre d'Entrée des Matières (OEM)");
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -62,6 +64,7 @@ public class ExportController {
         byte[] excelContent = excelExportService.generateLJA(biens, metadata);
 
         String filename = "LJA_Patrimoine_" + metadata.get("exercice") + ".xlsx";
+        auditService.save("EXPORT", "REPORT", null, "Génération Livre Journal Immobilisations (LJ-A)");
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -81,6 +84,7 @@ public class ExportController {
         metadata.put("poste", poste != null ? poste : "CENTRAL DE LAME");
         metadata.put("exercice", exercice != null ? exercice : "2024");
         byte[] content = excelExportService.generateFIA(biens, metadata);
+        auditService.save("EXPORT", "REPORT", null, "Génération Fiche d'Inventaire Annuel (FIA)");
         return createResponse(content, "FIA_" + metadata.get("exercice") + ".xlsx");
     }
 
@@ -97,6 +101,7 @@ public class ExportController {
         metadata.put("poste", poste != null ? poste : "CENTRAL DE LAME");
         metadata.put("exercice", exercice != null ? exercice : "2024");
         byte[] content = excelExportService.generateFIB(biens, metadata);
+        auditService.save("EXPORT", "REPORT", null, "Génération Fiche Matricule Bâtiments (FIB)");
         return createResponse(content, "FIB_" + metadata.get("exercice") + ".xlsx");
     }
 
@@ -113,6 +118,7 @@ public class ExportController {
         metadata.put("poste", poste != null ? poste : "CENTRAL DE LAME");
         metadata.put("exercice", exercice != null ? exercice : "2024");
         byte[] content = excelExportService.generateBGC(biens, metadata);
+        auditService.save("EXPORT", "REPORT", null, "Génération Balance Générale des Comptes (BGC)");
         return createResponse(content, "BGC_" + metadata.get("exercice") + ".xlsx");
     }
 
@@ -129,6 +135,7 @@ public class ExportController {
         metadata.put("poste", poste != null ? poste : "CENTRAL DE LAME");
         metadata.put("exercice", exercice != null ? exercice : "2024");
         byte[] content = excelExportService.generateGLA(biens, metadata);
+        auditService.save("EXPORT", "REPORT", null, "Génération Grand Livre Immobilisations (GL-A)");
         return createResponse(content, "GLA_" + metadata.get("exercice") + ".xlsx");
     }
 

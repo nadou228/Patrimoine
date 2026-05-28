@@ -71,4 +71,25 @@ public class JwtService {
                 .parseClaimsJws(token).getBody();
         return claims.getSubject();
     }
+
+    /** Alias for compatibility with AuthController */
+    public String extractUsername(String token) {
+        return getUsernameFromToken(token);
+    }
+
+    /**
+     * Génère un token temporaire de 5 minutes utilisé uniquement lors de la vérification 2FA.
+     * Il ne contient pas les permissions, juste le subject.
+     */
+    public String generateTempToken(Utilisateur utilisateur) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + 5 * 60 * 1000L); // 5 minutes
+        return Jwts.builder()
+                .setSubject(utilisateur.getUsername())
+                .claim("type", "2FA_TEMP")
+                .setIssuedAt(now)
+                .setExpiration(expiry)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
 }

@@ -759,7 +759,7 @@ export default function AffectationsPage() {
                     <button
                       className="aff-action-btn"
                       type="button"
-                      onClick={() => exportBordereauMutationExcel(item as Record<string, string | number | boolean | null | undefined>, `BM_${item.id}.xlsx`)}
+                      onClick={() => exportBordereauMutationExcel(item as unknown as Record<string, string | number | boolean | null | undefined>, `BM_${item.id}.xlsx`)}
                     >📊 XLS</button>
                     {canValidate && (
                       <button className="aff-action-btn" type="button" onClick={() => void handleDelete(item)} style={{ color: "#ef4444" }}>

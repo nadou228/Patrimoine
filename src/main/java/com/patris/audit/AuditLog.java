@@ -21,11 +21,16 @@ public class AuditLog {
     private String entite;
     private Long entiteId;
     private String username;
+    private String utilisateurLogin;
+    private String utilisateurNom;
+    private String ipAdresse;
     private LocalDateTime dateAction;
 
-    /** Contexte, motif ou détail supplémentaire (traçabilité). */
     @Column(length = 2000)
     private String detail;
+
+    @Column(length = 4000)
+    private String details;
 
     @Column(length = 2000)
     private String ancienneValeur;
@@ -41,6 +46,7 @@ public class AuditLog {
         this.entite = entite;
         this.entiteId = entiteId;
         this.username = username;
+        this.utilisateurLogin = username;
         this.dateAction = dateAction;
     }
 
@@ -52,12 +58,40 @@ public class AuditLog {
     public void setEntite(String entite) { this.entite = entite; }
     public Long getEntiteId() { return entiteId; }
     public void setEntiteId(Long entiteId) { this.entiteId = entiteId; }
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public String getUsername() { return username != null ? username : utilisateurLogin; }
+    public void setUsername(String username) {
+        this.username = username;
+        if (this.utilisateurLogin == null || this.utilisateurLogin.isBlank()) {
+            this.utilisateurLogin = username;
+        }
+    }
+    public String getUtilisateurLogin() { return utilisateurLogin != null ? utilisateurLogin : username; }
+    public void setUtilisateurLogin(String utilisateurLogin) {
+        this.utilisateurLogin = utilisateurLogin;
+        if (this.username == null || this.username.isBlank()) {
+            this.username = utilisateurLogin;
+        }
+    }
+    public String getUtilisateurNom() { return utilisateurNom; }
+    public void setUtilisateurNom(String utilisateurNom) { this.utilisateurNom = utilisateurNom; }
+    public String getIpAdresse() { return ipAdresse; }
+    public void setIpAdresse(String ipAdresse) { this.ipAdresse = ipAdresse; }
     public LocalDateTime getDateAction() { return dateAction; }
     public void setDateAction(LocalDateTime dateAction) { this.dateAction = dateAction; }
-    public String getDetail() { return detail; }
-    public void setDetail(String detail) { this.detail = detail; }
+    public String getDetail() { return detail != null ? detail : details; }
+    public void setDetail(String detail) {
+        this.detail = detail;
+        if (this.details == null || this.details.isBlank()) {
+            this.details = detail;
+        }
+    }
+    public String getDetails() { return details != null ? details : detail; }
+    public void setDetails(String details) {
+        this.details = details;
+        if (this.detail == null || this.detail.isBlank()) {
+            this.detail = details;
+        }
+    }
     public String getAncienneValeur() { return ancienneValeur; }
     public void setAncienneValeur(String ancienneValeur) { this.ancienneValeur = ancienneValeur; }
     public String getNouvelleValeur() { return nouvelleValeur; }

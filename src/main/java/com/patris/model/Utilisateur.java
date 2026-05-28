@@ -40,6 +40,10 @@ public class Utilisateur {
 
     private boolean twoFactorEnabled;
 
+    /** Clé secrète TOTP (Base32) utilisée pour la 2FA — jamais exposée en JSON. */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private String twoFactorSecret;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private StatutUtilisateur statut = StatutUtilisateur.ACTIF;
@@ -162,6 +166,14 @@ public class Utilisateur {
 
     public void setTwoFactorEnabled(boolean twoFactorEnabled) {
         this.twoFactorEnabled = twoFactorEnabled;
+    }
+
+    public String getTwoFactorSecret() {
+        return twoFactorSecret;
+    }
+
+    public void setTwoFactorSecret(String twoFactorSecret) {
+        this.twoFactorSecret = twoFactorSecret;
     }
 
     public StatutUtilisateur getStatut() {

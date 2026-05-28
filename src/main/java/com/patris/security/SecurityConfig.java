@@ -105,7 +105,7 @@ public class SecurityConfig {
 
                 // AUDIT & LOGS
                 .requestMatchers("/api/audit/**")
-                    .hasAnyRole("ADMIN","SUPERADMIN","AUDITEUR")
+                    .hasAnyRole("ADMIN","SUPERADMIN","AUDITEUR","RESPONSABLE_PATRIMOINE")
 
                 // INVENTAIRES CERTIFIES
                 .requestMatchers(HttpMethod.GET, "/api/inventaires/**")

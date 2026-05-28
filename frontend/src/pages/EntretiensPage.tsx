@@ -92,7 +92,7 @@ export default function EntretiensPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Entretien | null>(null);
-  const [viewerMedia, setViewerMedia] = useState<{ url: string; type: "image" | "document"; filename: string } | null>(null);
+  const [viewerMedia, setViewerMedia] = useState<{ url: string; type: "image" | "pdf"; filename: string } | null>(null);
 
   const views = [
     { id: "PLANNING", label: "Planning Visuel", icon: <Calendar size={18} /> },
@@ -490,7 +490,7 @@ export default function EntretiensPage() {
                               const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
                               setViewerMedia({ 
                                 url: normalizeUrl(url), 
-                                type: isImage ? "image" : "document", 
+                                type: isImage ? "image" : "pdf", 
                                 filename: `Document - ${item.bien?.designation || "Entretien"}` 
                               });
                             }}
@@ -565,7 +565,7 @@ export default function EntretiensPage() {
                               const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
                               setViewerMedia({ 
                                 url: normalizeUrl(url), 
-                                type: isImage ? "image" : "document", 
+                                type: isImage ? "image" : "pdf", 
                                 filename: `Document - ${item.bien?.designation || "Entretien"}` 
                               });
                             }}
@@ -667,7 +667,7 @@ export default function EntretiensPage() {
                           const isImage = url.match(/\.(jpg|jpeg|png|webp)$/i);
                           setViewerMedia({ 
                             url: normalizeUrl(url), 
-                            type: isImage ? "image" : "document", 
+                            type: isImage ? "image" : "pdf", 
                             filename: `Document - ${selected.bien?.designation || "Entretien"}` 
                           });
                         }}

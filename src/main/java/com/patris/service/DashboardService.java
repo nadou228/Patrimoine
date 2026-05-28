@@ -3,6 +3,7 @@ package com.patris.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -14,11 +15,17 @@ import com.patris.model.Bien;
 import com.patris.model.BienMaterielRoulant;
 import com.patris.model.BienMobilier;
 import com.patris.model.Stock;
+import com.patris.model.Entretien;
+import com.patris.model.InventaireCampagne;
+import com.patris.model.InventaireFiche;
 import com.patris.repository.BienRepository;
 import com.patris.repository.MouvementStockRepository;
 import com.patris.repository.ReformeRepository;
 import com.patris.repository.SinistreRepository;
 import com.patris.repository.StockRepository;
+import com.patris.repository.EntretienRepository;
+import com.patris.repository.InventaireCampagneRepository;
+import com.patris.repository.InventaireFicheRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,6 +39,9 @@ public class DashboardService {
     private final SinistreRepository sinistreRepository;
     private final ReformeRepository reformeRepository;
     private final AuditLogRepository auditLogRepository;
+    private final EntretienRepository entretienRepository;
+    private final InventaireCampagneRepository inventaireCampagneRepository;
+    private final InventaireFicheRepository inventaireFicheRepository;
 
     public DashboardStatsDTO getStats() {
         List<Bien> biens = bienRepository.findAllByArchivedFalse();
@@ -62,11 +72,11 @@ public class DashboardService {
             .limit(5)
             .toList();
 
-        List<DashboardStatsDTO.DashboardAlerteStockDTO> alertesStock = stocks.stream()
+        List<DashboardAlerteStockDTOImpl> alertesStockTmp = stocks.stream()
             .filter(this::isStockInAlert)
             .sorted(Comparator.comparingInt(stock -> stock.getQuantite() - resolveStockThreshold(stock)))
             .limit(5)
-            .map(stock -> new DashboardStatsDTO.DashboardAlerteStockDTO(
+            .map(stock -> new DashboardAlerteStockDTOImpl(
                 stock.getId(),
                 stock.getConsommable() != null ? stock.getConsommable().getCodeArticle() : "",
                 stock.getConsommable() != null ? stock.getConsommable().getNomProduit() : "Article",
@@ -74,6 +84,18 @@ public class DashboardService {
                 resolveStockThreshold(stock),
                 stock.getUnite(),
                 stock.getMagasin() != null ? stock.getMagasin().getNom() : ""
+            ))
+            .toList();
+
+        List<DashboardStatsDTO.DashboardAlerteStockDTO> alertesStock = alertesStockTmp.stream()
+            .map(impl -> new DashboardStatsDTO.DashboardAlerteStockDTO(
+                impl.stockId(),
+                impl.codeArticle(),
+                impl.nomProduit(),
+                impl.quantite(),
+                impl.seuilAlerte(),
+                impl.unite(),
+                impl.magasin()
             ))
             .toList();
 
@@ -91,6 +113,53 @@ public class DashboardService {
             ))
             .toList();
 
+        // 1. Calcul coutEntretienAnnuel
+        double coutEntretienAnnuel = entretienRepository.findAll().stream()
+            .filter(e -> {
+                LocalDate d = e.getDateRealisee() != null ? e.getDateRealisee() : e.getDatePrevue();
+                return d != null && d.getYear() == now.getYear() && e.getCout() != null;
+            })
+            .mapToDouble(Entretien::getCout)
+            .sum();
+
+        // 2. Calcul ecartInventaireComptabilite
+        double ecartInventaireComptabilite = 0.0;
+        List<InventaireCampagne> campagnes = inventaireCampagneRepository.findAll();
+        if (!campagnes.isEmpty()) {
+            InventaireCampagne latest = campagnes.stream()
+                .filter(c -> c.getDateCreation() != null)
+                .max(Comparator.comparing(InventaireCampagne::getDateCreation))
+                .orElse(null);
+            if (latest == null && !campagnes.isEmpty()) {
+                latest = campagnes.get(campagnes.size() - 1);
+            }
+            if (latest != null) {
+                List<InventaireFiche> fiches = inventaireFicheRepository.findByCampagneId(latest.getId());
+                double valeurComptableTotal = fiches.stream()
+                    .mapToDouble(f -> f.getBien() != null ? f.getBien().getValeur() : 0.0)
+                    .sum();
+                double valeurInventorieeTotal = fiches.stream()
+                    .filter(f -> f.getValidationSuperviseur() == com.patris.enums.statutValidation.VALIDE)
+                    .mapToDouble(f -> f.getBien() != null ? f.getBien().getValeur() : 0.0)
+                    .sum();
+                ecartInventaireComptabilite = Math.abs(valeurComptableTotal - valeurInventorieeTotal);
+            }
+        }
+
+        // 3. Calcul tauxVetusteGlobal
+        double totalAmortissement = biens.stream()
+            .mapToDouble(b -> b.getAmortissementCumule() == null ? 0.0 : b.getAmortissementCumule())
+            .sum();
+        double totalValeurForVetuste = biens.stream()
+            .mapToDouble(Bien::getValeur)
+            .sum();
+        double tauxVetusteGlobal = totalValeurForVetuste > 0 ? (totalAmortissement / totalValeurForVetuste) * 100.0 : 0.0;
+
+        // 4. Calcul repartitionCategories
+        List<DashboardStatsDTO.CategoryDistributionDTO> repartitionCategories = buildCategoryDistribution(biens);
+
+        List<DashboardStatsDTO.EvolutionMensuelleDTO> evolutionMensuelle = buildMonthlyEvolution(biens, now);
+
         return new DashboardStatsDTO(
             totalBiens,
             valeurTotale,
@@ -104,8 +173,31 @@ public class DashboardService {
             mouvementsThisMois,
             prochainesMaintenance,
             alertesStock,
-            activiteRecente
+            activiteRecente,
+            coutEntretienAnnuel,
+            ecartInventaireComptabilite,
+            tauxVetusteGlobal,
+            repartitionCategories,
+            evolutionMensuelle
         );
+    }
+
+    public List<DashboardStatsDTO.EvolutionMensuelleDTO> getEvolutionMensuelle() {
+        return buildMonthlyEvolution(bienRepository.findAllByArchivedFalse(), LocalDate.now());
+    }
+
+    public List<DashboardStatsDTO.CategoryDistributionDTO> getRepartitionCategories() {
+        return buildCategoryDistribution(bienRepository.findAllByArchivedFalse());
+    }
+
+    public List<DashboardStatsDTO.DashboardAlerteBienDTO> getTopAlertes() {
+        return bienRepository.findAllByArchivedFalse().stream()
+            .map(this::toRiskAlert)
+            .filter(java.util.Objects::nonNull)
+            .sorted(Comparator.comparingInt(RiskAlert::score).reversed())
+            .limit(5)
+            .map(risk -> risk.payload())
+            .toList();
     }
 
     private boolean isStockInAlert(Stock stock) {
@@ -145,4 +237,119 @@ public class DashboardService {
             typeAlerte
         );
     }
+
+    private List<DashboardStatsDTO.CategoryDistributionDTO> buildCategoryDistribution(List<Bien> biens) {
+        List<DashboardStatsDTO.CategoryDistributionDTO> repartitionCategories = new ArrayList<>();
+        for (String cat : List.of("IMMOBILIER", "MOBILIER", "INFORMATIQUE", "MATERIEL_ROULANT", "MATERIEL_TECHNIQUE", "INCORPORELS", "OEUVRES_COLLECTIONS", "CHEPTELS")) {
+            long count = biens.stream()
+                .filter(bien -> cat.equalsIgnoreCase(bien.getCodeCategorie()))
+                .count();
+            double val = biens.stream()
+                .filter(bien -> cat.equalsIgnoreCase(bien.getCodeCategorie()))
+                .mapToDouble(Bien::getValeur)
+                .sum();
+            if (count > 0) {
+                repartitionCategories.add(new DashboardStatsDTO.CategoryDistributionDTO(cat, count, val));
+            }
+        }
+        return repartitionCategories;
+    }
+
+    private List<DashboardStatsDTO.EvolutionMensuelleDTO> buildMonthlyEvolution(List<Bien> biens, LocalDate now) {
+        List<DashboardStatsDTO.EvolutionMensuelleDTO> evolutionMensuelle = new ArrayList<>();
+        for (int i = 11; i >= 0; i--) {
+            LocalDate targetMonthEnd = now.minusMonths(i).withDayOfMonth(now.minusMonths(i).lengthOfMonth());
+            double val = biens.stream()
+                .filter(bien -> bien.getDateAcquisition() != null && !bien.getDateAcquisition().isAfter(targetMonthEnd))
+                .mapToDouble(Bien::getValeur)
+                .sum();
+            String monthName = targetMonthEnd.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.FRENCH);
+            monthName = monthName.substring(0, 1).toUpperCase() + monthName.substring(1);
+            evolutionMensuelle.add(new DashboardStatsDTO.EvolutionMensuelleDTO(monthName, val));
+        }
+        return evolutionMensuelle;
+    }
+
+    private RiskAlert toRiskAlert(Bien bien) {
+        int score = 0;
+        LocalDate dateEcheance = null;
+        String typeAlerte = "SURVEILLANCE";
+
+        if ("SINISTRE".equalsIgnoreCase(String.valueOf(bien.getStatutOperationnel()))) {
+            score += 100;
+            typeAlerte = "SINISTRE";
+        } else if ("EN_MAINTENANCE".equalsIgnoreCase(String.valueOf(bien.getStatutOperationnel()))) {
+            score += 70;
+            typeAlerte = "MAINTENANCE";
+        }
+
+        if (bien.getService() == null || bien.getService().isBlank()) {
+            score += 20;
+        }
+
+        LocalDate maintenanceDate = resolveNextControlDate(bien);
+        if (maintenanceDate != null) {
+            dateEcheance = maintenanceDate;
+            long daysUntil = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), maintenanceDate);
+            if (daysUntil < 0) {
+                score += 45;
+            } else if (daysUntil <= 7) {
+                score += 35;
+            } else if (daysUntil <= 30) {
+                score += 20;
+            }
+            if (typeAlerte.equals("SURVEILLANCE")) {
+                typeAlerte = bien instanceof BienMaterielRoulant ? "VISITE_TECHNIQUE" : "MAINTENANCE";
+            }
+        }
+
+        double tauxVetuste = bien.getValeur() > 0 && bien.getAmortissementCumule() != null
+            ? (bien.getAmortissementCumule() / bien.getValeur()) * 100.0
+            : 0.0;
+        if (tauxVetuste >= 80) {
+            score += 15;
+        }
+
+        if (score <= 0) {
+            return null;
+        }
+
+        return new RiskAlert(
+            score,
+            new DashboardStatsDTO.DashboardAlerteBienDTO(
+                bien.getId(),
+                bien.getIup(),
+                bien.getDesignation(),
+                bien.getCodeSousCategorie() != null ? bien.getCodeSousCategorie() : bien.getCodeCategorie(),
+                bien.getService(),
+                dateEcheance != null ? dateEcheance.toString() : null,
+                typeAlerte
+            )
+        );
+    }
+
+    private LocalDate resolveNextControlDate(Bien bien) {
+        if (bien instanceof BienMobilier mobilier) {
+            return mobilier.getDateProchaineMaintenance();
+        }
+        if (bien instanceof BienMaterielRoulant roulant) {
+            return roulant.getDateProchaineVisiteTechnique();
+        }
+        return null;
+    }
+
+    private record DashboardAlerteStockDTOImpl(
+        Long stockId,
+        String codeArticle,
+        String nomProduit,
+        int quantite,
+        int seuilAlerte,
+        String unite,
+        String magasin
+    ) {}
+
+    private record RiskAlert(
+        int score,
+        DashboardStatsDTO.DashboardAlerteBienDTO payload
+    ) {}
 }

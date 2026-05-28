@@ -13,9 +13,56 @@ export interface PermissionsData {
   permissions: PermissionDetail[];
 }
 
+// Matrice RBAC granulaire : action × ressource → rôles autorisés
+const RBAC_MATRIX: Record<string, Record<string, string[]>> = {
+  create: {
+    biens: ['ADMIN', 'SUPERADMIN', 'AGENT_INVENTAIRE', 'GESTIONNAIRE_TECHNIQUE', 'RESPONSABLE_PATRIMOINE', 'MAGASINIER', 'RESPONSABLE_PARC_AUTOMOBILE'],
+    entretiens: ['ADMIN', 'SUPERADMIN', 'GESTIONNAIRE_TECHNIQUE', 'RESPONSABLE_PATRIMOINE'],
+    affectations: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE'],
+    reformes: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE'],
+    sinistres: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE', 'GESTIONNAIRE_TECHNIQUE'],
+    stocks: ['ADMIN', 'SUPERADMIN', 'MAGASINIER', 'RESPONSABLE_PATRIMOINE'],
+    inventaires: ['ADMIN', 'SUPERADMIN', 'AGENT_INVENTAIRE', 'RESPONSABLE_PATRIMOINE'],
+    users: ['ADMIN', 'SUPERADMIN'],
+  },
+  update: {
+    biens: ['ADMIN', 'SUPERADMIN', 'AGENT_INVENTAIRE', 'GESTIONNAIRE_TECHNIQUE', 'RESPONSABLE_PATRIMOINE'],
+    entretiens: ['ADMIN', 'SUPERADMIN', 'GESTIONNAIRE_TECHNIQUE', 'RESPONSABLE_PATRIMOINE'],
+    affectations: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE'],
+    reformes: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE'],
+    sinistres: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE'],
+    stocks: ['ADMIN', 'SUPERADMIN', 'MAGASINIER', 'RESPONSABLE_PATRIMOINE'],
+    inventaires: ['ADMIN', 'SUPERADMIN', 'AGENT_INVENTAIRE', 'RESPONSABLE_PATRIMOINE'],
+    users: ['ADMIN', 'SUPERADMIN'],
+  },
+  delete: {
+    biens: ['ADMIN', 'SUPERADMIN'],
+    entretiens: ['ADMIN', 'SUPERADMIN'],
+    affectations: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE'],
+    reformes: ['ADMIN', 'SUPERADMIN'],
+    sinistres: ['ADMIN', 'SUPERADMIN'],
+    stocks: ['ADMIN', 'SUPERADMIN'],
+    inventaires: ['ADMIN', 'SUPERADMIN'],
+    users: ['ADMIN', 'SUPERADMIN'],
+  },
+  export: {
+    biens: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE', 'RESPONSABLE_FINANCIER', 'AUDITEUR', 'ELU'],
+    audit: ['ADMIN', 'SUPERADMIN', 'AUDITEUR', 'RESPONSABLE_PATRIMOINE'],
+    rapports: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE', 'RESPONSABLE_FINANCIER', 'AUDITEUR', 'ELU'],
+  },
+  view: {
+    audit: ['ADMIN', 'SUPERADMIN', 'AUDITEUR', 'RESPONSABLE_PATRIMOINE'],
+    users: ['ADMIN', 'SUPERADMIN'],
+    dashboard: ['ADMIN', 'SUPERADMIN', 'RESPONSABLE_PATRIMOINE', 'RESPONSABLE_FINANCIER', 'ELU', 'AUDITEUR', 'GESTIONNAIRE_TECHNIQUE', 'AGENT_INVENTAIRE', 'MAGASINIER', 'RESPONSABLE_PARC_AUTOMOBILE'],
+  },
+};
+
 interface PermissionsContextType {
   permissions: PermissionsData | null;
   hasPermission: (permissionCode: string) => boolean;
+  hasAnyRole: (...roles: string[]) => boolean;
+  /** Vérifie si le rôle actuel peut effectuer `action` sur `resource` selon la matrice RBAC */
+  can: (action: string, resource: string) => boolean;
   loading: boolean;
 }
 
@@ -74,8 +121,25 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return perm?.granted || false;
   };
 
+  const hasAnyRole = (...roles: string[]): boolean => {
+    if (!permissions?.role) return false;
+    return roles.includes(permissions.role);
+  };
+
+  /**
+   * Vérifie si l'utilisateur peut effectuer `action` sur `resource`.
+   * Ex: can('delete', 'biens') → false pour AGENT_INVENTAIRE
+   * Ex: can('create', 'users') → true pour ADMIN
+   */
+  const can = (action: string, resource: string): boolean => {
+    if (!permissions?.role) return false;
+    const allowedRoles = RBAC_MATRIX[action]?.[resource];
+    if (!allowedRoles) return false;
+    return allowedRoles.includes(permissions.role);
+  };
+
   return (
-    <PermissionsContext.Provider value={{ permissions, hasPermission, loading }}>
+    <PermissionsContext.Provider value={{ permissions, hasPermission, hasAnyRole, can, loading }}>
       {children}
     </PermissionsContext.Provider>
   );

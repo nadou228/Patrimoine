@@ -46,16 +46,26 @@ export const isTokenExpired = (token?: string): boolean => {
   return payload.exp * 1000 <= Date.now();
 };
 
-export const login = async (username: string, password: string): Promise<LoginResponse> => {
+export interface TwoFactorRequiredResponse {
+  requiresTwoFactor: true;
+  tempToken: string;
+}
+
+export const login = async (username: string, password: string): Promise<LoginResponse | TwoFactorRequiredResponse> => {
   try {
     const response = await api.post('/auth/login', { username, password });
-    const user = response.data;
-    localStorage.setItem('user', JSON.stringify(user));
-    return user;
+    const data = response.data;
+    // Si 2FA requise, ne pas stocker en localStorage — le LoginPage gère l'étape 2
+    if (data?.requiresTwoFactor) {
+      return data as TwoFactorRequiredResponse;
+    }
+    localStorage.setItem('user', JSON.stringify(data));
+    return data as LoginResponse;
   } catch (error) {
     throw new Error('Invalid credentials');
   }
 };
+
 
 export const logout = () => {
   clearCurrentUser();

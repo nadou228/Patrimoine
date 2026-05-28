@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
+import { getBackups, createBackup } from '../api/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
@@ -37,7 +38,7 @@ import './AdminPage.css';
 const AdminPage: React.FC = () => {
   const { hasPermission, loading: permLoading } = usePermissions();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'catalog' | 'config'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'catalog' | 'config' | 'backup'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
@@ -171,7 +172,8 @@ const AdminPage: React.FC = () => {
             { id: 'users', label: 'Utilisateurs', icon: <Users size={18} /> },
             { id: 'roles', label: 'Sécurité', icon: <ShieldCheck size={18} /> },
             { id: 'catalog', label: 'Catalogue', icon: <Layers size={18} /> },
-            { id: 'config', label: 'Paramètres', icon: <Settings size={18} /> }
+            { id: 'config', label: 'Paramètres', icon: <Settings size={18} /> },
+            { id: 'backup', label: 'PRA & Backup', icon: <Database size={18} /> }
           ].map((tab) => (
             <button 
               key={tab.id}
@@ -364,9 +366,94 @@ const AdminPage: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {activeTab === 'backup' && (
+                <BackupPanel showToast={showToast} />
+              )}
             </motion.div>
           </AnimatePresence>
         )}
+      </div>
+    </div>
+  );
+};
+
+const BackupPanel: React.FC<{ showToast: any }> = ({ showToast }) => {
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [triggering, setTriggering] = useState(false);
+
+  const loadBackups = async () => {
+    setLoading(true);
+    try {
+      const data = await getBackups();
+      setBackups(data);
+    } catch {
+      showToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les sauvegardes.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBackups();
+  }, []);
+
+  const handleCreateBackup = async () => {
+    setTriggering(true);
+    try {
+      await createBackup('manual');
+      showToast({ type: 'success', title: 'Backup lancé', message: 'Sauvegarde effectuée avec succès.' });
+      loadBackups();
+    } catch (e: any) {
+      showToast({ type: 'error', title: 'Erreur', message: e.response?.data?.error || 'Échec de la sauvegarde.' });
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  return (
+    <div className="admin-glass-panel fade-up">
+      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="header-icon-box"><Database size={20} /></div>
+          <div>
+            <h2>Plan de Reprise d'Activité (PRA)</h2>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Gérez vos sauvegardes de base de données PostgreSQL.</p>
+          </div>
+        </div>
+        <button className="btn-premium sm" onClick={handleCreateBackup} disabled={triggering} style={{ background: '#059669', color: 'white' }}>
+          <RefreshCw size={16} className={triggering ? 'spin' : ''} /> {triggering ? 'Création...' : 'Sauvegarder Maintenant'}
+        </button>
+      </div>
+
+      <div className="matrix-wrapper" style={{ marginTop: '20px' }}>
+        <table className="matrix-tech-table">
+          <thead>
+            <tr>
+              <th>Nom du fichier</th>
+              <th>Type</th>
+              <th>Taille</th>
+              <th>Date de création</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>Chargement...</td></tr>
+            ) : backups.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>Aucune sauvegarde trouvée.</td></tr>
+            ) : (
+              backups.map((b, i) => (
+                <tr key={i} className="matrix-row">
+                  <td style={{ fontWeight: 500 }}>{b.fileName}</td>
+                  <td><span style={{ padding: '4px 8px', background: '#e2e8f0', borderRadius: '4px', fontSize: '12px' }}>{b.type}</span></td>
+                  <td>{(b.sizeBytes / 1024 / 1024).toFixed(2)} MB</td>
+                  <td>{new Date(b.timestamp).toLocaleString('fr-FR')}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

@@ -67,6 +67,7 @@ public final class RolePermissionBootstrap {
                         Permission.DELETE_REFORMES,
                         Permission.READ_SINISTRES,
                         Permission.READ_ENTRETIENS,
+                        Permission.READ_AUDIT,
                         Permission.CREATE_ENTRETIENS,
                         Permission.VIEW_DASHBOARD,
                         Permission.EXPORT_REPORTS
