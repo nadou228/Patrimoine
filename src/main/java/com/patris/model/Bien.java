@@ -87,6 +87,18 @@ public abstract class Bien {
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime dateValidation; 
 
+    // Nouveaux champs issus des maquettes UI
+    private String sousCategorie;
+    private String description;
+    @Column(columnDefinition = "TEXT")
+    private String photoUrl;
+    @Column(columnDefinition = "TEXT")
+    private String documentFactureUrl;
+    private String modeAcquisition;
+    private String site;
+    private String batiment;
+    private String sourceFinancement;
+
     @Enumerated(EnumType.STRING)
     private statutValidation statutValidation;
 
