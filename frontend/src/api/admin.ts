@@ -40,6 +40,20 @@ export interface Permission {
   libelle: string;
 }
 
+export interface UserPermissionOverride {
+  permissionCode: string;
+  accordee: boolean;
+  motif: string;
+  accordeePar: string;
+  dateAccord: string;
+}
+
+export interface UserPermissionsDetail {
+  effectivePermissionCodes: string[];
+  rolePermissionCodes: string[];
+  directOverrides: UserPermissionOverride[];
+}
+
 export const getAdminUsers = async () => {
   const response = await api.get('/admin/users');
   return response.data;
@@ -92,6 +106,24 @@ export const updateRoleMeta = async (roleCode: string, data: { libelle: string, 
 
 export const deleteRole = async (roleCode: string) => {
   await api.delete(`/admin/roles/${roleCode}`);
+};
+
+export const getUserPermissionsDetail = async (userId: number): Promise<UserPermissionsDetail> => {
+  const response = await api.get(`/admin/users/${userId}/permissions`);
+  return response.data;
+};
+
+export const applyUserDirectPermission = async (
+  userId: number,
+  permission: string,
+  accordee: boolean,
+  motif: string
+) => {
+  await api.post(`/admin/users/${userId}/permissions`, { permission, accordee, motif });
+};
+
+export const deleteUserDirectPermission = async (userId: number, permission: string) => {
+  await api.delete(`/admin/users/${userId}/permissions/${permission}`);
 };
 export interface EtiquetteDto {
   iup: string;

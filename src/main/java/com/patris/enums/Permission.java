@@ -55,6 +55,14 @@ public enum Permission {
     EXPORT_REPORTS("Exporter les rapports"),
     VIEW_DASHBOARD("Accéder au tableau de bord"),
 
+    // ── VALIDATIONS MÉTIER (Matrice Haute Densité) ──────────────────────
+    VALIDATE_AFFECTATIONS("Valider les affectations de biens"),
+    VALIDATE_REFORMES("Valider les réformes de biens"),
+    VALIDATE_STOCKS("Valider les mouvements de stock"),
+    VALIDATE_INVENTAIRES_AGENT("Valider les fiches inventaires (Agent)"),
+    VALIDATE_INVENTAIRES_SUPERVISEUR("Valider les fiches inventaires (Superviseur)"),
+    VALIDATE_INVENTAIRES_ECART("Valider les écarts d'inventaire"),
+
     // ADMIN
     ADMIN_SYSTEM("Accès administrateur système");
 

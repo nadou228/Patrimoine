@@ -36,15 +36,26 @@ export default function AssetDetailDrawer({
   };
 
   const renderAffectationStatus = () => {
-    // Basic heuristics to determine if assigned or transferred based on entries
     const hasTransfert = entries?.some((e: any) => e.typeEvenement?.toUpperCase().includes("TRANSFERT"));
     const hasAffectation = entries?.some((e: any) => e.typeEvenement?.toUpperCase().includes("AFFECTATION"));
-    
+    const isAffected = Boolean(bien.service || hasAffectation);
+
     if (hasTransfert) {
       return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#3b82f620', color: '#2563eb', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}><ArrowRightLeft size={14}/> Transféré</span>;
-    } else if (hasAffectation || bien.service) {
+    }
+
+    if (bien.statutOperationnel === 'SINISTRE') {
+      return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f871710f', color: '#b91c1c', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}><AlertTriangle size={14}/> Sinistré</span>;
+    }
+
+    if (bien.statutOperationnel === 'HORS_SERVICE') {
+      return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#7f1d1d0f', color: '#7f1d1d', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}><TrendingDown size={14}/> Hors service</span>;
+    }
+
+    if (isAffected) {
       return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#6366f120', color: '#4f46e5', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}><CheckCircle2 size={14}/> Affecté</span>;
     }
+
     return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#e2e8f0', color: '#64748b', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}><Info size={14}/> Non Affecté</span>;
   };
 

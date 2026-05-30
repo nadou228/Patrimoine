@@ -63,6 +63,10 @@ public class SecurityConfig {
                 // PERMISSIONS ENDPOINT (Authentifié seulement)
                 .requestMatchers("/api/permissions/**").authenticated()
 
+                // PARAMETRES SYSTEME
+                .requestMatchers(HttpMethod.GET, "/api/admin/system-settings").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/admin/system-settings").authenticated()
+
                 // ADMIN SYSTEME
                 .requestMatchers("/admin/**")
                     .hasAnyRole("ADMIN","SUPERADMIN")

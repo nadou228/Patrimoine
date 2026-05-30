@@ -4,7 +4,14 @@ import com.patris.dto.AffectationDto;
 import com.patris.model.Affectation;
 import com.patris.service.AffectationService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import java.util.List;
 
@@ -51,6 +58,7 @@ public class AffectationController {
         }
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_AFFECTATIONS')")
     @PostMapping("/{id}/valider")
     public ResponseEntity<?> valider(@PathVariable Long id, @RequestParam String validator) {
         try {
@@ -60,6 +68,35 @@ public class AffectationController {
         }
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_AFFECTATIONS')")
+    @PostMapping(path = "/{id}/validerAvecDocument", consumes = {"multipart/form-data"})
+    public ResponseEntity<?> validerAvecDocument(@PathVariable Long id,
+                                                 @RequestParam String validator,
+                                                 @RequestPart(required = false) MultipartFile file) {
+        try {
+            if (file != null && !file.isEmpty()) {
+                // Save file to uploads/documents/affectations/{id}/
+                Path destDir = Paths.get("uploads", "documents", "affectations", String.valueOf(id));
+                Files.createDirectories(destDir);
+                String filename = System.currentTimeMillis() + "-" + file.getOriginalFilename();
+                Path dest = destDir.resolve(filename);
+                file.transferTo(dest.toFile());
+                // Build URL path (relative)
+                String url = "/uploads/documents/affectations/" + id + "/" + filename;
+                // attach to affectation documents
+                service.addDocumentUrl(id, url);
+            }
+            // perform validation
+            com.patris.model.Affectation validated = service.validerAffectation(id, validator);
+            return ResponseEntity.ok(validated);
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body("Erreur lors de l'enregistrement du fichier: " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur lors de la validation: " + e.getMessage());
+        }
+    }
+
+    @PreAuthorize("hasAuthority('VALIDATE_AFFECTATIONS')")
     @PostMapping("/{id}/rejeter")
     public ResponseEntity<Affectation> rejeter(@PathVariable Long id, @RequestParam String validator) {
         return ResponseEntity.ok(service.rejeterAffectation(id, validator));

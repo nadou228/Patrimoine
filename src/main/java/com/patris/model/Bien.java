@@ -61,9 +61,7 @@ public abstract class Bien {
     private String etat;
     private String localisation;
     private String service; // Service ou département détenteur
-    private String modeAcquisition;
     private String observation;
-    private String photoUrl;
     
     // Champs comptables additionnels pour les annexes
     private Double quantite;

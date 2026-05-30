@@ -6,11 +6,16 @@ import BienSelector from "../components/BienSelector";
 import FileUpload from "../components/FileUpload";
 import { useToast } from "../contexts/ToastContext";
 import AnimatedNumber from "../components/AnimatedNumber";
+import { usePermissions } from "../contexts/PermissionsContext";
 import {
   Archive, History, PlusCircle, CheckCircle2,
   Download, XCircle, FileMinus, Info, Eye, Trash2
 } from "lucide-react";
 import MediaViewer from "../components/MediaViewer";
+import SignatureModal from "../components/SignatureModal";
+import { generateReformePdf } from "../utils/pdfExport";
+import { uploadReformeRapport } from "../api/api";
+
 type TypeReforme = "MISE_AU_REBUT" | "VENTE_CESSION" | "TRANSFERT_INTER_MINISTERE" | "DON" | "PERTE_SINISTRE";
 type StatutValidation = "EN_ATTENTE_VALIDATION" | "EN_ATTENTE" | "VALIDE" | "VALIDÉ" | "ANNULE" | "ANNULÉ";
 
@@ -94,12 +99,25 @@ const yearsOfService = (date?: string) => {
 };
 
 function ErrorText({ message }: { message?: string }) {
-  return message ? <span className="field-error">{message}</span> : null;
+  if (!message) return null;
+  return <span className="field-error">{message}</span>;
+}
+
+function Field({ label, error, span = false, children }: React.PropsWithChildren<{ label: string; error?: string; span?: boolean }>) {
+  return (
+    <div className="form-group-modern" style={span ? { gridColumn: "span 2" } : undefined}>
+      <label>{label}</label>
+      {children}
+      <ErrorText message={error} />
+    </div>
+  );
 }
 
 export default function ReformePage() {
   const location = useLocation();
   const { showToast } = useToast();
+  const { hasPermission } = usePermissions();
+  const canValidate = hasPermission("VALIDATE_REFORMES");
   const [view, setView] = useState<"LIST" | "FORM">("LIST");
   const [data, setData] = useState<Reforme[]>([]);
   const [form, setForm] = useState<ReformeForm>(EMPTY_FORM);
@@ -110,6 +128,8 @@ export default function ReformePage() {
   const [period, setPeriod] = useState({ from: "", to: "" });
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerType, setViewerType] = useState<"image" | "pdf">("pdf");
+  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  const [signingReforme, setSigningReforme] = useState<Reforme | null>(null);
 
   const openViewer = (url: string) => {
     const isImage = url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
@@ -226,6 +246,37 @@ export default function ReformePage() {
     }
   };
 
+  const printReforme = (item: Reforme) => {
+    if (!item) return;
+    const html = `
+      <html>
+        <head>
+          <title>Dossier de réforme ${item.id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #222 }
+            h1 { margin-bottom: 0.5rem }
+            .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+            .section { margin-top: 1rem; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px }
+            .badge { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #ef4444; color: white; font-weight: 700 }
+          </style>
+        </head>
+        <body>
+          <h1>Dossier de réforme</h1>
+          <div class="meta">
+            <div><strong>Bien :</strong> ${item.bien?.designation || 'N/A'}</div>
+            <div><strong>IUP :</strong> ${item.bien?.iup || 'N/A'}</div>
+            <div><strong>Type :</strong> ${item.typeReforme || '—'}</div>
+            <div><strong>Date :</strong> ${item.dateSortie || item.dateReforme || '—'}</div>
+          </div>
+          <div class="section"><h3>Motif</h3><p>${item.motif || '—'}</p></div>
+          <div class="section"><h3>Valeur résiduelle</h3><p>${formatMoney(item.valeurResiduelle)}</p></div>
+        </body>
+      </html>
+    `;
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); win.focus(); win.print(); }
+  };
+
   const cancelReforme = async (item: Reforme) => {
     try {
       setActionLoadingId(item.id);
@@ -249,6 +300,23 @@ export default function ReformePage() {
       await loadData();
     } catch (error) {
       showToast({ type: "error", title: "Erreur lors de la suppression" });
+    }
+  };
+
+  const handleReformeSignatureConfirm = async (dataUrl: string, validatorName: string) => {
+    if (!signingReforme) return;
+    setSignatureModalOpen(false);
+    try {
+      showToast({ type: 'info', title: 'Génération du PDF signé...' });
+      const pdfBlob = await generateReformePdf(signingReforme, signingReforme.bien, { signerName: validatorName, signatureDataUrl: dataUrl });
+      await uploadReformeRapport(signingReforme.id!, pdfBlob);
+      await validerReforme(signingReforme.id!, { validateur: validatorName }).catch(() => null);
+      showToast({ type: 'success', title: 'Réforme validée et PDF signé enregistré' });
+      setSigningReforme(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      showToast({ type: 'error', title: 'Erreur lors de l\'export/validation' });
     }
   };
 
@@ -285,13 +353,19 @@ export default function ReformePage() {
   return (
     <div className="dashboard-container reforme-page-shell fade-in">
       {viewerUrl && (
-        <MediaViewer 
-          url={viewerUrl} 
-          type={viewerType} 
-          filename="Dossier de réforme" 
-          onClose={() => setViewerUrl(null)} 
+        <MediaViewer
+          url={viewerUrl}
+          type={viewerType}
+          filename="Dossier de réforme"
+          onClose={() => setViewerUrl(null)}
         />
       )}
+      <SignatureModal
+        open={signatureModalOpen}
+        onClose={() => { setSignatureModalOpen(false); setSigningReforme(null); }}
+        onConfirm={handleReformeSignatureConfirm}
+      />
+
       <div className="aff-header-premium glass-card" style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
           <div>
@@ -300,20 +374,20 @@ export default function ReformePage() {
             <p style={{ color: '#64748b', fontSize: '1.1rem' }}>Gestion des procédures de déclassement, rebut et cession des actifs</p>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-             <button 
-                className={`pill-filter ${view === "LIST" ? "active" : ""}`} 
-                onClick={() => setView("LIST")}
-                style={{ height: 60, padding: '0 24px' }}
-              >
-                <History size={18} /> Registre
-             </button>
-             <button 
-                className="primary-premium" 
-                onClick={() => setView("FORM")} 
-                style={{ height: 60, padding: '0 32px', fontSize: '1.1rem' }}
-              >
-                <PlusCircle size={20} /> Nouvelle réforme
-             </button>
+            <button
+              className={`pill-filter ${view === "LIST" ? "active" : ""}`}
+              onClick={() => setView("LIST")}
+              style={{ height: 60, padding: '0 24px' }}
+            >
+              <History size={18} /> Registre
+            </button>
+            <button
+              className="primary-premium"
+              onClick={() => setView("FORM")}
+              style={{ height: 60, padding: '0 32px', fontSize: '1.1rem' }}
+            >
+              <PlusCircle size={20} /> Nouvelle réforme
+            </button>
           </div>
         </div>
       </div>
@@ -359,9 +433,8 @@ export default function ReformePage() {
               <p>Sélection du bien, type de réforme et évaluation de la valeur résiduelle</p>
             </div>
           </div>
-          
-          <div className="aff-form-body">
 
+          <div className="aff-form-body">
             <form className="form-content-premium" onSubmit={submit}>
               <div className="form-group-modern" style={{ gridColumn: "span 2", marginBottom: "1rem" }}>
                 <label>Bien à réformer</label>
@@ -449,7 +522,12 @@ export default function ReformePage() {
                 </Field>
               </div>
 
-              <button className="primary-premium" type="submit" disabled={saving} style={{ width: "100%", marginTop: "2rem", display: "flex", justifyContent: "center", gap: "8px", alignItems: "center", padding: "14px", fontSize: "16px", borderRadius: "12px", background: "var(--primary)", color: "white", fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}>
+              <button
+                className="primary-premium"
+                type="submit"
+                disabled={saving}
+                style={{ width: "100%", marginTop: "2rem", display: "flex", justifyContent: "center", gap: "8px", alignItems: "center", padding: "14px", fontSize: "16px", borderRadius: "12px", background: "var(--primary)", color: "white", fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)" }}
+              >
                 {saving ? (
                   <>⏳ Patientez...</>
                 ) : (
@@ -467,21 +545,21 @@ export default function ReformePage() {
         <div className="affectation-list-wrapper fade-in">
           <div className="affectation-list-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center", justifyContent: "space-between" }}>
             <h2>📋 Registre des réformes ({filtered.length})</h2>
-            
+
             <div style={{ display: 'flex', gap: '8px', width: 'auto', flexWrap: "nowrap", alignItems: "center" }}>
-               <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ width: 'auto', minWidth: '150px', border: "1px solid #e2e8f0", background: "#fff", outline: "none", padding: "8px 12px", borderRadius: "8px", color: "#475569", fontWeight: 500, height: "40px" }}>
-                  <option value="TOUS">Tous types</option>
-                  <option value="MISE_AU_REBUT">Mise au rebut</option>
-                  <option value="VENTE_CESSION">Vente / Cession</option>
-                  <option value="TRANSFERT_INTER_MINISTERE">Transfert inter-ministères</option>
-                  <option value="DON">Don</option>
-                  <option value="PERTE_SINISTRE">Perte / Sinistre</option>
-               </select>
-               <input type="date" value={period.from} onChange={(e) => setPeriod(cur => ({ ...cur, from: e.target.value }))} style={{ width: 'auto', border: "1px solid #e2e8f0", padding: "8px 12px", borderRadius: "8px", height: "40px" }} title="Du" />
-               <input type="date" value={period.to} onChange={(e) => setPeriod(cur => ({ ...cur, to: e.target.value }))} style={{ width: 'auto', border: "1px solid #e2e8f0", padding: "8px 12px", borderRadius: "8px", height: "40px" }} title="Au" />
-               <button type="button" className="btn-export" onClick={exportCsv} style={{ width: 'auto', height: "40px", padding: "0 16px", display: "flex", alignItems: "center", gap: "6px", background: "#f8fafc", cursor: "pointer", whiteSpace: "nowrap" }}>
-                 <Download size={16} /> Excel
-               </button>
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ width: 'auto', minWidth: '150px', border: "1px solid #e2e8f0", background: "#fff", outline: "none", padding: "8px 12px", borderRadius: "8px", color: "#475569", fontWeight: 500, height: "40px" }}>
+                <option value="TOUS">Tous types</option>
+                <option value="MISE_AU_REBUT">Mise au rebut</option>
+                <option value="VENTE_CESSION">Vente / Cession</option>
+                <option value="TRANSFERT_INTER_MINISTERE">Transfert inter-ministères</option>
+                <option value="DON">Don</option>
+                <option value="PERTE_SINISTRE">Perte / Sinistre</option>
+              </select>
+              <input type="date" value={period.from} onChange={(e) => setPeriod(cur => ({ ...cur, from: e.target.value }))} style={{ width: 'auto', border: "1px solid #e2e8f0", padding: "8px 12px", borderRadius: "8px", height: "40px" }} title="Du" />
+              <input type="date" value={period.to} onChange={(e) => setPeriod(cur => ({ ...cur, to: e.target.value }))} style={{ width: 'auto', border: "1px solid #e2e8f0", padding: "8px 12px", borderRadius: "8px", height: "40px" }} title="Au" />
+              <button type="button" className="btn-export" onClick={exportCsv} style={{ width: 'auto', height: "40px", padding: "0 16px", display: "flex", alignItems: "center", gap: "6px", background: "#f8fafc", cursor: "pointer", whiteSpace: "nowrap" }}>
+                <Download size={16} /> Excel
+              </button>
             </div>
           </div>
 
@@ -495,11 +573,11 @@ export default function ReformePage() {
               const statut = normalizeReformeStatus(item);
               const isPending = statut === "EN_ATTENTE_VALIDATION";
               const isCanceled = statut === "ANNULEE" || statut === "ANNULÉ";
-              
+
               let statusClass = "status-en_attente";
               if (statut === "VALIDE" || statut === "VALIDÉ") statusClass = "status-valide";
-              if (isCanceled) statusClass = "status-transfere"; // Reusing the red-ish style from transfer for annulé
-              
+              if (isCanceled) statusClass = "status-transfere";
+
               const firstJustificatif = item.rapportTechniqueUrl;
 
               return (
@@ -507,10 +585,10 @@ export default function ReformePage() {
                   <div className="aff-card-header" style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
                     <div style={{ width: "48px", height: "48px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}>
                       {item.bien?.photoUrl ? (
-                        <img 
-                          src={getFullUrl(item.bien.photoUrl)} 
-                          alt="Bien" 
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                        <img
+                          src={getFullUrl(item.bien.photoUrl)}
+                          alt="Bien"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                             (e.target as HTMLImageElement).parentElement!.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>';
@@ -544,13 +622,13 @@ export default function ReformePage() {
                     {firstJustificatif && (
                       <div className="aff-meta-row" style={{ gridColumn: "1/-1", marginTop: "4px" }}>
                         <span>📎</span><strong>Dossier joint</strong>
-                        <button 
-                           type="button" 
-                           onClick={() => openViewer(getFullUrl(firstJustificatif))} 
-                           className="btn-export" 
-                           style={{ padding: "4px 10px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px", background: "rgba(59,130,246,0.1)", color: "#2563eb", border: "1px solid rgba(59,130,246,0.2)" }}
+                        <button
+                          type="button"
+                          onClick={() => openViewer(getFullUrl(firstJustificatif))}
+                          className="btn-export"
+                          style={{ padding: "4px 10px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px", background: "rgba(59,130,246,0.1)", color: "#2563eb", border: "1px solid rgba(59,130,246,0.2)" }}
                         >
-                           <Eye size={14} /> Lire le document
+                          <Eye size={14} /> Lire le document
                         </button>
                       </div>
                     )}
@@ -558,38 +636,48 @@ export default function ReformePage() {
 
                   <div className="aff-card-actions">
                     {isPending ? (
-                      <>
-                        <button 
-                          className="aff-action-btn btn-success" 
-                          type="button" 
-                          disabled={actionLoadingId === item.id}
-                          onClick={() => void validateReforme(item)}
-                        >
-                          ✅ Valider
-                        </button>
-                        <button 
-                          className="aff-action-btn btn-danger" 
-                          type="button" 
-                          disabled={actionLoadingId === item.id}
-                          onClick={() => void cancelReforme(item)}
-                        >
-                          ❌ Annuler
-                        </button>
-                      </>
+                      canValidate ? (
+                        <>
+                          <button
+                            className="aff-action-btn btn-success"
+                            type="button"
+                            disabled={actionLoadingId === item.id}
+                            onClick={() => void validateReforme(item)}
+                          >
+                            ✅ Valider
+                          </button>
+                          <button
+                            className="aff-action-btn btn-danger"
+                            type="button"
+                            disabled={actionLoadingId === item.id}
+                            onClick={() => void cancelReforme(item)}
+                          >
+                            ❌ Annuler
+                          </button>
+                          <button className="aff-action-btn" type="button" onClick={() => { setSigningReforme(item); setSignatureModalOpen(true); }}>
+                            📎 Export & Sign
+                          </button>
+                        </>
+                      ) : (
+                        <div className="aff-status-pill status-en_attente" style={{ width: "100%", justifyContent: "center", fontStyle: "italic", padding: "8px" }}>
+                          ⏳ En attente de validation administrative
+                        </div>
+                      )
                     ) : (
-                      <button 
-                        className="aff-action-btn" 
-                        type="button" 
+                      <button
+                        className="aff-action-btn"
+                        type="button"
                         style={{ opacity: 0.7, cursor: "default" }}
                         disabled
                       >
                         🔒 Dossier clôturé
                       </button>
                     )}
-                    <button 
-                      className="aff-action-btn" 
-                      type="button" 
-                      onClick={() => void handleDelete(item)} 
+                    <button className="aff-action-btn" type="button" onClick={() => printReforme(item)}>🖨️ Imprimer</button>
+                    <button
+                      className="aff-action-btn"
+                      type="button"
+                      onClick={() => void handleDelete(item)}
                       style={{ color: "#ef4444" }}
                       title="Supprimer la réforme"
                     >
@@ -602,16 +690,6 @@ export default function ReformePage() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({ label, error, span = false, children }: React.PropsWithChildren<{ label: string; error?: string; span?: boolean }>) {
-  return (
-    <div className="form-group-modern" style={span ? { gridColumn: "span 2" } : undefined}>
-      <label>{label}</label>
-      {children}
-      <ErrorText message={error} />
     </div>
   );
 }

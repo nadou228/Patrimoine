@@ -3,6 +3,7 @@ package com.patris.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -49,6 +50,7 @@ public class InventaireEcartController {
         return service.update(id, ecart);
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_INVENTAIRES_ECART')")
     @PostMapping("/{id}/validation")
     public InventaireEcart validation(@PathVariable Long id, @RequestParam statutValidation statut) {
         return service.valider(id, statut);

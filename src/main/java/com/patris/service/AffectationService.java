@@ -203,6 +203,13 @@ public class AffectationService {
     }
 
     @Transactional
+    public Affectation addDocumentUrl(Long id, String url) {
+        Affectation aff = findById(id);
+        aff.getDocumentsUrls().add(url);
+        return repository.save(aff);
+    }
+
+    @Transactional
     public Affectation retournerAffectation(Long id, String motif, String dateRetour, String acteur) {
         Affectation affectation = findById(id);
         String ancienneVal = "{\"dateFin\":\"" + affectation.getDateFin() + "\", \"fonction\":\"" + affectation.getFonction() + "\"}";

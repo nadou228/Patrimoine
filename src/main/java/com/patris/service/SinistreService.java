@@ -70,4 +70,25 @@ public class SinistreService {
     public void delete(Long id) {
         sinistreRepository.deleteById(id);
     }
+
+    public Sinistre valider(Long id, String statut, String validateur) {
+        Sinistre s = findById(id);
+        s.setStatut(statut);
+        s.setDateCloture(java.time.LocalDate.now());
+        Sinistre saved = sinistreRepository.save(s);
+
+        try {
+            if (s.getBien() != null && s.getBien().getId() != null) {
+                Bien b = s.getBien();
+                if ("PERTE_TOTALE".equals(s.getGravite()) && s.getMontantIndemnise() != null && s.getMontantIndemnise() > 0) {
+                    b.setStatutOperationnel("REFORME");
+                    bienRepository.save(b);
+                }
+            }
+        } catch (Exception ex) {
+            // ignore failures when updating bien status
+        }
+
+        return saved;
+    }
 }

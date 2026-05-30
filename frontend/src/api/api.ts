@@ -1,11 +1,11 @@
 import axios from 'axios';
 import { getCurrentUser } from './auth';
+import { API_BASE_URL, resolveApiUrl } from './config';
 
-export const API_BASE_URL = 'http://localhost:8082';
+export { API_BASE_URL, resolveApiUrl };
 
-// Base axios instance with auth token injection
 const api = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
+  baseURL: resolveApiUrl('/api'),
 });
 
 api.interceptors.request.use((config) => {
@@ -184,6 +184,7 @@ export const createInventaire = (data: ApiRecord) => api.post('/inventaires/camp
 export const deleteInventaire = (id: number) => api.delete(`/inventaires/campagnes/${id}`);
 
 export const getInventaireFiches = (campagneId: number) => api.get(`/inventaires/fiches?campagneId=${campagneId}`).then(r => r.data);
+export const createInventaireFiche = (data: ApiRecord) => api.post('/inventaires/fiches', data).then(r => r.data);
 export const updateInventaireFiche = (id: number, data: ApiRecord) => api.put(`/inventaires/fiches/${id}`, data).then(r => r.data);
 export const validerFicheAgent = (id: number, statut: string) => api.post(`/inventaires/fiches/${id}/validation-agent?statut=${statut}`).then(r => r.data);
 export const validerFicheSuperviseur = (id: number, statut: string) => api.post(`/inventaires/fiches/${id}/validation-superviseur?statut=${statut}`).then(r => r.data);
@@ -194,12 +195,28 @@ export const validerEcart = (id: number, statut: string) => api.post(`/inventair
 export const validerZoneInventaire = (campagneId: number) => api.post(`/inventaires/campagnes/${campagneId}/valider-zone`).then(r => r.data);
 export const certifierInventaire = (campagneId: number) => api.post(`/inventaires/campagnes/${campagneId}/certifier`).then(r => r.data);
 
+export const getInventaireStats = (campagneId: number) => api.get(`/inventaires/campagnes/${campagneId}/stats`).then(r => r.data);
+export const lancerRapprochementInventaire = (campagneId: number) => api.post(`/inventaires/campagnes/${campagneId}/rapprochement`).then(r => r.data);
+
+export const scanTerrainInventaire = (campagneId: number, code: string) =>
+  api.get('/inventaires/terrain/scan', { params: { campagneId, code } }).then(r => r.data);
+
+export const recenserTerrainInventaire = (data: ApiRecord) =>
+  api.post('/inventaires/terrain/recensement', data).then(r => r.data);
+
 // ====== AFFECTATIONS — /api/affectations ======
 export const getAffectations = () => api.get('/affectations').then(r => r.data);
 export const createAffectation = (data: AffectationPayload) => api.post('/affectations', data).then(r => r.data);
 export const updateAffectation = (id: number, data: AffectationPayload) => api.put(`/affectations/${id}`, data).then(r => r.data);
 export const deleteAffectation = (id: number) => api.delete(`/affectations/${id}`);
 export const validerAffectation = (id: number, validator: string) => api.post(`/affectations/${id}/valider?validator=${validator}`).then(r => r.data);
+export const validerAffectationAvecDocument = (id: number, file: Blob | File, validator: string) => {
+  const fd = new FormData();
+  fd.append('file', file instanceof File ? file : new File([file], 'signed.pdf', { type: 'application/pdf' }));
+  return api.post(`/affectations/${id}/validerAvecDocument?validator=${encodeURIComponent(validator)}`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
 export const rejeterAffectation = (id: number, validator: string) => api.post(`/affectations/${id}/rejeter?validator=${validator}`).then(r => r.data);
 export const getOrigineAffectation = (bienId: number) => api.get(`/affectations/origine/${bienId}`).then(r => r.data);
 export const retournerAffectation = (id: number, data: RetourAffectationPayload) => api.put(`/affectations/${id}/retour`, data).then(r => r.data);
@@ -217,6 +234,19 @@ export const createReforme = (data: ApiRecord) => api.post('/reformes', data).th
 export const deleteReforme = (id: number) => api.delete(`/reformes/${id}`);
 export const validerReforme = (id: number, data: ReformeValidationPayload = {}) => api.put(`/reformes/${id}/valider`, data).then(r => r.data);
 export const annulerReforme = (id: number) => api.put(`/reformes/${id}/annuler`).then(r => r.data);
+export const uploadReformeRapport = (id: number, file: Blob | File) => {
+  const fd = new FormData();
+  fd.append('file', file instanceof File ? file : new File([file], 'report.pdf', { type: 'application/pdf' }));
+  return api.post(`/reformes/${id}/rapport`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+};
+
+export const uploadSinistreRapport = (id: number, file: Blob | File) => {
+  const fd = new FormData();
+  fd.append('file', file instanceof File ? file : new File([file], 'report.pdf', { type: 'application/pdf' }));
+  return api.post(`/sinistres/${id}/rapport`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+};
+
+export const validerSinistre = (id: number, data: Record<string, any> = {}) => api.put(`/sinistres/${id}/valider`, data).then(r => r.data);
 
 // ====== STOCKS / CONSOMMABLES — /api/consommables & /api/mouvement_stock ======
 export const getConsommables = () => api.get('/consommables').then(r => r.data);
@@ -255,7 +285,6 @@ export const getDashboardEvolutionMensuelle = () => api.get('/dashboard/evolutio
 export const getDashboardRepartitionCategories = () => api.get('/dashboard/repartition-categories').then(r => r.data as DashboardCategoryDistribution[]);
 export const getDashboardTopAlertes = () => api.get('/dashboard/top-alertes').then(r => r.data as DashboardMaintenanceAlert[]);
 
-
 // ====== NOMENCLATURE — /api/v1/nomenclature ======
 export const getNomenclatureComptes = (params?: any) => api.get('/v1/nomenclature/comptes', { params }).then(r => r.data);
 export const getNomenclatureCategories = (params?: any) => api.get('/v1/nomenclature/categories', { params }).then(r => r.data);
@@ -266,5 +295,73 @@ export const searchNomenclature = (q: string, params?: any) => api.get('/v1/nome
 // ====== BACKUP / PRA ======
 export const getBackups = () => api.get('/admin/backups').then(r => r.data);
 export const createBackup = (type: string = "manual") => api.post(`/admin/backups/now?type=${type}`).then(r => r.data);
+
+// ====== SYSTEM SETTINGS ======
+export type SystemSettings = {
+  IUP_PREFIX: string;
+  REFERENCE_YEAR: string;
+  AMORTISSEMENT_MODE: string;
+  EXPORT_EXERCICE: string;
+  EXPORT_INSTITUTION: string;
+  EXPORT_POSTE: string;
+};
+
+export const getSystemSettings = () =>
+  api.get('/admin/system-settings').then(r => r.data as SystemSettings);
+
+export const updateSystemSettings = (settings: Partial<SystemSettings>) =>
+  api.put('/admin/system-settings', settings).then(r => r.data as SystemSettings);
+
+// ====== SPRINT 5 — COPILOT & PREDICTIVE ANALYTICS ======
+export type CopilotItem = {
+  label: string;
+  value: string;
+  badge: 'danger' | 'warning' | 'success' | 'info';
+};
+
+export type CopilotResponse = {
+  answer: string;
+  type: 'INFO' | 'ALERTE' | 'RECOMMANDATION' | 'RAPPORT';
+  items: CopilotItem[];
+  suggestion: string | null;
+};
+
+export const queryCopilot = (question: string) =>
+  api.post('/copilot/query', { question }).then(r => r.data as CopilotResponse);
+
+export type DepreciationPoint = {
+  label: string;
+  valeurNette: number;
+  mois: number;
+};
+
+export const getDepreciationForecast = () =>
+  api.get('/dashboard/depreciation-forecast').then(r => r.data as DepreciationPoint[]);
+
+export type RiskHeatmapItem = {
+  id: number;
+  iup: string;
+  designation: string;
+  categorie: string;
+  service: string;
+  scoreRisque: number;
+  niveau: 'BAS' | 'MOYEN' | 'ÉLEVÉ' | 'CRITIQUE';
+  vetuste: number;
+};
+
+export const getRiskHeatmap = () =>
+  api.get('/dashboard/risk-heatmap').then(r => r.data as RiskHeatmapItem[]);
+
+export type SmartAlerte = {
+  id: string;
+  titre: string;
+  message: string;
+  niveau: 'BAS' | 'MOYEN' | 'ÉLEVÉ' | 'CRITIQUE';
+  count: number;
+  action: string;
+};
+
+export const getAlertesIntelligentes = () =>
+  api.get('/dashboard/alertes-intelligentes').then(r => r.data as SmartAlerte[]);
 
 export default api;

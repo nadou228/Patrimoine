@@ -5,10 +5,11 @@ import {
   LayoutDashboard, Package, Warehouse, ClipboardList, 
   ArrowLeftRight, Trash2, AlertTriangle, Wrench, 
   Settings, ChevronDown, LogOut, Shield,
-  Circle, FileSpreadsheet
+  Circle, FileSpreadsheet, TrendingUp, Smartphone
 } from "lucide-react";
 import { getCurrentUser, logout } from "../api/auth";
 import { usePermissions } from "../contexts/PermissionsContext";
+import { CopilotWidget } from "../components/CopilotWidget";
 
 type NavItem = {
   path: string;
@@ -51,9 +52,11 @@ const AppLayout: React.FC = () => {
 
   const navItems = useMemo<NavItem[]>(() => [
     { path: "/", label: "Tableau de bord", requiredPermission: "VIEW_DASHBOARD", icon: <LayoutDashboard size={20} /> },
+    { path: "/analytics", label: "Analyses & IA", requiredPermission: "VIEW_DASHBOARD", icon: <TrendingUp size={20} /> },
     { path: "/biens", label: "Gestion des biens", requiredPermission: "READ_BIENS", icon: <Package size={20} /> },
     { path: "/stocks", label: "Stocks", requiredPermission: "READ_STOCKS", icon: <Warehouse size={20} /> },
     { path: "/inventaire", label: "Inventaire", requiredPermission: "READ_INVENTAIRES", icon: <ClipboardList size={20} /> },
+    { path: "/terrain", label: "Mode Terrain", requiredPermission: "READ_INVENTAIRES", icon: <Smartphone size={20} /> },
     { path: "/audit", label: "Journal d'Audit", requiredPermission: "READ_AUDIT", icon: <Shield size={20} /> },
     { path: "/rapports", label: "États & Annexes", requiredPermission: "VIEW_DASHBOARD", icon: <FileSpreadsheet size={20} /> },
     { path: "/affectations", label: "Affectations", requiredPermission: "READ_AFFECTATIONS", icon: <ArrowLeftRight size={20} />, inOperations: true },
@@ -166,6 +169,7 @@ const AppLayout: React.FC = () => {
 
       <main className="executive-main">
         <Outlet />
+        <CopilotWidget />
       </main>
 
       <style>{`

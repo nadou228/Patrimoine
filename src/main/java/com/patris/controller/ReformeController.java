@@ -3,6 +3,7 @@ package com.patris.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,12 +49,14 @@ public class ReformeController {
         return service.update(id, reforme);
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_REFORMES')")
     @PutMapping("/{id}/valider")
     public ResponseEntity<Reforme> valider(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> payload) {
         String acteur = payload != null ? payload.getOrDefault("validateur", "systeme") : "systeme";
         return ResponseEntity.ok(service.valider(id, acteur));
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_REFORMES')")
     @PutMapping("/{id}/annuler")
     public ResponseEntity<Reforme> annuler(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> payload) {
         String acteur = payload != null ? payload.getOrDefault("validateur", "systeme") : "systeme";

@@ -1,18 +1,12 @@
 package com.patris.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Getter
-@Setter
-@NoArgsConstructor
 @Table(name = "roles")
 public class Role {
 
@@ -44,6 +38,8 @@ public class Role {
     )
     private Set<Permission> permissions = new HashSet<>();
 
+    public Role() {}
+
     public Role(String code, String libelle, String description, boolean systemRole) {
         this.code = code;
         this.libelle = libelle;
@@ -58,4 +54,24 @@ public class Role {
             dateCreation = LocalDateTime.now();
         }
     }
+
+    // --- Getters ---
+    public Long getId() { return id; }
+    public String getCode() { return code; }
+    public String getLibelle() { return libelle; }
+    public String getDescription() { return description; }
+    public boolean isSystemRole() { return systemRole; }
+    public boolean isActif() { return actif; }
+    public LocalDateTime getDateCreation() { return dateCreation; }
+    public Set<Permission> getPermissions() { return permissions; }
+
+    // --- Setters ---
+    public void setId(Long id) { this.id = id; }
+    public void setCode(String code) { this.code = code; }
+    public void setLibelle(String libelle) { this.libelle = libelle; }
+    public void setDescription(String description) { this.description = description; }
+    public void setSystemRole(boolean systemRole) { this.systemRole = systemRole; }
+    public void setActif(boolean actif) { this.actif = actif; }
+    public void setDateCreation(LocalDateTime dateCreation) { this.dateCreation = dateCreation; }
+    public void setPermissions(Set<Permission> permissions) { this.permissions = permissions; }
 }

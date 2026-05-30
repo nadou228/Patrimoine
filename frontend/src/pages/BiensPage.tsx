@@ -32,6 +32,7 @@ import {
   Sparkles, Search, CheckCircle2, ChevronRight, X, Loader2, 
   Building2, Armchair, Monitor, Car, Wrench, FileText, Palette, Dog, LayoutGrid, Check, ArrowRight, ArrowLeft, PlusCircle,
   DollarSign, UserCheck, Package
+  , AlertTriangle
 } from "lucide-react";
 
 type MainCategory = 
@@ -77,6 +78,8 @@ type BienForm = {
   modeAcquisition: string;
   valeur: number;
   dureeAmortissement: number;
+  tauxAmortissement: number;
+  dureeVie: number;
   valeurNetteComptable: number;
   amortissementCumule: number;
   localisation: string;
@@ -154,6 +157,8 @@ const EMPTY_FORM: BienForm = {
   modeAcquisition: "ACHAT",
   valeur: 0,
   dureeAmortissement: 0,
+  tauxAmortissement: 0,
+  dureeVie: 0,
   valeurNetteComptable: 0,
   amortissementCumule: 0,
   localisation: "",
@@ -240,12 +245,53 @@ const CATEGORY_META: Record<MainCategory, { label: string; description: string; 
 
 const formatMoney = (value?: number) => `${Math.round(value || 0).toLocaleString("fr-FR")} FCFA`;
 
+const OPERATIONAL_STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
+  ACTIF: { label: "ACTIF", color: "#047857", bg: "rgba(16, 185, 129, 0.92)" },
+  AFFECTE: { label: "AFFECTÉ", color: "#ffffff", bg: "rgba(99, 102, 241, 0.92)" },
+  EN_MAINTENANCE: { label: "EN MAINTENANCE", color: "#ffffff", bg: "rgba(245, 158, 11, 0.94)" },
+  SINISTRE: { label: "SINISTRÉ", color: "#ffffff", bg: "rgba(220, 38, 38, 0.94)" },
+  HORS_SERVICE: { label: "HORS SERVICE", color: "#ffffff", bg: "rgba(127, 29, 29, 0.94)" },
+  REFORME: { label: "RÉFORMÉ", color: "#ffffff", bg: "rgba(71, 85, 105, 0.94)" },
+  PERDU: { label: "PERDU", color: "#ffffff", bg: "rgba(190, 18, 60, 0.94)" },
+  VOLE: { label: "VOLÉ", color: "#ffffff", bg: "rgba(190, 18, 60, 0.94)" },
+};
+
+const normalizeOperationalStatus = (value?: string) => {
+  const raw = String(value || "ACTIF").trim().toUpperCase();
+  if (raw === "RÉFORMÉ" || raw === "REFORMÉ") return "REFORME";
+  if (raw === "EN MAINTENANCE") return "EN_MAINTENANCE";
+  if (raw === "HORS SERVICE") return "HORS_SERVICE";
+  if (raw === "SINISTRÉ") return "SINISTRE";
+  if (raw === "VOLÉ") return "VOLE";
+  return raw;
+};
+
+const resolveBienOperationalStatus = (bien: Bien) => {
+  const statut = normalizeOperationalStatus(bien.statutOperationnel);
+  if ((statut === "ACTIF" || !statut) && bien.service) return "AFFECTE";
+  return statut || "ACTIF";
+};
+
+const resolveBienStatusLabel = (bien: Bien) => {
+  const statut = resolveBienOperationalStatus(bien);
+  if (statut === "AFFECTE") return `Affecté : ${bien.service || "service non renseigné"}`;
+  if (statut === "ACTIF") return "Libre";
+  return OPERATIONAL_STATUS_META[statut]?.label || statut.replace(/_/g, " ");
+};
+
 const getFullUrl = (url?: string) => {
   if (!url) return "";
   if (url.startsWith("http")) return url;
   // Utilisation de la constante API_BASE_URL importée pour plus de robustesse
   const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
   return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
+const isRecentlyTransferred = (bien: Bien, days = 14) => {
+  if (!bien) return false;
+  const d = bien.dateAffectation ? Date.parse(String(bien.dateAffectation)) : NaN;
+  if (Number.isNaN(d)) return false;
+  return (Date.now() - d) <= days * 24 * 60 * 60 * 1000;
 };
 
 const getAttachments = (docs?: string | string[]) => {
@@ -479,6 +525,10 @@ export default function BiensPage() {
       value: visible.reduce((sum, bien) => sum + (bien.valeur || 0), 0),
       affected: visible.filter((bien) => Boolean(bien.service) || bien.statutOperationnel === "AFFECTE").length,
       free: visible.filter((bien) => !bien.service && bien.statutOperationnel !== "AFFECTE").length,
+      maintenance: visible.filter((bien) => normalizeOperationalStatus(bien.statutOperationnel) === "EN_MAINTENANCE").length,
+      sinistre: visible.filter((bien) => normalizeOperationalStatus(bien.statutOperationnel) === "SINISTRE").length,
+      reforme: visible.filter((bien) => normalizeOperationalStatus(bien.statutOperationnel) === "REFORME").length,
+      transferred: visible.filter((bien) => isRecentlyTransferred(bien)).length,
     };
   }, [biens]);
 
@@ -499,8 +549,9 @@ export default function BiensPage() {
       const affectationOk =
         filters.affectation === "TOUS" ||
         (filters.affectation === "AFFECTE" && isAffected) ||
-        (filters.affectation === "NON_AFFECTE" && !isAffected) ||
-        (filters.affectation === "REFORME" && bien.statutOperationnel === "REFORME");
+        (filters.affectation === "NON_AFFECTE" && !isAffected && resolveBienOperationalStatus(bien) === "ACTIF") ||
+        resolveBienOperationalStatus(bien) === filters.affectation ||
+        (filters.affectation === "TRANSFERE" && isRecentlyTransferred(bien));
       const searchOk =
         !term ||
         [bien.iup, bien.designation, bien.service, bien.localisation, bien.sousCategorie]
@@ -1053,6 +1104,24 @@ export default function BiensPage() {
               </div>
               <span className="stat-value"><AnimatedNumber value={totals.free} /></span>
             </div>
+            <div className="stat-card-premium">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="stat-label">En maintenance</span>
+                <div className="icon-box-mini" style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
+                  <Wrench size={16} />
+                </div>
+              </div>
+              <span className="stat-value"><AnimatedNumber value={totals.maintenance} /></span>
+            </div>
+            <div className="stat-card-premium">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className="stat-label">Sinistres</span>
+                <div className="icon-box-mini" style={{ background: 'rgba(239,68,68,0.08)', color: '#dc2626' }}>
+                  <AlertTriangle size={16} />
+                </div>
+              </div>
+              <span className="stat-value"><AnimatedNumber value={totals.sinistre} /></span>
+            </div>
           </div>
 
           <div className="gallery-toolbar">
@@ -1086,6 +1155,10 @@ export default function BiensPage() {
                 <option value="TOUS">Tous statuts</option>
                 <option value="AFFECTE">Affecté</option>
                 <option value="NON_AFFECTE">Non affecté</option>
+                <option value="TRANSFERE">Transféré</option>
+                <option value="EN_MAINTENANCE">En maintenance</option>
+                <option value="SINISTRE">Sinistré</option>
+                <option value="HORS_SERVICE">Hors service</option>
                 <option value="REFORME">Réformé</option>
               </select>
               <select value={filters.sort} onChange={(e) => setFilters((c) => ({ ...c, sort: e.target.value as SortMode }))}>
@@ -1112,6 +1185,12 @@ export default function BiensPage() {
                 const mainImage = bien.photoUrl ? normalizeUrl(bien.photoUrl) : null;
                 const vnc = bien.valeurNetteComptable ?? bien.valeur;
                 const isConfirmingDelete = confirmation?.bienId === bien.id;
+                const operationalStatus = resolveBienOperationalStatus(bien);
+                const operationalMeta = OPERATIONAL_STATUS_META[operationalStatus] || {
+                  label: operationalStatus.replace(/_/g, " "),
+                  color: "#ffffff",
+                  bg: "rgba(71, 85, 105, 0.92)",
+                };
 
                 return (
                   <article key={bien.id || bien.iup} className="asset-card-premium" style={{ position: 'relative' }}>
@@ -1163,9 +1242,14 @@ export default function BiensPage() {
                         {(() => {
                           const isAffecte = !!bien.service;
                           const statutOp = bien.statutOperationnel || 'ACTIF';
+                          const transferred = isRecentlyTransferred(bien);
                           return (
                             <>
-                              {isAffecte ? (
+                              {transferred ? (
+                                <span style={{ background: 'rgba(14, 165, 233, 0.9)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                  🔁 TRANSFÉRÉ
+                                </span>
+                              ) : isAffecte ? (
                                 <span style={{ background: 'rgba(99, 102, 241, 0.9)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                                   <CheckCircle2 size={10} style={{ display: 'inline', marginRight: 4, marginBottom: -1 }} /> AFFECTÉ
                                 </span>
@@ -1182,6 +1266,11 @@ export default function BiensPage() {
                               {statutOp === 'REFORME' && (
                                 <span style={{ background: 'rgba(239, 68, 68, 0.9)', color: 'white', padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                                   ⛔ RÉFORMÉ
+                                </span>
+                              )}
+                              {!['ACTIF', 'AFFECTE', 'EN_MAINTENANCE', 'REFORME'].includes(operationalStatus) && (
+                                <span style={{ background: operationalMeta.bg, color: operationalMeta.color, padding: '4px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, backdropFilter: 'blur(4px)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                                  {operationalMeta.label}
                                 </span>
                               )}
                             </>
@@ -1211,6 +1300,11 @@ export default function BiensPage() {
                           </span>
                         </div>
                       </div>
+                      {resolveBienOperationalStatus(bien) !== "AFFECTE" && resolveBienOperationalStatus(bien) !== "ACTIF" && (
+                        <div className="asset-operational-strip" style={{ marginTop: 12, padding: '8px 10px', borderRadius: 10, background: operationalMeta.bg, color: operationalMeta.color, fontSize: 11, fontWeight: 900, textAlign: 'center' }}>
+                          {operationalMeta.label}
+                        </div>
+                      )}
                     </div>
 
                     <div className="asset-footer-premium">

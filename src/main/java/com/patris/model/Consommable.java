@@ -19,6 +19,13 @@ public class Consommable {
     private String unite;
     private Double prixMoyenPondere = 0.0;
     private String serviceAffiche;
+    private String profilArticle;
+    private String conditionnement;
+    private String rythmeConsommation;
+    private String criticite;
+    private String emplacementReference;
+    @Column(length = 1000)
+    private String descriptionUsage;
 
     @ManyToOne
     @JoinColumn(name = "commune_id")
@@ -59,6 +66,24 @@ public class Consommable {
 
     public String getServiceAffiche() { return serviceAffiche; }
     public void setServiceAffiche(String serviceAffiche) { this.serviceAffiche = serviceAffiche; }
+
+    public String getProfilArticle() { return profilArticle; }
+    public void setProfilArticle(String profilArticle) { this.profilArticle = profilArticle; }
+
+    public String getConditionnement() { return conditionnement; }
+    public void setConditionnement(String conditionnement) { this.conditionnement = conditionnement; }
+
+    public String getRythmeConsommation() { return rythmeConsommation; }
+    public void setRythmeConsommation(String rythmeConsommation) { this.rythmeConsommation = rythmeConsommation; }
+
+    public String getCriticite() { return criticite; }
+    public void setCriticite(String criticite) { this.criticite = criticite; }
+
+    public String getEmplacementReference() { return emplacementReference; }
+    public void setEmplacementReference(String emplacementReference) { this.emplacementReference = emplacementReference; }
+
+    public String getDescriptionUsage() { return descriptionUsage; }
+    public void setDescriptionUsage(String descriptionUsage) { this.descriptionUsage = descriptionUsage; }
 
     public NomenclatureCompte getNomenclature() { return nomenclature; }
     public void setNomenclature(NomenclatureCompte nomenclature) { this.nomenclature = nomenclature; }

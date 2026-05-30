@@ -1,7 +1,6 @@
 package com.patris.security;
 
 import com.patris.model.Utilisateur;
-import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
@@ -10,7 +9,6 @@ import java.util.Collection;
 /**
  * Détails utilisateur pour Spring Security : autorités pré-calculées (rôle + permissions effectives).
  */
-@Getter
 public class CustomUserDetails implements UserDetails {
 
     private final Utilisateur utilisateur;
@@ -19,6 +17,11 @@ public class CustomUserDetails implements UserDetails {
     public CustomUserDetails(Utilisateur utilisateur, Collection<? extends GrantedAuthority> authorities) {
         this.utilisateur = utilisateur;
         this.authorities = authorities;
+    }
+
+    /** Retourne l'entité Utilisateur associée. */
+    public Utilisateur getUtilisateur() {
+        return utilisateur;
     }
 
     @Override

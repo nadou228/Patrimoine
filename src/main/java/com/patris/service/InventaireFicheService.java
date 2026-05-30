@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 public class InventaireFicheService {
 
     private final InventaireFicheRepository repository;
+    private final InventaireEcartDetectionService ecartDetectionService;
 
     public List<InventaireFiche> findAll() {
         return repository.findAll();
@@ -58,7 +59,12 @@ public class InventaireFicheService {
         fiche.setCoordonneeGps(data.getCoordonneeGps());
         fiche.setObservation(data.getObservation());
         fiche.setAnomalie(data.getAnomalie());
-        return repository.save(fiche);
+        if (fiche.getValidationSuperviseur() == statutValidation.VALIDE) {
+            fiche.setValidationSuperviseur(statutValidation.EN_ATTENTE);
+        }
+        InventaireFiche saved = repository.save(fiche);
+        ecartDetectionService.syncFromFiche(saved);
+        return saved;
     }
 
     public InventaireFiche validerAgent(Long id, statutValidation statut) {
@@ -70,6 +76,10 @@ public class InventaireFicheService {
 
     public InventaireFiche validerSuperviseur(Long id, statutValidation statut) {
         InventaireFiche fiche = findById(id);
+        if (statut == statutValidation.VALIDE
+                && fiche.getValidationAgent() != statutValidation.VALIDE) {
+            throw new RuntimeException("Validation superviseur impossible : la validation agent est requise au préalable.");
+        }
         fiche.setValidationSuperviseur(statut);
         fiche.setSuperviseurUsername(SecurityContextHolder.getContext().getAuthentication().getName());
         return repository.save(fiche);

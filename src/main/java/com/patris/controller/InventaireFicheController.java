@@ -3,6 +3,7 @@ package com.patris.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -49,11 +50,13 @@ public class InventaireFicheController {
         return service.update(id, fiche);
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_INVENTAIRES_AGENT')")
     @PostMapping("/{id}/validation-agent")
     public InventaireFiche validationAgent(@PathVariable Long id, @RequestParam statutValidation statut) {
         return service.validerAgent(id, statut);
     }
 
+    @PreAuthorize("hasAuthority('VALIDATE_INVENTAIRES_SUPERVISEUR')")
     @PostMapping("/{id}/validation-superviseur")
     public InventaireFiche validationSuperviseur(@PathVariable Long id, @RequestParam statutValidation statut) {
         return service.validerSuperviseur(id, statut);

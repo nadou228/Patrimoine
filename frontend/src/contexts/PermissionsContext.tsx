@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import axios from 'axios';
-import { clearCurrentUser, getCurrentUser } from '../api/auth';
+import { api } from '../api/api';
+import { buildPermissionsFallback, clearCurrentUser, getCurrentUser } from '../api/auth';
 
 export interface PermissionDetail {
   code: string;
@@ -64,6 +64,8 @@ interface PermissionsContextType {
   /** Vérifie si le rôle actuel peut effectuer `action` sur `resource` selon la matrice RBAC */
   can: (action: string, resource: string) => boolean;
   loading: boolean;
+  /** true si le serveur API n'a pas répondu (backend arrêté ou mauvaise URL). */
+  backendUnreachable: boolean;
 }
 
 const PermissionsContext = createContext<PermissionsContextType | undefined>(undefined);
@@ -71,39 +73,44 @@ const PermissionsContext = createContext<PermissionsContextType | undefined>(und
 export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [permissions, setPermissions] = useState<PermissionsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backendUnreachable, setBackendUnreachable] = useState(false);
 
   useEffect(() => {
     const fetchPermissions = async () => {
+      const user = getCurrentUser();
+      if (!user?.token) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const user = getCurrentUser();
-        if (!user) {
-          console.warn('Pas d utilisateur valide trouve en session');
-          setLoading(false);
-          return;
-        }
-
-        if (!user.token) {
-          console.warn('Pas de token trouve pour utilisateur:', user);
-          setLoading(false);
-          return;
-        }
-
-        console.log('Chargement des permissions pour utilisateur:', user.nom, 'avec le role:', user.role);
-
-        const response = await axios.get('http://localhost:8082/api/permissions/my-permissions', {
-          headers: {
-            Authorization: `Bearer ${user.token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        console.log('Permissions chargees avec succes:', response.data);
+        const response = await api.get('/permissions/my-permissions');
         setPermissions(response.data);
-      } catch (error: any) {
-        console.error('Erreur chargement permissions:', error);
-        console.error('Details:', error.response?.data || error.message);
+        setBackendUnreachable(false);
+      } catch (error: unknown) {
+        const err = error as { response?: { status?: number }; message?: string; code?: string };
+        const isNetwork =
+          !err.response ||
+          err.code === 'ERR_NETWORK' ||
+          (err.message ?? '').includes('Network Error');
 
-        if (error.response?.status === 401 || error.response?.status === 403) {
+        if (isNetwork) {
+          setBackendUnreachable(true);
+          const fallback = buildPermissionsFallback(user);
+          if (fallback) {
+            setPermissions(fallback);
+            console.warn(
+              'API indisponible : permissions chargées depuis le jeton de connexion. Démarrez le backend sur le port 8082.'
+            );
+            return;
+          }
+          console.warn(
+            'Serveur PATRIS injoignable (port 8082). Lancez le backend puis rechargez la page.'
+          );
+          return;
+        }
+
+        if (err.response?.status === 401 || err.response?.status === 403) {
           clearCurrentUser();
           window.location.replace('/login');
         }
@@ -112,7 +119,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     };
 
-    fetchPermissions();
+    void fetchPermissions();
   }, []);
 
   const hasPermission = (permissionCode: string): boolean => {
@@ -139,7 +146,25 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   return (
-    <PermissionsContext.Provider value={{ permissions, hasPermission, hasAnyRole, can, loading }}>
+    <PermissionsContext.Provider
+      value={{ permissions, hasPermission, hasAnyRole, can, loading, backendUnreachable }}
+    >
+      {backendUnreachable && (
+        <div
+          role="alert"
+          style={{
+            background: '#fef3c7',
+            color: '#92400e',
+            padding: '10px 16px',
+            textAlign: 'center',
+            fontSize: '14px',
+            borderBottom: '1px solid #fcd34d',
+          }}
+        >
+          Backend non joignable — démarrez l&apos;API Spring Boot (port 8082), par ex.{' '}
+          <code>start-backend-background.bat</code>, puis rechargez.
+        </div>
+      )}
       {children}
     </PermissionsContext.Provider>
   );

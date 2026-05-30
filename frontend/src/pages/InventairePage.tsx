@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
   getInventaires, createInventaire, deleteInventaire,
   getInventaireFiches, updateInventaireFiche,
   validerFicheAgent, validerFicheSuperviseur,
   getInventaireEcarts, validerEcart,
   validerZoneInventaire, certifierInventaire,
+  getInventaireStats, lancerRapprochementInventaire,
   getServices
 } from '../api/api';
 import { exportCertificatInventaire, exportInventaireCompletExcel } from '../utils/exporters';
-import FileUpload from '../components/FileUpload';
+import ImageUpload from '../components/ImageUpload';
+import { parseQrPayload } from '../utils/qrParser';
+import { ETATS_CONSTATES, TYPE_ECART_LABELS } from '../utils/inventaireConstants';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useToast } from '../contexts/ToastContext';
+import { usePermissions } from '../contexts/PermissionsContext';
 import { 
   Sparkles, CheckCircle2, LayoutGrid, Search, X, Check, ChevronRight,
-  ShieldCheck, Activity, BarChart3, QrCode, FileText, PlusCircle, AlertTriangle
+  ShieldCheck, Activity, BarChart3, QrCode, FileText, PlusCircle, AlertTriangle, ExternalLink, Smartphone
 } from 'lucide-react';
 import AnimatedNumber from "../components/AnimatedNumber";
 
@@ -23,12 +28,9 @@ const MISSION_TEMPLATES = [
   { id: 'HANDOVER', name: 'Passation de Service', desc: 'Inventaire contradictoire lors du changement d\'un gestionnaire ou d\'un poste.', icon: '🤝', color: '#10b981' }
 ];
 
-const ETAT_COLORS: Record<string, string> = {
-  BON:   '#10b981',
-  MOYEN: '#f59e0b',
-  MAUVAIS: '#ef4444',
-  HS:    '#7f1d1d',
-};
+const ETAT_COLORS: Record<string, string> = Object.fromEntries(
+  ETATS_CONSTATES.map(e => [e.value, e.color])
+);
 
 /* ─── Circular Progress ─── */
 const CircularProgress = ({ percent, size = 56 }: { percent: number; size?: number }) => {
@@ -65,11 +67,18 @@ const EmptyState = ({ icon, title, subtitle, action, onAction }: any) => (
 
 /* ─── Main Component ─── */
 const InventairePage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const { confirm } = useConfirm();
   const { showToast } = useToast();
+  const { hasPermission } = usePermissions();
+  const canValidateAgent = hasPermission('VALIDATE_INVENTAIRES_AGENT');
+  const canValidateSuperviseur = hasPermission('VALIDATE_INVENTAIRES_SUPERVISEUR');
+  const canValidateEcart = hasPermission('VALIDATE_INVENTAIRES_ECART');
+  const canCertifier = hasPermission('VALIDATE_INVENTAIRES_SUPERVISEUR') || hasPermission('VALIDATE_INVENTAIRES_ECART');
   type ViewType = 'DASHBOARD'|'PREPARATION'|'EXECUTION'|'RECONCILIATION'|'CERTIFICATION';
   const [view, setView] = useState<ViewType>('DASHBOARD');
   const [campagnes,       setCampagnes]       = useState<any[]>([]);
+  const [campagnesStats,  setCampagnesStats]  = useState<Record<number, any>>({});
   const [selectedCampagne, setSelectedCampagne] = useState<any|null>(null);
   const [fiches,          setFiches]          = useState<any[]>([]);
   const [ecarts,          setEcarts]          = useState<any[]>([]);
@@ -89,10 +98,24 @@ const InventairePage: React.FC = () => {
     getServices().then(s => setServices(s || [])).catch(() => setServices([]));
   }, []);
 
+  useEffect(() => {
+    const fromUrl = searchParams.get('campagne');
+    if (!fromUrl || campagnes.length === 0) return;
+    const c = campagnes.find(x => x.id === Number(fromUrl));
+    if (c && selectedCampagne?.id !== c.id) openCampagne(c);
+  }, [searchParams, campagnes]);
+
   const loadInitialData = async () => {
     setLoading(true);
-    try { setCampagnes(await getInventaires() || []); }
-    catch { setCampagnes([]); }
+    try {
+      const list = await getInventaires() || [];
+      setCampagnes(list);
+      const statsMap: Record<number, any> = {};
+      await Promise.all(list.map(async (c: any) => {
+        try { statsMap[c.id] = await getInventaireStats(c.id); } catch { /* ignore */ }
+      }));
+      setCampagnesStats(statsMap);
+    } catch { setCampagnes([]); }
     finally { setLoading(false); }
   };
 
@@ -148,18 +171,33 @@ const InventairePage: React.FC = () => {
   const handleScan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanInput.trim()) return;
-    const found = fiches.find(f => (f.bien?.iup === scanInput.trim() || f.codeIup === scanInput.trim()));
+    const iup = parseQrPayload(scanInput);
+    const found = fiches.find(f =>
+      f.bien?.iup === iup || f.codeIup === iup
+      || (iup && (f.bien?.iup?.includes(iup) || iup.includes(f.bien?.iup || '')))
+    );
     if (found) {
       if (found.validationAgent !== 'VALIDE') {
-        setAuditModal({...found});
+        setAuditModal({ ...found, coordonneeGps: found.coordonneeGps || found.coordonneesGps || '' });
         showToast({ type: 'info', title: 'IUP Détecté', message: `Ouverture de la fiche pour ${found.bien?.designation || found.codeIup}` });
       } else {
-        showToast({ type: 'info', title: 'Déjà audité', message: 'Ce bien a déjà été scanné et validé.' });
+        showToast({ type: 'info', title: 'Déjà audité', message: 'Ce bien a déjà été scanné et validé par l\'agent.' });
       }
     } else {
-      showToast({ type: 'error', title: 'IUP introuvable', message: 'Ce bien n\'est pas dans le périmètre de la mission.' });
+      showToast({ type: 'error', title: 'IUP introuvable', message: 'Ce bien n\'est pas dans le périmètre de la mission. Utilisez le Mode Terrain pour les biens hors périmètre.' });
     }
     setScanInput('');
+  };
+
+  const handleRapprochement = async () => {
+    if (!selectedCampagne) return;
+    try {
+      const res = await lancerRapprochementInventaire(selectedCampagne.id);
+      showToast({ type: 'success', title: 'Rapprochement comptable', message: res.message || `${res.ecartsDetectes} écart(s) détecté(s)` });
+      goView('RECONCILIATION');
+    } catch (err: any) {
+      showToast({ type: 'error', title: 'Rapprochement impossible', message: String(err.response?.data || err.message) });
+    }
   };
 
   const handleGlobalValidate = async () => {
@@ -200,20 +238,41 @@ const InventairePage: React.FC = () => {
 
   const captureGPS = () => {
     if (!navigator.geolocation) {
-      setAuditModal((m: any) => ({ ...m, coordonneesGps: "GPS non disponible" }));
+      setAuditModal((m: any) => ({ ...m, coordonneeGps: 'GPS non disponible' }));
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      pos => setAuditModal((m: any) => ({ ...m, coordonneesGps: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}` })),
-      () => setAuditModal((m: any) => ({ ...m, coordonneesGps: "6.1248, 1.2394 (simulation)" }))
+      pos => setAuditModal((m: any) => ({ ...m, coordonneeGps: `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}` })),
+      () => setAuditModal((m: any) => ({ ...m, coordonneeGps: '' }))
     );
   };
+
+  const securityHash = selectedCampagne
+    ? `SIGP-${selectedCampagne.id}-${(selectedCampagne.nom || '').slice(0, 4).toUpperCase()}-${new Date().getFullYear()}`
+    : 'SIGP-PENDING';
 
   const fichesSansAnomalie   = fiches.filter(f => !f.anomalie);
   const fichesAvecAnomalie   = fiches.filter(f => f.anomalie);
   const fichesValidees        = fiches.filter(f => f.validationAgent === 'VALIDE');
   const ecartsEnAttente       = ecarts.filter(e => e.statutValidation === 'EN_ATTENTE');
   const progressPercent       = fiches.length ? Math.round((fichesValidees.length / fiches.length) * 100) : 0;
+  const selectedStats         = selectedCampagne ? campagnesStats[selectedCampagne.id] : null;
+  const globalInventoryStats  = Object.values(campagnesStats).reduce((acc: any, st: any) => {
+    acc.totalFiches += Number(st?.totalFiches || 0);
+    acc.fichesRecensees += Number(st?.fichesRecensees || 0);
+    acc.fichesConformes += Math.max(0, Number(st?.fichesRecensees || 0) - Number(st?.fichesAvecAnomalie || 0));
+    acc.ecartsTotal += Number(st?.ecartsTotal || 0);
+    return acc;
+  }, { totalFiches: 0, fichesRecensees: 0, fichesConformes: 0, ecartsTotal: 0 });
+  const certifiedAssetsCount  = campagnes
+    .filter(c => c.statut === 'CERTIFIE')
+    .reduce((sum, c) => sum + Number(campagnesStats[c.id]?.totalFiches || 0), 0);
+  const dashboardConformity   = selectedCampagne
+    ? Number(selectedStats?.tauxConformite || 0)
+    : (globalInventoryStats.fichesRecensees
+      ? Math.round((globalInventoryStats.fichesConformes / globalInventoryStats.fichesRecensees) * 100)
+      : 0);
+  const dashboardAnomalies    = selectedCampagne ? ecarts.length : globalInventoryStats.ecartsTotal;
 
   const handleExportCertificat = async () => {
     if (!selectedCampagne) return;
@@ -282,15 +341,15 @@ const InventairePage: React.FC = () => {
           <div className="stat-card-premium">
             <span className="stat-label">Taux de Conformité</span>
             <span className="stat-value text-success">
-              <AnimatedNumber value={selectedCampagne ? progressPercent : 94} />%
+              <AnimatedNumber value={dashboardConformity} />%
             </span>
-            <p className="stat-hint">Moyenne globale</p>
+            <p className="stat-hint">{selectedCampagne ? 'Mission sélectionnée' : 'Missions recensées'}</p>
           </div>
 
           <div className="stat-card-premium">
             <span className="stat-label">Anomalies Détectées</span>
             <span className="stat-value text-danger">
-              <AnimatedNumber value={selectedCampagne ? ecarts.length : 12} />
+              <AnimatedNumber value={dashboardAnomalies} />
             </span>
             <p className="stat-hint">Écarts à régulariser</p>
           </div>
@@ -298,9 +357,9 @@ const InventairePage: React.FC = () => {
           <div className="stat-card-premium">
             <span className="stat-label">Biens Certifiés</span>
             <span className="stat-value text-warning">
-              <AnimatedNumber value={campagnes.filter(c => c.statut === 'CERTIFIE').length * 150} />
+              <AnimatedNumber value={certifiedAssetsCount} />
             </span>
-            <p className="stat-hint">Scellés au registre</p>
+            <p className="stat-hint">Validés dans missions certifiées</p>
           </div>
         </div>
       )}
@@ -308,6 +367,32 @@ const InventairePage: React.FC = () => {
       {/* ══════════ DASHBOARD ══════════ */}
       {!loading && view === 'DASHBOARD' && (
         <div className="fade-in" style={{ marginTop: 20 }}>
+          <div className="mission-logic-panel">
+            <div>
+              <span className="badge-pill-glow">Logique métier</span>
+              <h3>Une mission d'inventaire suit un cycle contrôlé</h3>
+              <p>
+                Préparer le périmètre, enregistrer les membres de l'équipe, recenser sur le terrain,
+                valider par agent puis superviseur, rapprocher les écarts, enfin certifier le rapport.
+              </p>
+            </div>
+            <div className="mission-logic-steps">
+              {[
+                'Préparation',
+                'Équipe terrain',
+                'Scan + preuve',
+                'Double contrôle',
+                'Écarts',
+                'Certification'
+              ].map((step, index) => (
+                <div key={step} className="logic-step">
+                  <strong>{index + 1}</strong>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {campagnes.length === 0 ? (
             <div className="empty-state-modern">
               <div className="icon-box-premium" style={{ width: 100, height: 100, fontSize: 40, margin: '0 auto 24px' }}>🗂️</div>
@@ -320,7 +405,8 @@ const InventairePage: React.FC = () => {
           ) : (
             <div className="mission-grid-modern">
               {campagnes.map(c => {
-                const prog = c.statut === 'CERTIFIE' ? 100 : Math.floor(Math.random() * 70) + 15;
+                const st = campagnesStats[c.id];
+                const prog = c.statut === 'CERTIFIE' ? 100 : (st?.tauxCouverture ?? 0);
                 const isCert = c.statut === 'CERTIFIE';
                 return (
                   <div key={c.id} className={`mission-card-premium glass-card ${isCert ? 'certified' : ''}`}>
@@ -356,6 +442,11 @@ const InventairePage: React.FC = () => {
                       <button className="primary-premium" onClick={() => openCampagne(c)}>
                         Gérer la mission
                       </button>
+                      {!isCert && (
+                        <Link to={`/terrain?campagne=${c.id}`} className="pill-filter" title="Mode Terrain">
+                          <Smartphone size={16} />
+                        </Link>
+                      )}
                       <button className="pill-filter" title="Exporter" onClick={() => {
                         getInventaireFiches(c.id).then(f => exportInventaireCompletExcel(c, f, []));
                       }}>
@@ -464,8 +555,14 @@ const InventairePage: React.FC = () => {
                     </div>
 
                     <div className="form-group-modern">
-                      <label>Brigades de recensement</label>
-                      <input value={form.equipes} onChange={e => setForm({...form, equipes: e.target.value})} placeholder="Ex : Équipe Alpha + Audit Interne"/>
+                      <label>Noms des membres de l'équipe terrain</label>
+                      <textarea
+                        value={form.equipes}
+                        onChange={e => setForm({...form, equipes: e.target.value})}
+                        placeholder="Ex : Amina Diallo - Agent, Karim Ba - Superviseur, Fatou Ndiaye - Contrôle interne"
+                        rows={3}
+                      />
+                      <small className="field-help">Ces noms seront conservés avec la mission et repris dans le rapport/certificat.</small>
                     </div>
 
                     <div className="form-group-modern">
@@ -500,6 +597,7 @@ const InventairePage: React.FC = () => {
                 <div className="summary-glass-box">
                   <div className="summary-item"><span>MISSION</span><strong>{form.nom}</strong></div>
                   <div className="summary-item"><span>ZONE</span><strong>{form.sites || 'NATIONAL'}</strong></div>
+                  <div className="summary-item"><span>ÉQUIPE</span><strong>{form.equipes || 'Non renseignée'}</strong></div>
                   <div className="summary-item"><span>DÉBUT</span><strong>{form.dateDebut}</strong></div>
                 </div>
 
@@ -544,14 +642,26 @@ const InventairePage: React.FC = () => {
                 </div>
               </div>
               <div className="action-group">
+                <Link to={`/terrain?campagne=${selectedCampagne.id}`} className="pill-filter" title="Ouvrir Mode Terrain">
+                  <Smartphone size={16} /> Mode Terrain
+                </Link>
+                <button className="pill-filter" onClick={handleRapprochement} title="Rapprochement comptable automatique">
+                  <BarChart3 size={16} /> Rapprochement
+                </button>
                 <button className="pill-filter" onClick={() => exportInventaireCompletExcel(selectedCampagne, fiches, ecarts)}>
                   <FileText size={16} />
                   Rapport
                 </button>
-                <button className="primary-premium" onClick={handleGlobalValidate}>
-                  <CheckCircle2 size={16} />
-                  Clôturer Zone
-                </button>
+                {canValidateAgent ? (
+                  <button className="primary-premium" onClick={handleGlobalValidate}>
+                    <CheckCircle2 size={16} />
+                    Clôturer Zone
+                  </button>
+                ) : (
+                  <div className="aff-status-pill status-en_attente" style={{ padding: '8px 14px' }}>
+                    ⏳ Zone en attente de clôture
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -606,19 +716,46 @@ const InventairePage: React.FC = () => {
                             <span className="val">{f.localisationReelle}</span>
                           </div>
                         )}
+                        <div className="loc-row" style={{ fontSize: 11, marginTop: 6, gap: 8, display: 'flex' }}>
+                          {f.photoUrl ? <span style={{ color: '#10b981' }}>📷 Photo</span> : <span style={{ color: '#f59e0b' }}>📷 Manquante</span>}
+                          {f.coordonneeGps ? <span style={{ color: '#10b981' }}>🛰️ GPS</span> : <span style={{ color: '#f59e0b' }}>🛰️ GPS absent</span>}
+                        </div>
                       </div>
                     </div>
 
                     <div className="card-footer-premium">
                       {!done ? (
-                        <button className="primary-premium small" onClick={() => setAuditModal({...f})}>
-                          AUDITER L'ACTIF
-                        </button>
+                        canValidateAgent ? (
+                          <button className="primary-premium small" onClick={() => setAuditModal({...f})}>
+                            AUDITER L'ACTIF
+                          </button>
+                        ) : (
+                          <div className="audit-status-badge" style={{ background: '#f1f5f9', color: '#64748b', border: '1px dashed #cbd5e1' }}>
+                            <span>LECTURE SEULE</span>
+                          </div>
+                        )
                       ) : (
-                        <div className="audit-status-badge">
-                          <CheckCircle2 size={14} />
-                          <span>STATUT : AUDITÉ</span>
-                        </div>
+                        f.validationSuperviseur === 'VALIDE' ? (
+                          <div className="audit-status-badge" style={{ background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7' }}>
+                            <CheckCircle2 size={14} />
+                            <span>CONFORME (SUPERVISEUR)</span>
+                          </div>
+                        ) : f.validationSuperviseur === 'REJETE' ? (
+                          <div className="audit-status-badge" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}>
+                            <X size={14} />
+                            <span>REJETÉ PAR LE SUPERVISEUR</span>
+                          </div>
+                        ) : (
+                          canValidateSuperviseur ? (
+                            <button className="primary-premium small" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }} onClick={() => setSuperviseurModal({...f, decisionSup: 'VALIDE'})}>
+                              CONTRÔLER / VALIDER
+                            </button>
+                          ) : (
+                            <div className="aff-status-pill status-en_attente" style={{ width: '100%', justifyContent: 'center', fontSize: '10px' }}>
+                              ⏳ En attente de contrôle final
+                            </div>
+                          )
+                        )
                       )}
                     </div>
                   </div>
@@ -664,7 +801,7 @@ const InventairePage: React.FC = () => {
                 return (
                   <div key={e.id} className="premium-card" style={{ opacity: valide ? 0.7 : 1 }}>
                     <div className="inv-ecart-top" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <span className="badge-pill-glow" style={{ fontSize: 10 }}>{e.typeEcart?.replace(/_/g,' ')}</span>
+                      <span className="badge-pill-glow" style={{ fontSize: 10 }}>{TYPE_ECART_LABELS[e.typeEcart] || e.typeEcart?.replace(/_/g,' ')}</span>
                       <span className={`status-pill ${valide ? 'neuf' : 'bon'}`} style={{ fontSize: 9 }}>{valide ? 'RÉSOLU' : 'À TRAITER'}</span>
                     </div>
                     <div className="inv-ecart-bien" style={{ fontSize: 16, fontWeight: 700 }}>{e.bien?.designation || 'Bien non identifié'}</div>
@@ -678,15 +815,21 @@ const InventairePage: React.FC = () => {
                     )}
 
                     {!valide && (
-                      <button className="primary-premium" style={{ marginTop: 20, width: '100%', padding: '12px' }} onClick={async () => {
-                        const j = window.prompt("Décision / justification du superviseur :");
-                        if (j !== null) {
-                          try { await validerEcart(e.id, 'VALIDE'); goView('RECONCILIATION'); }
-                          catch { showToast({ type: "error", title: "Erreur de validation" }); }
-                        }
-                      }}>
-                        Valider l'écart
-                      </button>
+                      canValidateEcart ? (
+                        <button className="primary-premium" style={{ marginTop: 20, width: '100%', padding: '12px' }} onClick={async () => {
+                          const j = window.prompt("Décision / justification du superviseur :");
+                          if (j !== null) {
+                            try { await validerEcart(e.id, 'VALIDE'); goView('RECONCILIATION'); }
+                            catch { showToast({ type: "error", title: "Erreur de validation" }); }
+                          }
+                        }}>
+                          Valider l'écart
+                        </button>
+                      ) : (
+                        <div className="aff-status-pill status-en_attente" style={{ marginTop: 20, width: '100%', justifyContent: 'center', fontSize: '11px', padding: '10px' }}>
+                          ⏳ En attente de régularisation comptable
+                        </div>
+                      )
                     )}
                   </div>
                 );
@@ -768,12 +911,18 @@ const InventairePage: React.FC = () => {
                 <div className="certification-action-zone">
                   <div className="security-hash-box light">
                     <span className="label">EMPREINTE DE SÉCURITÉ :</span>
-                    <code>{Math.random().toString(36).substring(2, 12).toUpperCase()}</code>
+                    <code>{securityHash}</code>
                   </div>
-                  <button className="primary-premium extra-large" onClick={handleCertify}>
-                    <ShieldCheck size={24} />
-                    SCELLER ET CERTIFIER LA MISSION
-                  </button>
+                  {canCertifier ? (
+                    <button className="primary-premium extra-large" onClick={handleCertify}>
+                      <ShieldCheck size={24} />
+                      SCELLER ET CERTIFIER LA MISSION
+                    </button>
+                  ) : (
+                    <div className="aff-status-pill status-en_attente" style={{ padding: '12px 24px', fontSize: '13px', fontWeight: 700 }}>
+                      🔐 Certification réservée au superviseur ou responsable patrimoine
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -798,13 +947,13 @@ const InventairePage: React.FC = () => {
                 <div className="form-group-modern">
                   <label>État de Conservation constaté</label>
                   <div className="inv-etat-selector">
-                    {['BON','MOYEN','MAUVAIS','HS'].map(e => (
-                      <button type="button" key={e}
-                        style={{ background: auditModal.etatConstate === e ? ETAT_COLORS[e] : 'transparent',
-                          color: auditModal.etatConstate === e ? 'white' : 'var(--text-dim)',
-                          border: `2px solid ${ETAT_COLORS[e]}` }}
-                        onClick={() => setAuditModal({...auditModal, etatConstate: e})}>
-                        {e}
+                    {ETATS_CONSTATES.map(e => (
+                      <button type="button" key={e.value}
+                        style={{ background: auditModal.etatConstate === e.value ? e.color : 'transparent',
+                          color: auditModal.etatConstate === e.value ? 'white' : 'var(--text-dim)',
+                          border: `2px solid ${e.color}` }}
+                        onClick={() => setAuditModal({...auditModal, etatConstate: e.value})}>
+                        {e.label}
                       </button>
                     ))}
                   </div>
@@ -818,14 +967,14 @@ const InventairePage: React.FC = () => {
                 <div className="form-group-modern" style={{ gridColumn:'span 2' }}>
                   <label>Coordonnées GPS</label>
                   <div style={{ display:'flex', gap:8 }}>
-                    <input style={{ flex:1 }} readOnly value={auditModal.coordonneesGps || ''}
+                    <input style={{ flex:1 }} readOnly value={auditModal.coordonneeGps || ''}
                       placeholder="Cliquez sur Capturer pour localiser"/>
                     <button type="button" className="inv-btn-gps" onClick={captureGPS}>🛰️ Capturer</button>
                   </div>
                 </div>
                 <div className="form-group-modern" style={{ gridColumn:'span 2' }}>
                   <label>Preuve Photographique</label>
-                  <FileUpload onUploadSuccess={(url: string) => setAuditModal({...auditModal, photoUrl: url})}/>
+                  <ImageUpload value={auditModal.photoUrl || ''} onChange={(url) => setAuditModal({...auditModal, photoUrl: url})} />
                   {auditModal.photoUrl && (
                     <div style={{ marginTop:8, padding:'6px 10px', background:'rgba(16,185,129,.1)', borderRadius:8, fontSize:12, color:'#10b981' }}>
                       ✔ Photo enregistrée
@@ -1054,6 +1203,88 @@ const InventairePage: React.FC = () => {
         .inv-cert-info { background:rgba(16,185,129,.06); border-radius:16px; padding:20px; margin:24px 0; text-align:left; display:flex; flex-direction:column; gap:10px; }
         .inv-cert-info div { display:flex; justify-content:space-between; font-size:14px; }
         .inv-cert-info span { color:var(--text-dim); }
+
+        .mission-logic-panel {
+          display: grid;
+          grid-template-columns: minmax(260px, 0.9fr) 1.5fr;
+          gap: 20px;
+          align-items: center;
+          background: var(--card-bg);
+          border: 1px solid var(--glass-border);
+          border-radius: 22px;
+          padding: 22px;
+          margin-bottom: 22px;
+        }
+
+        .mission-logic-panel h3 {
+          margin: 10px 0 8px;
+          color: var(--text-main);
+          font-size: 18px;
+        }
+
+        .mission-logic-panel p {
+          margin: 0;
+          color: var(--text-dim);
+          font-size: 13px;
+          line-height: 1.55;
+        }
+
+        .mission-logic-steps {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .logic-step {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: var(--bg-main);
+          border: 1px solid var(--glass-border);
+          border-radius: 14px;
+          padding: 12px;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-main);
+        }
+
+        .logic-step strong {
+          width: 24px;
+          height: 24px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: rgba(99,102,241,.12);
+          color: #6366f1;
+          font-size: 11px;
+          flex-shrink: 0;
+        }
+
+        .form-group-modern textarea {
+          min-height: 86px;
+          resize: vertical;
+          border: 1px solid var(--glass-border);
+          border-radius: 12px;
+          padding: 12px 14px;
+          background: var(--bg-main);
+          color: var(--text-main);
+          font: inherit;
+          font-size: 13px;
+        }
+
+        .field-help {
+          color: var(--text-dim);
+          font-size: 11px;
+          line-height: 1.4;
+        }
+
+        @media (max-width: 900px) {
+          .mission-logic-panel,
+          .mission-logic-steps {
+            grid-template-columns: 1fr;
+          }
+        }
 
         /* MODAL */
         .inv-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(4px); }

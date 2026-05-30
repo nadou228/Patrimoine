@@ -1,9 +1,6 @@
 package com.patris.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.time.LocalDateTime;
 
@@ -16,9 +13,6 @@ import java.time.LocalDateTime;
         name = "utilisateur_permission",
         uniqueConstraints = @UniqueConstraint(columnNames = {"utilisateur_id", "permission_code"})
 )
-@Getter
-@Setter
-@NoArgsConstructor
 public class UtilisateurPermission {
 
     @Id
@@ -48,10 +42,30 @@ public class UtilisateurPermission {
     @Column(nullable = false, length = 2000)
     private String motif;
 
+    public UtilisateurPermission() {}
+
     @PrePersist
     public void prePersist() {
         if (dateAccord == null) {
             dateAccord = LocalDateTime.now();
         }
     }
+
+    // --- Getters ---
+    public Long getId() { return id; }
+    public Utilisateur getUtilisateur() { return utilisateur; }
+    public String getPermissionCode() { return permissionCode; }
+    public boolean isAccordee() { return accordee; }
+    public String getAccordeePar() { return accordeePar; }
+    public LocalDateTime getDateAccord() { return dateAccord; }
+    public String getMotif() { return motif; }
+
+    // --- Setters ---
+    public void setId(Long id) { this.id = id; }
+    public void setUtilisateur(Utilisateur utilisateur) { this.utilisateur = utilisateur; }
+    public void setPermissionCode(String permissionCode) { this.permissionCode = permissionCode; }
+    public void setAccordee(boolean accordee) { this.accordee = accordee; }
+    public void setAccordeePar(String accordeePar) { this.accordeePar = accordeePar; }
+    public void setDateAccord(LocalDateTime dateAccord) { this.dateAccord = dateAccord; }
+    public void setMotif(String motif) { this.motif = motif; }
 }

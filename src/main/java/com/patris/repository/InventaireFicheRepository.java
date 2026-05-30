@@ -8,6 +8,20 @@ import com.patris.model.InventaireFiche;
 
 public interface InventaireFicheRepository extends JpaRepository<InventaireFiche, Long> {
     List<InventaireFiche> findByCampagneId(Long campagneId);
+
+    java.util.Optional<InventaireFiche> findByCampagneIdAndBienId(Long campagneId, Long bienId);
+
+    java.util.Optional<InventaireFiche> findByCampagneIdAndCodeIupIgnoreCase(Long campagneId, String codeIup);
+
+    long countByCampagneId(Long campagneId);
+
+    long countByCampagneIdAndEtatConstateNot(Long campagneId, String etatConstate);
+
+    long countByCampagneIdAndValidationAgent(Long campagneId, com.patris.enums.statutValidation statut);
+
+    long countByCampagneIdAndValidationSuperviseur(Long campagneId, com.patris.enums.statutValidation statut);
+
+    long countByCampagneIdAndAnomalieTrue(Long campagneId);
     
     long countByCampagneIdAndValidationSuperviseurAndAnomalieTrue(Long id, com.patris.enums.statutValidation statut);
     

@@ -3,6 +3,8 @@ import { PermissionsProvider } from './contexts/PermissionsContext';
 import AppLayout from './layouts/AppLayout';
 import BiensPage from './pages/BiensPage';
 import DashboardPage from './pages/DashboardPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import TerrainPage from './pages/TerrainPage';
 import AffectationsPage from './pages/AffectationsPage';
 import InventairePage from './pages/InventairePage';
 import ReformePage from './pages/ReformePage';
@@ -44,9 +46,11 @@ function App() {
               </ProtectedRoute>
             }>
               <Route index element={<DashboardPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="biens" element={<BiensPage />} />
               <Route path="affectations" element={<AffectationsPage />} />
               <Route path="inventaire" element={<InventairePage />} />
+              <Route path="terrain" element={<TerrainPage />} />
               <Route path="rapports" element={<ReportsPage />} />
               <Route path="audit" element={<AuditPage />} />
               <Route path="reforme" element={<ReformePage />} />

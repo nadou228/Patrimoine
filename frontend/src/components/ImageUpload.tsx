@@ -9,7 +9,7 @@ interface ImageUploadProps {
   label?: string;
 }
 
-const API_BASE_URL = "http://localhost:8082";
+import { API_BASE_URL } from "../api/config";
 
 export default function ImageUpload({ value, onChange, className, label = "Cliquer pour ajouter une photo" }: ImageUploadProps) {
   const { showToast } = useToast();

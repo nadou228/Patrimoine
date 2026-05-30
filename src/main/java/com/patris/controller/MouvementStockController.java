@@ -70,6 +70,7 @@ public class MouvementStockController {
         mouvementStock.setDateMouvement(dto.getDateOperation() != null ? dto.getDateOperation() : java.time.LocalDateTime.now());
         mouvementStock.setReferencePiece(dto.getPieceJustificative());
         mouvementStock.setPrixUnitaire(dto.getPrixUnitaire());
+        mouvementStock.setFournisseur(dto.getFournisseur());
         
         String finalDestination = dto.getDestination() != null ? dto.getDestination() : "";
         String obs = dto.getObservations() != null ? dto.getObservations() : "";

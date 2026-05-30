@@ -28,6 +28,7 @@ public class InventaireCampagneService {
     private final InventaireEcartRepository ecartRepository;
     private final MouvementService mouvementService;
     private final BienRepository bienRepository;
+    private final InventaireEcartDetectionService ecartDetectionService;
 
     public List<InventaireCampagne> findAll() {
         return repository.findAll();
@@ -90,6 +91,14 @@ public class InventaireCampagneService {
     @org.springframework.transaction.annotation.Transactional
     public void validerZoneConfort(Long campagneId) {
         String supervisor = SecurityContextHolder.getContext().getAuthentication().getName();
+        List<InventaireFiche> fiches = ficheRepository.findByCampagneId(campagneId);
+        long sansAgent = fiches.stream()
+                .filter(f -> f.getValidationAgent() != statutValidation.VALIDE)
+                .filter(f -> f.getAnomalie() == null || !f.getAnomalie())
+                .count();
+        if (sansAgent > 0) {
+            throw new RuntimeException("Clôture de zone impossible : " + sansAgent + " fiche(s) sans validation agent.");
+        }
         ficheRepository.validerZoneConfort(campagneId, statutValidation.VALIDE, supervisor);
     }
 
@@ -99,8 +108,20 @@ public class InventaireCampagneService {
         String supervisor = SecurityContextHolder.getContext().getAuthentication().getName();
 
         List<InventaireFiche> fiches = ficheRepository.findByCampagneId(id);
+        List<InventaireFiche> sansAgent = fiches.stream()
+                .filter(f -> f.getValidationAgent() == com.patris.enums.statutValidation.EN_ATTENTE)
+                .filter(f -> !"NON_VERIFIÉ".equalsIgnoreCase(f.getEtatConstate()))
+                .toList();
+        if (!sansAgent.isEmpty()) {
+            throw new RuntimeException("Certification impossible : " + sansAgent.size()
+                    + " fiche(s) recensées sans validation agent (double contrôle requis).");
+        }
+
+        ecartDetectionService.detectMissingBiens(id);
+
         List<InventaireFiche> nonTraiteesList = fiches.stream()
                 .filter(f -> f.getValidationSuperviseur() == com.patris.enums.statutValidation.EN_ATTENTE)
+                .filter(f -> !"NON_VERIFIÉ".equalsIgnoreCase(f.getEtatConstate()))
                 .toList();
         
         if (!nonTraiteesList.isEmpty()) {
@@ -114,6 +135,17 @@ public class InventaireCampagneService {
         long ecartsNonValides = ecartRepository.countByCampagneIdAndStatutValidation(id, statutValidation.EN_ATTENTE);
         if (ecartsNonValides > 0) {
             throw new RuntimeException("Certification impossible : " + ecartsNonValides + " écarts de rapprochement non résolus.");
+        }
+
+        List<InventaireFiche> sansPreuve = fiches.stream()
+                .filter(f -> !"NON_VERIFIÉ".equalsIgnoreCase(f.getEtatConstate()))
+                .filter(f -> f.getValidationAgent() == statutValidation.VALIDE)
+                .filter(f -> (f.getPhotoUrl() == null || f.getPhotoUrl().isBlank())
+                        || (f.getCoordonneeGps() == null || f.getCoordonneeGps().isBlank()))
+                .toList();
+        if (!sansPreuve.isEmpty()) {
+            throw new RuntimeException("Certification impossible : " + sansPreuve.size()
+                    + " fiche(s) sans photo ou géolocalisation (preuve obligatoire CDC §4.2.1).");
         }
 
         for (InventaireFiche f : fiches) {

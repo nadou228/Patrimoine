@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import { getBackups, createBackup } from '../api/api';
+import {
+  getBackups,
+  createBackup,
+  getSystemSettings,
+  updateSystemSettings,
+  SystemSettings
+} from '../api/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
@@ -25,25 +31,52 @@ import {
   getAllPermissions, 
   toggleUserActive, 
   updateRolePermissions,
+  applyUserDirectPermission,
+  getUserPermissionsDetail,
   User,
   Role,
   Permission,
-  RoleWithUserCount
+  RoleWithUserCount,
+  UserPermissionsDetail
 } from '../api/admin';
 import { useToast } from '../contexts/ToastContext';
 import { usePermissions } from '../contexts/PermissionsContext';
 import CategorieTreeSelect from '../components/CategorieTreeSelect';
 import './AdminPage.css';
 
+const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
+  IUP_PREFIX: 'CT-LME',
+  REFERENCE_YEAR: String(new Date().getFullYear()),
+  AMORTISSEMENT_MODE: 'LINEAIRE_01',
+  EXPORT_EXERCICE: String(new Date().getFullYear()),
+  EXPORT_INSTITUTION: "MINISTERE DE L'ECONOMIE ET DES FINANCES",
+  EXPORT_POSTE: 'CENTRAL DE LAME'
+};
+
+const VALIDATION_PERMISSION_ROWS = [
+  { code: 'VALIDATE_BIENS', libelle: 'Valider les biens (Workflow IUP)' },
+  { code: 'VALIDATE_AFFECTATIONS', libelle: 'Valider / Rejeter les affectations' },
+  { code: 'VALIDATE_REFORMES', libelle: 'Valider / Annuler les dossiers de réforme' },
+  { code: 'VALIDATE_STOCKS', libelle: 'Valider les mouvements de stock' },
+  { code: 'VALIDATE_INVENTAIRES_AGENT', libelle: 'Valider les fiches inventaires (Agent terrain)' },
+  { code: 'VALIDATE_INVENTAIRES_SUPERVISEUR', libelle: 'Contrôle final superviseur des fiches d’audit' },
+  { code: 'VALIDATE_INVENTAIRES_ECART', libelle: 'Valider et résoudre les écarts physiques/comptables' }
+];
+
 const AdminPage: React.FC = () => {
   const { hasPermission, loading: permLoading } = usePermissions();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'catalog' | 'config' | 'backup'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'validations' | 'catalog' | 'config' | 'backup'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingSystemSettings, setSavingSystemSettings] = useState(false);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM_SETTINGS);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedValidationUserId, setSelectedValidationUserId] = useState<number | ''>('');
+  const [userPermissionDetail, setUserPermissionDetail] = useState<UserPermissionsDetail | null>(null);
+  const [loadingUserPermissions, setLoadingUserPermissions] = useState(false);
 
   // 🚀 Métriques calculées
   const stats = React.useMemo(() => {
@@ -63,15 +96,17 @@ const AdminPage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [usersData, rolesData, permsData] = await Promise.all([
+      const [usersData, rolesData, permsData, settingsData] = await Promise.all([
         getAdminUsers(),
         getAdminRoles(),
-        getAllPermissions()
+        getAllPermissions(),
+        getSystemSettings().catch(() => DEFAULT_SYSTEM_SETTINGS)
       ]);
       setUsers(usersData);
       const wrapped = rolesData as RoleWithUserCount[];
       setRoles(wrapped.map((item) => item.role));
       setAllPermissions(permsData);
+      setSystemSettings({ ...DEFAULT_SYSTEM_SETTINGS, ...settingsData });
     } catch (error) {
       console.error("Error fetching admin data", error);
       showToast({ type: "error", title: "Erreur de chargement", message: "Impossible de récupérer les données système." });
@@ -115,6 +150,81 @@ const AdminPage: React.FC = () => {
       showToast({ type: "success", title: "Sécurité mise à jour", message: "Les droits d'accès ont été modifiés." });
     } catch (error) {
       showToast({ type: "error", title: "Erreur", message: "Impossible de modifier les permissions." });
+    }
+  };
+
+  const loadUserPermissionDetail = async (userId: number) => {
+    setLoadingUserPermissions(true);
+    try {
+      const detail = await getUserPermissionsDetail(userId);
+      setUserPermissionDetail(detail);
+    } catch {
+      showToast({ type: "error", title: "Chargement impossible", message: "Impossible de lire les droits individuels." });
+      setUserPermissionDetail(null);
+    } finally {
+      setLoadingUserPermissions(false);
+    }
+  };
+
+  const handleValidationUserChange = async (value: string) => {
+    const userId = value ? Number(value) : '';
+    setSelectedValidationUserId(userId);
+    setUserPermissionDetail(null);
+    if (userId) {
+      await loadUserPermissionDetail(userId);
+    }
+  };
+
+  const handleDirectValidationToggle = async (permissionCode: string) => {
+    if (!selectedValidationUserId || !userPermissionDetail) return;
+    const effective = userPermissionDetail.effectivePermissionCodes.includes(permissionCode);
+    const roleGrants = userPermissionDetail.rolePermissionCodes.includes(permissionCode);
+    const motif = window.prompt(
+      effective
+        ? "Motif du retrait de ce droit de validation :"
+        : "Motif de l'attribution de ce droit de validation :"
+    );
+    if (!motif || !motif.trim()) {
+      showToast({ type: "error", title: "Motif obligatoire", message: "La matrice exige une justification tracée." });
+      return;
+    }
+
+    try {
+      await applyUserDirectPermission(selectedValidationUserId, permissionCode, !effective, motif.trim());
+      await loadUserPermissionDetail(selectedValidationUserId);
+      showToast({
+        type: "success",
+        title: roleGrants && effective ? "Droit bloqué pour cet utilisateur" : "Droit individuel mis à jour",
+        message: "La décision est enregistrée dans le journal d'audit."
+      });
+    } catch (error: any) {
+      const msg = error.response?.data?.message || "Impossible de modifier ce droit individuel.";
+      showToast({ type: "error", title: "Action refusée", message: msg });
+    }
+  };
+
+  const updateSystemField = (key: keyof SystemSettings, value: string) => {
+    setSystemSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleSaveSystemSettings = async () => {
+    setSavingSystemSettings(true);
+    try {
+      const saved = await updateSystemSettings(systemSettings);
+      setSystemSettings({ ...DEFAULT_SYSTEM_SETTINGS, ...saved });
+      showToast({
+        type: 'success',
+        title: 'Paramètres synchronisés',
+        message: 'Le noyau et le profil d’export utilisent maintenant ces valeurs.'
+      });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'Mise à jour impossible',
+        message: 'Vérifiez vos droits administrateur ou la connexion au serveur.'
+      });
+    } finally {
+      setSavingSystemSettings(false);
     }
   };
 
@@ -170,7 +280,8 @@ const AdminPage: React.FC = () => {
         <nav className="admin-tabs-nav">
           {[
             { id: 'users', label: 'Utilisateurs', icon: <Users size={18} /> },
-            { id: 'roles', label: 'Sécurité', icon: <ShieldCheck size={18} /> },
+            { id: 'roles', label: 'Sécurité Générale', icon: <ShieldCheck size={18} /> },
+            { id: 'validations', label: 'Matrice de Validation', icon: <CheckCircle2 size={18} /> },
             { id: 'catalog', label: 'Catalogue', icon: <Layers size={18} /> },
             { id: 'config', label: 'Paramètres', icon: <Settings size={18} /> },
             { id: 'backup', label: 'PRA & Backup', icon: <Database size={18} /> }
@@ -265,48 +376,281 @@ const AdminPage: React.FC = () => {
               )}
 
               {activeTab === 'roles' && (
+                <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+
+                  {/* ── Section 1 : Matrice Sécurité Générale ── */}
+                  <div className="admin-glass-panel">
+                    <div className="panel-header">
+                      <div className="header-icon-box"><ShieldCheck size={20} /></div>
+                      <h2>Matrice de Sécurité Générale</h2>
+                      <span className="matrix-badge-count">{allPermissions.filter(p => !p.code.startsWith('VALIDATE_')).length} permissions</span>
+                    </div>
+                    <div className="matrix-wrapper">
+                      <table className="matrix-tech-table">
+                        <thead>
+                          <tr>
+                            <th className="sticky-col">Code Permission</th>
+                            {roles.map(role => (
+                              <th key={role.id}>{role.libelle}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allPermissions.filter(p => !p.code.startsWith('VALIDATE_')).map(perm => (
+                            <tr key={perm.id} className="matrix-row">
+                              <td className="perm-label-cell">
+                                <span className="perm-code">{perm.code}</span>
+                                <span className="perm-desc">{perm.libelle}</span>
+                              </td>
+                              {roles.map(role => {
+                                const hasPerm = role.permissions.some(p => p.code === perm.code);
+                                const rolePermCodes = role.permissions.map(p => p.code);
+                                return (
+                                  <td key={role.id} className="matrix-cell">
+                                    <input
+                                      type="checkbox"
+                                      className="cyber-toggle"
+                                      checked={hasPerm}
+                                      disabled={role.systemRole && role.code === 'ADMIN'}
+                                      onChange={() => handlePermissionToggle(role.code, perm.code, rolePermCodes)}
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="admin-glass-panel">
+                    <div className="panel-header">
+                      <div className="header-icon-box" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}>
+                        <Users size={20} />
+                      </div>
+                      <div>
+                        <h2>Droits individuels de validation</h2>
+                        <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
+                          L'admin ou superadmin peut accorder ou retirer un pouvoir de validation à une personne précise.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="direct-validation-layout">
+                      <div className="direct-validation-selector">
+                        <label>Utilisateur concerné</label>
+                        <select
+                          value={selectedValidationUserId}
+                          onChange={(e) => handleValidationUserChange(e.target.value)}
+                        >
+                          <option value="">-- Choisir un utilisateur --</option>
+                          {users.map(user => (
+                            <option key={user.id} value={user.id}>
+                              {user.nom} {user.prenom} - {user.role?.libelle || user.role?.code || 'Sans rôle'}
+                            </option>
+                          ))}
+                        </select>
+                        <p>
+                          Un accord direct donne le droit immédiatement. Un retrait direct bloque ce droit pour cette personne,
+                          même si son rôle le possède.
+                        </p>
+                      </div>
+
+                      <div className="direct-validation-grid">
+                        {loadingUserPermissions && (
+                          <div className="direct-validation-empty">Chargement des permissions individuelles...</div>
+                        )}
+
+                        {!loadingUserPermissions && !userPermissionDetail && (
+                          <div className="direct-validation-empty">Sélectionnez un utilisateur pour piloter ses droits de validation.</div>
+                        )}
+
+                        {!loadingUserPermissions && userPermissionDetail && VALIDATION_PERMISSION_ROWS.map(row => {
+                          const effective = userPermissionDetail.effectivePermissionCodes.includes(row.code);
+                          const roleGrants = userPermissionDetail.rolePermissionCodes.includes(row.code);
+                          const override = userPermissionDetail.directOverrides.find(o => o.permissionCode === row.code);
+                          return (
+                            <div key={row.code} className={`direct-validation-card ${effective ? 'enabled' : 'disabled'}`}>
+                              <div>
+                                <span className="perm-code">{row.code}</span>
+                                <strong>{row.libelle}</strong>
+                                <small>
+                                  {override
+                                    ? `${override.accordee ? 'Accord direct' : 'Retrait direct'} par ${override.accordeePar || 'admin'}`
+                                    : roleGrants ? 'Autorisé par le rôle' : 'Non autorisé par le rôle'}
+                                </small>
+                              </div>
+                              <label className="direct-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={effective}
+                                  onChange={() => handleDirectValidationToggle(row.code)}
+                                />
+                                <span>{effective ? 'Autorisé' : 'Refusé'}</span>
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'validations' && (
+                <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                  <div className="admin-glass-panel">
+                    <div className="panel-header">
+                      <div className="header-icon-box" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+                        <CheckCircle2 size={20} />
+                      </div>
+                      <div>
+                        <h2>Matrice de Validation Dynamique</h2>
+                        <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
+                          Configurez les droits d'approbation et de validation de flux métiers par rôle (Temps Réel)
+                        </p>
+                      </div>
+                      <span className="matrix-badge-count" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+                        {
+                          [
+                            'VALIDATE_BIENS',
+                            'VALIDATE_AFFECTATIONS',
+                            'VALIDATE_REFORMES',
+                            'VALIDATE_STOCKS',
+                            'VALIDATE_INVENTAIRES_AGENT',
+                            'VALIDATE_INVENTAIRES_SUPERVISEUR',
+                            'VALIDATE_INVENTAIRES_ECART'
+                          ].filter(code => allPermissions.some(p => p.code === code)).length
+                        } / 7 configurées
+                      </span>
+                    </div>
+
+                    <div className="matrix-wrapper">
+                      <table className="matrix-tech-table">
+                        <thead>
+                          <tr>
+                            <th className="sticky-col">Validation Métier</th>
+                            {roles.map(role => (
+                              <th key={role.id}>{role.libelle}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            { code: 'VALIDATE_BIENS', libelle: 'Valider les biens (Workflow IUP)' },
+                            { code: 'VALIDATE_AFFECTATIONS', libelle: 'Valider / Rejeter les affectations' },
+                            { code: 'VALIDATE_REFORMES', libelle: 'Valider / Annuler les dossiers de réforme' },
+                            { code: 'VALIDATE_STOCKS', libelle: 'Valider les mouvements de stock' },
+                            { code: 'VALIDATE_INVENTAIRES_AGENT', libelle: 'Valider les fiches inventaires (Agent terrain)' },
+                            { code: 'VALIDATE_INVENTAIRES_SUPERVISEUR', libelle: 'Contrôle final superviseur des fiches d\'audit' },
+                            { code: 'VALIDATE_INVENTAIRES_ECART', libelle: 'Valider et résoudre les écarts physiques/comptables' }
+                          ].map(staticPerm => {
+                            const perm = allPermissions.find(p => p.code === staticPerm.code) || { id: 0, code: staticPerm.code, libelle: staticPerm.libelle };
+                            return (
+                              <tr key={staticPerm.code} className="matrix-row">
+                                <td className="perm-label-cell">
+                                  <span className="perm-code" style={{ color: '#f59e0b', fontWeight: 600 }}>{perm.code}</span>
+                                  <span className="perm-desc">{perm.libelle}</span>
+                                </td>
+                                {roles.map(role => {
+                                  const hasPerm = role.permissions.some(p => p.code === perm.code);
+                                  const rolePermCodes = role.permissions.map(p => p.code);
+                                  const isLocked = role.systemRole && role.code === 'ADMIN';
+
+                                  return (
+                                    <td key={role.id} className="matrix-cell">
+                                      <input
+                                        type="checkbox"
+                                        className="cyber-toggle"
+                                        style={{ '--accent': '#f59e0b' } as React.CSSProperties}
+                                        checked={hasPerm}
+                                        disabled={isLocked}
+                                        onChange={() => handlePermissionToggle(role.code, perm.code, rolePermCodes)}
+                                      />
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'validations' && (
                 <div className="admin-glass-panel fade-up">
                   <div className="panel-header">
-                    <div className="header-icon-box"><ShieldCheck size={20} /></div>
-                    <h2>Matrice de Sécurité Haute Densité</h2>
+                    <div className="header-icon-box" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}>
+                      <Users size={20} />
+                    </div>
+                    <div>
+                      <h2>Droits individuels de validation</h2>
+                      <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
+                        L'admin ou superadmin peut accorder ou retirer un pouvoir de validation à une personne précise.
+                      </p>
+                    </div>
                   </div>
-                  
-                  <div className="matrix-wrapper">
-                    <table className="matrix-tech-table">
-                      <thead>
-                        <tr>
-                          <th className="sticky-col">Code Permission</th>
-                          {roles.map(role => (
-                            <th key={role.id}>{role.libelle}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allPermissions.map(perm => (
-                          <tr key={perm.id} className="matrix-row">
-                            <td className="perm-label-cell">
-                              <span className="perm-code">{perm.code}</span>
-                              <span className="perm-desc">{perm.libelle}</span>
-                            </td>
-                            {roles.map(role => {
-                              const hasPerm = role.permissions.some(p => p.code === perm.code);
-                              const rolePermCodes = role.permissions.map(p => p.code);
-                              return (
-                                <td key={role.id} className="matrix-cell">
-                                  <input 
-                                    type="checkbox" 
-                                    className="cyber-toggle"
-                                    checked={hasPerm}
-                                    disabled={role.systemRole && role.code === 'ADMIN'}
-                                    onChange={() => handlePermissionToggle(role.code, perm.code, rolePermCodes)}
-                                  />
-                                </td>
-                              );
-                            })}
-                          </tr>
+
+                  <div className="direct-validation-layout">
+                    <div className="direct-validation-selector">
+                      <label>Utilisateur concerné</label>
+                      <select
+                        value={selectedValidationUserId}
+                        onChange={(e) => handleValidationUserChange(e.target.value)}
+                      >
+                        <option value="">-- Choisir un utilisateur --</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.nom} {user.prenom} - {user.role?.libelle || user.role?.code || 'Sans rôle'}
+                          </option>
                         ))}
-                      </tbody>
-                    </table>
+                      </select>
+                      <p>
+                        Un accord direct donne le droit immédiatement. Un retrait direct bloque ce droit pour cette personne,
+                        même si son rôle le possède.
+                      </p>
+                    </div>
+
+                    <div className="direct-validation-grid">
+                      {loadingUserPermissions && (
+                        <div className="direct-validation-empty">Chargement des permissions individuelles...</div>
+                      )}
+
+                      {!loadingUserPermissions && !userPermissionDetail && (
+                        <div className="direct-validation-empty">Sélectionnez un utilisateur pour piloter ses droits de validation.</div>
+                      )}
+
+                      {!loadingUserPermissions && userPermissionDetail && VALIDATION_PERMISSION_ROWS.map(row => {
+                        const effective = userPermissionDetail.effectivePermissionCodes.includes(row.code);
+                        const roleGrants = userPermissionDetail.rolePermissionCodes.includes(row.code);
+                        const override = userPermissionDetail.directOverrides.find(o => o.permissionCode === row.code);
+                        return (
+                          <div key={row.code} className={`direct-validation-card ${effective ? 'enabled' : 'disabled'}`}>
+                            <div>
+                              <span className="perm-code">{row.code}</span>
+                              <strong>{row.libelle}</strong>
+                              <small>
+                                {override
+                                  ? `${override.accordee ? 'Accord direct' : 'Retrait direct'} par ${override.accordeePar || 'admin'}`
+                                  : roleGrants ? 'Autorisé par le rôle' : 'Non autorisé par le rôle'}
+                              </small>
+                            </div>
+                            <label className="direct-toggle">
+                              <input
+                                type="checkbox"
+                                checked={effective}
+                                onChange={() => handleDirectValidationToggle(row.code)}
+                              />
+                              <span>{effective ? 'Autorisé' : 'Refusé'}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -332,20 +676,31 @@ const AdminPage: React.FC = () => {
                   <div className="config-cyber-card">
                     <h3>
                       <div className="config-icon-box"><Cpu size={18} /></div>
-                      Identité (IUP)
+                      Identite (IUP)
                     </h3>
                     <div className="cyber-field">
-                      <label>Préfixe IUP Global</label>
-                      <input type="text" defaultValue="CT-LME" />
+                      <label>Prefixe IUP Global</label>
+                      <input
+                        type="text"
+                        value={systemSettings.IUP_PREFIX}
+                        onChange={(event) => updateSystemField('IUP_PREFIX', event.target.value.toUpperCase())}
+                        placeholder="CT-LME"
+                      />
                       <div className="field-glow" />
                     </div>
-                    <div className="cyber-field disabled">
-                      <label>Année de Référence</label>
-                      <input type="text" defaultValue="2024" disabled />
+                    <div className="cyber-field">
+                      <label>Annee de Reference</label>
+                      <input
+                        type="number"
+                        min="2020"
+                        max="2100"
+                        value={systemSettings.REFERENCE_YEAR}
+                        onChange={(event) => updateSystemField('REFERENCE_YEAR', event.target.value)}
+                      />
                     </div>
-                    <button className="btn-cyber-submit">
-                      <RefreshCw size={16} /> Mettre à jour le noyau
-                    </button>
+                    <div className="cyber-hint">
+                      <ChevronRight size={14} /> Ces valeurs pilotent les nouveaux identifiants generes.
+                    </div>
                   </div>
 
                   <div className="config-cyber-card">
@@ -355,14 +710,88 @@ const AdminPage: React.FC = () => {
                     </h3>
                     <div className="cyber-field">
                       <label>Mode Standard</label>
-                      <select>
-                        <option>Linéaire (Code 01)</option>
-                        <option>Dégressif (Code 02)</option>
+                      <select
+                        value={systemSettings.AMORTISSEMENT_MODE}
+                        onChange={(event) => updateSystemField('AMORTISSEMENT_MODE', event.target.value)}
+                      >
+                        <option value="LINEAIRE_01">Lineaire (Code 01)</option>
+                        <option value="DEGRESSIF_02">Degressif (Code 02)</option>
+                        <option value="MANUEL">Saisie manuelle</option>
                       </select>
                     </div>
                     <div className="cyber-hint">
                       <ChevronRight size={14} /> La modification affectera les nouveaux biens.
                     </div>
+                  </div>
+
+                  <div className="config-cyber-card export-profile-card">
+                    <h3>
+                      <div className="config-icon-box"><Database size={18} /></div>
+                      Profil d'export
+                    </h3>
+                    <div className="smart-year-row">
+                      {['2024', '2025', '2026'].map((year) => (
+                        <button
+                          key={year}
+                          type="button"
+                          className={`year-chip ${systemSettings.EXPORT_EXERCICE === year ? 'active' : ''}`}
+                          onClick={() => updateSystemField('EXPORT_EXERCICE', year)}
+                        >
+                          {year}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="cyber-field">
+                      <label>Exercice budgetaire</label>
+                      <input
+                        list="exercice-options"
+                        inputMode="numeric"
+                        value={systemSettings.EXPORT_EXERCICE}
+                        onChange={(event) => updateSystemField('EXPORT_EXERCICE', event.target.value)}
+                        placeholder="Ex: 2027"
+                      />
+                      <datalist id="exercice-options">
+                        <option value="2023" />
+                        <option value="2024" />
+                        <option value="2025" />
+                        <option value="2026" />
+                        <option value="2027" />
+                      </datalist>
+                    </div>
+                    <div className="cyber-field">
+                      <label>Institution / Ministere</label>
+                      <textarea
+                        value={systemSettings.EXPORT_INSTITUTION}
+                        onChange={(event) => updateSystemField('EXPORT_INSTITUTION', event.target.value)}
+                        rows={3}
+                        placeholder="Nom officiel a afficher dans les documents"
+                      />
+                    </div>
+                    <div className="cyber-field">
+                      <label>Poste Comptable</label>
+                      <input
+                        type="text"
+                        value={systemSettings.EXPORT_POSTE}
+                        onChange={(event) => updateSystemField('EXPORT_POSTE', event.target.value)}
+                        placeholder="Ex: CENTRAL DE LAME"
+                      />
+                    </div>
+                    <div className="profile-preview">
+                      <span>{systemSettings.EXPORT_EXERCICE || 'Exercice'}</span>
+                      <strong>{systemSettings.EXPORT_POSTE || 'Poste comptable'}</strong>
+                      <small>{systemSettings.EXPORT_INSTITUTION || 'Institution'}</small>
+                    </div>
+                  </div>
+
+                  <div className="config-save-panel">
+                    <div>
+                      <strong>Noyau systeme pret</strong>
+                      <span>Les rapports utilisent ce profil automatiquement.</span>
+                    </div>
+                    <button className="btn-cyber-submit" onClick={handleSaveSystemSettings} disabled={savingSystemSettings}>
+                      <RefreshCw size={16} className={savingSystemSettings ? 'spin' : ''} />
+                      {savingSystemSettings ? 'Synchronisation...' : 'Enregistrer les parametres'}
+                    </button>
                   </div>
                 </div>
               )}
@@ -378,7 +807,9 @@ const AdminPage: React.FC = () => {
   );
 };
 
+// ── Backup Panel ─────────────────────────────────────────────────────────────
 const BackupPanel: React.FC<{ showToast: any }> = ({ showToast }) => {
+
   const [backups, setBackups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);

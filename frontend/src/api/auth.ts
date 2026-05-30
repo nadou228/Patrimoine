@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { resolveApiUrl } from './config';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8082/api',
+  baseURL: resolveApiUrl('/api'),
 });
 
 export interface LoginResponse {
@@ -16,9 +17,11 @@ export interface LoginResponse {
 
 interface JwtPayload {
   exp?: number;
+  role?: string;
+  permissions?: string[];
 }
 
-const decodeJwtPayload = (token: string): JwtPayload | null => {
+export const decodeJwtPayload = (token: string): JwtPayload | null => {
   try {
     const [, payload] = token.split('.');
     if (!payload) return null;
@@ -69,6 +72,28 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
 export const logout = () => {
   clearCurrentUser();
+};
+
+/** Repli si le backend est momentanément indisponible (permissions du JWT / login). */
+export const buildPermissionsFallback = (user: LoginResponse): {
+  role: string;
+  permissions: { code: string; description: string; granted: boolean }[];
+} | null => {
+  const payload = decodeJwtPayload(user.token);
+  const codes =
+    (Array.isArray(payload?.permissions) ? payload.permissions : user.permissions) ?? [];
+  const role = payload?.role ?? user.role ?? 'GUEST';
+  if (codes.length === 0) {
+    return null;
+  }
+  return {
+    role,
+    permissions: codes.map((code) => ({
+      code,
+      description: code,
+      granted: true,
+    })),
+  };
 };
 
 export const getCurrentUser = (): LoginResponse | null => {

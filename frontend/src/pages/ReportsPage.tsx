@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { 
-  FileText, Download, Filter, 
-  BookOpen, ClipboardList, TrendingUp, 
-  ShieldCheck, AlertTriangle, Printer,
-  FileSpreadsheet, Layers, History
+import {
+  Download,
+  BookOpen, ClipboardList, TrendingUp,
+  ShieldCheck, Printer,
+  FileSpreadsheet, Layers
 } from "lucide-react";
-import { api } from "../api/api";
+import { api, getSystemSettings } from "../api/api";
 import { useToast } from "../contexts/ToastContext";
 
 type DocCategory = 'ENTREES' | 'JOURNAUX' | 'INVENTAIRES' | 'BILANS' | 'TECHNIQUE';
@@ -34,9 +34,21 @@ const ReportsPage: React.FC = () => {
   const [loadingDoc, setLoadingDoc] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     exercice: "2024",
-    institution: "MINISTÈRE DE L'ÉCONOMIE ET DES FINANCES",
+    institution: "MINISTERE DE L'ECONOMIE ET DES FINANCES",
     poste: "CENTRAL DE LAME"
   });
+
+  useEffect(() => {
+    getSystemSettings()
+      .then((settings) => {
+        setFilters({
+          exercice: settings.EXPORT_EXERCICE || "2024",
+          institution: settings.EXPORT_INSTITUTION || "MINISTERE DE L'ECONOMIE ET DES FINANCES",
+          poste: settings.EXPORT_POSTE || "CENTRAL DE LAME"
+        });
+      })
+      .catch(() => undefined);
+  }, []);
 
   const handleDownload = async (docCode: string) => {
     setLoadingDoc(docCode);
@@ -77,47 +89,7 @@ const ReportsPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="reports-layout">
-        {/* --- FILTERS SIDEBAR --- */}
-        <aside className="reports-sidebar-glass">
-          <div className="sidebar-section">
-            <div className="section-title">
-              <Filter size={16} />
-              <span>Paramètres d'Export</span>
-            </div>
-            <div className="filter-group">
-              <label>Exercice Budgétaire</label>
-              <select 
-                value={filters.exercice} 
-                onChange={(e) => setFilters({...filters, exercice: e.target.value})}
-                className="premium-select"
-              >
-                <option value="2023">2023</option>
-                <option value="2024">2024</option>
-                <option value="2025">2025</option>
-              </select>
-            </div>
-            <div className="filter-group">
-              <label>Institution / Ministère</label>
-              <textarea 
-                value={filters.institution}
-                onChange={(e) => setFilters({...filters, institution: e.target.value})}
-                className="premium-textarea"
-                rows={3}
-              />
-            </div>
-            <div className="filter-group">
-              <label>Poste Comptable</label>
-              <input 
-                type="text"
-                value={filters.poste}
-                onChange={(e) => setFilters({...filters, poste: e.target.value})}
-                className="premium-input"
-              />
-            </div>
-          </div>
-        </aside>
-
+      <div className="reports-layout compact">
         {/* --- MAIN CATALOG --- */}
         <main className="reports-catalog">
           <div className="catalog-grid">
@@ -162,6 +134,7 @@ const ReportsPage: React.FC = () => {
       <style>{`
         .reports-module { padding: 40px; }
         .reports-layout { display: grid; grid-template-columns: 320px 1fr; gap: 32px; margin-top: 30px; }
+        .reports-layout.compact { display: block; }
         
         .reports-sidebar-glass {
           background: white;

@@ -352,4 +352,192 @@ public class DashboardService {
         int score,
         DashboardStatsDTO.DashboardAlerteBienDTO payload
     ) {}
+
+    // ============================================================
+    // SPRINT 5 — ANALYTICS PRÉDICTIFS
+    // ============================================================
+
+    /**
+     * Courbe de dépréciation prévisionnelle sur 36 mois.
+     * Calcul d'amortissement linéaire : valeur nette = valeur brute - (amortissement annuel × mois écoulés / 12)
+     */
+    public java.util.List<java.util.Map<String, Object>> getDepreciationForecast() {
+        List<Bien> biens = bienRepository.findAllByArchivedFalse();
+        LocalDate now = LocalDate.now();
+
+        double valeurNetteActuelle = biens.stream()
+            .mapToDouble(b -> b.getValeurNetteComptable() != null ? b.getValeurNetteComptable() : b.getValeur())
+            .sum();
+        double amortissementAnnuelTotal = biens.stream()
+            .mapToDouble(b -> {
+                if (b.getValeur() <= 0 || b.getDureeAmortissement() == null || b.getDureeAmortissement() <= 0) return 0;
+                return b.getValeur() / b.getDureeAmortissement();
+            })
+            .sum();
+        double amortissementMensuel = amortissementAnnuelTotal / 12.0;
+
+        java.util.List<java.util.Map<String, Object>> result = new ArrayList<>();
+        double valeurCourante = valeurNetteActuelle;
+
+        for (int i = 0; i <= 36; i++) {
+            LocalDate date = now.plusMonths(i);
+            String label = date.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.FRENCH)
+                + " " + date.getYear();
+            result.add(java.util.Map.of(
+                "label", label,
+                "valeurNette", Math.max(0, Math.round(valeurCourante)),
+                "mois", i
+            ));
+            valeurCourante = Math.max(0, valeurCourante - amortissementMensuel);
+        }
+        return result;
+    }
+
+    /**
+     * Risk Heatmap : Score de risque multicritère pour chaque bien (top 20).
+     * Critères : vétusté, statut opérationnel, maintenance en retard, non-affectation.
+     */
+    public java.util.List<java.util.Map<String, Object>> getRiskHeatmap() {
+        List<Bien> biens = bienRepository.findAllByArchivedFalse();
+        LocalDate now = LocalDate.now();
+
+        return biens.stream()
+            .map(b -> {
+                int score = 0;
+                String niveau = "BAS";
+
+                // Vétusté
+                if (b.getValeur() > 0 && b.getAmortissementCumule() != null) {
+                    double v = b.getAmortissementCumule() / b.getValeur() * 100;
+                    if (v >= 90) score += 40;
+                    else if (v >= 70) score += 25;
+                    else if (v >= 50) score += 10;
+                }
+
+                // Statut opérationnel
+                if ("SINISTRE".equalsIgnoreCase(String.valueOf(b.getStatutOperationnel()))) score += 40;
+                else if ("EN_MAINTENANCE".equalsIgnoreCase(String.valueOf(b.getStatutOperationnel()))) score += 20;
+                else if ("HORS_SERVICE".equalsIgnoreCase(String.valueOf(b.getStatutOperationnel()))) score += 30;
+
+                // Maintenance en retard
+                LocalDate nextControl = resolveNextControlDate(b);
+                if (nextControl != null && nextControl.isBefore(now)) score += 25;
+                else if (nextControl != null && nextControl.isBefore(now.plusDays(15))) score += 10;
+
+                // Non affecté
+                if (b.getService() == null || b.getService().isBlank()) score += 10;
+
+                if (score >= 60) niveau = "CRITIQUE";
+                else if (score >= 35) niveau = "ÉLEVÉ";
+                else if (score >= 15) niveau = "MOYEN";
+
+                double vetuste = b.getValeur() > 0 && b.getAmortissementCumule() != null
+                    ? Math.round(b.getAmortissementCumule() / b.getValeur() * 100.0) : 0;
+
+                return java.util.Map.<String, Object>of(
+                    "id", b.getId(),
+                    "iup", b.getIup() != null ? b.getIup() : "",
+                    "designation", b.getDesignation() != null ? b.getDesignation() : "",
+                    "categorie", b.getCodeCategorie() != null ? b.getCodeCategorie() : "",
+                    "service", b.getService() != null ? b.getService() : "Non affecté",
+                    "scoreRisque", score,
+                    "niveau", niveau,
+                    "vetuste", (int) vetuste
+                );
+            })
+            .filter(m -> (int) m.get("scoreRisque") > 0)
+            .sorted(java.util.Comparator.comparingInt(m -> -(int) ((java.util.Map<?, ?>) m).get("scoreRisque")))
+            .limit(20)
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Alertes intelligentes générées par règles métier — détection proactive.
+     */
+    public java.util.List<java.util.Map<String, Object>> getAlertesIntelligentes() {
+        List<Bien> biens = bienRepository.findAllByArchivedFalse();
+        List<Stock> stocks = stockRepository.findAll();
+        LocalDate now = LocalDate.now();
+        java.util.List<java.util.Map<String, Object>> alertes = new ArrayList<>();
+
+        // Règle 1 : Biens à vétusté > 80%
+        long aReformer = biens.stream().filter(b -> b.getValeur() > 0 && b.getAmortissementCumule() != null
+            && b.getAmortissementCumule() / b.getValeur() * 100 >= 80).count();
+        if (aReformer > 0) {
+            alertes.add(java.util.Map.of(
+                "id", "REFORME_REQUISE",
+                "titre", "Réforme requise",
+                "message", aReformer + " bien(s) ont un taux de vétusté ≥ 80% et doivent être mis en réforme.",
+                "niveau", "CRITIQUE",
+                "count", aReformer,
+                "action", "Accéder au module Réforme"
+            ));
+        }
+
+        // Règle 2 : Maintenances en retard
+        long maintenancesRetard = biens.stream()
+            .filter(b -> resolveNextControlDate(b) != null && resolveNextControlDate(b).isBefore(now))
+            .count();
+        if (maintenancesRetard > 0) {
+            alertes.add(java.util.Map.of(
+                "id", "MAINTENANCE_RETARD",
+                "titre", "Maintenances en retard",
+                "message", maintenancesRetard + " bien(s) ont des maintenances dépassées. Chaque jour de retard augmente le risque de panne.",
+                "niveau", "ÉLEVÉ",
+                "count", maintenancesRetard,
+                "action", "Voir le calendrier d'entretiens"
+            ));
+        }
+
+        // Règle 3 : Stocks critiques
+        long stocksRupture = stocks.stream().filter(s -> {
+            int seuil = s.getSeuilAlerte() > 0 ? s.getSeuilAlerte() : (s.getConsommable() != null ? s.getConsommable().getSeuilAlerte() : 0);
+            return s.getQuantite() <= seuil;
+        }).count();
+        if (stocksRupture > 0) {
+            alertes.add(java.util.Map.of(
+                "id", "STOCK_CRITIQUE",
+                "titre", "Stocks en alerte",
+                "message", stocksRupture + " consommable(s) sont sous le seuil critique. Un réapprovisionnement urgent est recommandé.",
+                "niveau", "MOYEN",
+                "count", stocksRupture,
+                "action", "Accéder aux stocks"
+            ));
+        }
+
+        // Règle 4 : Biens non affectés > 30 jours
+        long nonAffectes = biens.stream()
+            .filter(b -> (b.getService() == null || b.getService().isBlank())
+                && b.getDateAcquisition() != null
+                && b.getDateAcquisition().isBefore(now.minusDays(30)))
+            .count();
+        if (nonAffectes > 0) {
+            alertes.add(java.util.Map.of(
+                "id", "NON_AFFECTE",
+                "titre", "Biens sans affectation prolongée",
+                "message", nonAffectes + " bien(s) acquis il y a plus de 30 jours ne sont toujours pas affectés à un service.",
+                "niveau", "MOYEN",
+                "count", nonAffectes,
+                "action", "Gérer les affectations"
+            ));
+        }
+
+        // Règle 5 : Biens sinistrés sans réforme
+        long sinistresActifs = biens.stream()
+            .filter(b -> "SINISTRE".equalsIgnoreCase(String.valueOf(b.getStatutOperationnel())))
+            .count();
+        if (sinistresActifs > 0) {
+            alertes.add(java.util.Map.of(
+                "id", "SINISTRES_ACTIFS",
+                "titre", "Biens sinistrés actifs",
+                "message", sinistresActifs + " bien(s) sont marqués comme sinistrés. Déclaration assurance et procédure de réforme recommandées.",
+                "niveau", "CRITIQUE",
+                "count", sinistresActifs,
+                "action", "Consulter les sinistres"
+            ));
+        }
+
+        return alertes;
+    }
 }
+

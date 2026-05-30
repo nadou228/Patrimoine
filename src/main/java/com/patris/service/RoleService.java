@@ -23,13 +23,17 @@ public class RoleService {
 
     private boolean isCurrentSuperAdmin() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPERADMIN"));
+        if (auth == null) return false;
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPERADMIN")
+                            || a.getAuthority().equals("ROLE_ADMIN")
+                            || a.getAuthority().equals("SUPERADMIN")
+                            || a.getAuthority().equals("ADMIN"));
     }
 
     private void assertCanManageRole(String code, String action) {
         if ("SUPERADMIN".equals(code) && !isCurrentSuperAdmin()) {
-            throw new RuntimeException("Seul un SUPERADMIN peut " + action + " le role SUPERADMIN.");
+            throw new RuntimeException("Seul un SUPERADMIN ou un ADMIN peut " + action + " le role SUPERADMIN.");
         }
     }
 
@@ -97,6 +101,19 @@ public class RoleService {
     public Role updatePermissions(Long roleId, Set<String> permissionCodes) {
         Role role = findById(roleId);
         assertCanManageRole(role.getCode(), "modifier les permissions du");
+
+        // Assurer que chaque permission demandée existe en base avant l'affectation
+        for (String code : permissionCodes) {
+            if (permissionRepository.findByCode(code).isEmpty()) {
+                try {
+                    com.patris.enums.Permission enumPerm = com.patris.enums.Permission.valueOf(code);
+                    permissionRepository.save(new com.patris.model.Permission(code, enumPerm.description));
+                } catch (IllegalArgumentException e) {
+                    permissionRepository.save(new com.patris.model.Permission(code, "Droit de validation " + code));
+                }
+            }
+        }
+
         Set<Permission> permissions = permissionCodes.stream()
                 .map(code -> permissionRepository.findByCode(code)
                         .orElseThrow(() -> new RuntimeException("Permission introuvable : " + code)))

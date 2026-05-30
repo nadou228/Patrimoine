@@ -6,6 +6,9 @@ import BienSelector from "../components/BienSelector";
 import FileUpload from "../components/FileUpload";
 import MediaViewer from "../components/MediaViewer";
 import { useToast } from "../contexts/ToastContext";
+import SignatureModal from "../components/SignatureModal";
+import { generateSinistrePdf } from "../utils/pdfExport";
+import { uploadSinistreRapport, validerSinistre } from "../api/api";
 import { PlusCircle, ShieldAlert, ShieldCheck, Eye, Trash2, Shield, CheckCircle2 } from "lucide-react";
 
 type SinistreType = "VOL" | "INCENDIE" | "ACCIDENT" | "DEGRADATION" | "CATASTROPHE_NATURELLE" | "AUTRE";
@@ -116,6 +119,50 @@ export default function SinistresPage() {
   const loadData = async () => {
     const response = await getSinistres().catch(() => []);
     setData(asSinistres(response));
+  };
+
+  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  const [signingSinistre, setSigningSinistre] = useState<Sinistre | null>(null);
+
+  const handleSinistreSignatureConfirm = async (dataUrl: string, validatorName: string) => {
+    if (!signingSinistre) return;
+    setSignatureModalOpen(false);
+    try {
+      showToast({ type: 'info', title: 'Génération du PDF signé...' });
+      const pdfBlob = await generateSinistrePdf(signingSinistre, signingSinistre.bien, { signerName: validatorName, signatureDataUrl: dataUrl });
+      await uploadSinistreRapport(signingSinistre.id!, pdfBlob);
+      await validerSinistre(signingSinistre.id!, { validateur: validatorName }).catch(() => null);
+      showToast({ type: 'success', title: 'Sinistre validé et PDF signé enregistré' });
+      setSigningSinistre(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      showToast({ type: 'error', title: 'Erreur lors de l\'export/validation' });
+    }
+  };
+
+  const printSinistre = (item: Sinistre) => {
+    if (!item) return;
+    const html = `
+      <html>
+        <head>
+          <title>Déclaration de sinistre ${item.id}</title>
+          <style>body{font-family:Arial,sans-serif;margin:24px;color:#222}h1{margin-bottom:.5rem}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px}.section{margin-top:1rem;padding:12px;border:1px solid #e5e7eb;border-radius:8px}</style>
+        </head>
+        <body>
+          <h1>Déclaration de sinistre</h1>
+          <div class="meta">
+            <div><strong>Bien :</strong> ${item.bien?.designation || 'N/A'}</div>
+            <div><strong>IUP :</strong> ${item.bien?.iup || 'N/A'}</div>
+            <div><strong>Type :</strong> ${item.type || '—'}</div>
+            <div><strong>Date :</strong> ${item.dateSinistre || '—'}</div>
+          </div>
+          <div class="section"><h3>Description</h3><p>${item.description || '—'}</p></div>
+          <div class="section"><h3>Montant estimé</h3><p>${formatMoney(item.montantEstime)}</p></div>
+        </body>
+      </html>
+    `;
+    const win = window.open('', '_blank'); if (win) { win.document.write(html); win.document.close(); win.focus(); win.print(); }
   };
 
   useEffect(() => {
@@ -434,6 +481,8 @@ export default function SinistresPage() {
                       >
                         <ShieldAlert size={14} style={{ marginRight: 4 }} /> Suivi Assurance
                       </button>
+                      <button className="aff-action-btn" type="button" onClick={() => printSinistre(item)}>🖨️ Imprimer</button>
+                      <button className="aff-action-btn" type="button" onClick={() => { setSigningSinistre(item); setSignatureModalOpen(true); }}>📎 Export & Sign</button>
                       <button 
                         className="aff-action-btn" 
                         type="button" 
@@ -565,6 +614,7 @@ export default function SinistresPage() {
           </div>
         </div>
       ) : null}
+      <SignatureModal open={signatureModalOpen} onClose={() => { setSignatureModalOpen(false); setSigningSinistre(null); }} onConfirm={handleSinistreSignatureConfirm} />
     </div>
   );
 }

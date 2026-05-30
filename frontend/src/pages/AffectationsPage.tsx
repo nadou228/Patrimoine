@@ -16,6 +16,9 @@ import {
   deleteAffectation,
 } from "../api/api";
 import { Trash2, FileText } from "lucide-react";
+import SignatureModal from "../components/SignatureModal";
+import { generateAffectationPdf } from "../utils/pdfExport";
+import { validerAffectationAvecDocument } from "../api/api";
 import MediaViewer from "../components/MediaViewer";
 import { Bien, updateBienStatus } from "../api/biens";
 import { getCurrentUser } from "../api/auth";
@@ -41,6 +44,9 @@ type Affectation = {
   ministere?: string;
   posteComptable?: string;
   documentsUrls?: string[];
+  validePar?: string;
+  dateValidation?: string;
+  dateFin?: string;
 };
 
 type AffectationForm = {
@@ -135,16 +141,26 @@ const normalizeValidationStatus = (value?: Affectation["statutValidation"]) => {
   return value || "EN_ATTENTE";
 };
 
+const getAffectationStatusLabel = (value?: Affectation["statutValidation"]) => {
+  const normalized = normalizeValidationStatus(value);
+  const raw = String(normalized).trim().toUpperCase();
+  if (normalized === "EN_ATTENTE") return "EN ATTENTE";
+  if (normalized === "VALIDE") return "VALIDÉ";
+  if (raw === "REJETE" || raw === "REJETÉ") return "REJETÉ";
+  if (normalized === "TRANSFERE") return "TRANSFÉRÉ";
+  return normalized;
+};
+
 function ErrorText({ message }: { message?: string }) {
   return message ? <span className="field-error">{message}</span> : null;
 }
 
 export default function AffectationsPage() {
   const location = useLocation();
-  const { permissions } = usePermissions();
+  const { permissions, hasPermission } = usePermissions();
   const { showToast } = useToast();
   const user = getCurrentUser();
-  const canValidate = permissions?.role === "ADMIN" || permissions?.role === "SUPERVISOR";
+  const canValidate = hasPermission("VALIDATE_AFFECTATIONS");
 
   const [view, setView] = useState<"LIST" | "FORM">("LIST");
   const [data, setData] = useState<Affectation[]>([]);
@@ -367,6 +383,52 @@ export default function AffectationsPage() {
     showToast({ type: "success", title: "Affectation validee" });
   };
 
+  const printAffectation = (item: Affectation) => {
+    if (!item.bien) return;
+    const html = `
+      <html>
+        <head>
+          <title>Bordereau d'affectation ${item.id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
+            h1 { margin-bottom: 0.5rem; }
+            p, div { margin: 0.4rem 0; }
+            .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 1rem; }
+            .section { margin-top: 1.5rem; padding: 16px; border: 1px solid #ddd; border-radius: 12px; }
+            .badge { display: inline-flex; padding: 6px 12px; border-radius: 999px; background: #4f46e5; color: white; font-weight: 700; margin-top: 0.5rem; }
+            .signature { margin-top: 1rem; }
+            img { max-width: 100%; border: 1px solid #ccc; border-radius: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>Bordereau d'affectation</h1>
+          <div class="badge">${getAffectationStatusLabel(item.statutValidation)}</div>
+          <div class="meta">
+            <div><strong>Bien :</strong> ${item.bien.designation || "N/A"}</div>
+            <div><strong>IUP :</strong> ${item.bien.iup || "N/A"}</div>
+            <div><strong>Service :</strong> ${item.service || "N/A"}</div>
+            <div><strong>Détenteur :</strong> ${item.detenteur || item.detenteurA || "N/A"}</div>
+            <div><strong>Date d'affectation :</strong> ${item.dateAffectation ? new Date(item.dateAffectation).toLocaleDateString('fr-FR') : "N/A"}</div>
+            <div><strong>Validé par :</strong> ${item.validePar || "—"}</div>
+            <div><strong>Date validation :</strong> ${item.dateValidation ? new Date(item.dateValidation).toLocaleDateString('fr-FR') : "—"}</div>
+          </div>
+          <div class="section">
+            <h2>Motif</h2>
+            <p>${item.motif || "Aucun motif renseigné."}</p>
+          </div>
+          ${item.signatureUrl ? `<div class="section signature"><h2>Signature</h2><img src="${getFullUrl(item.signatureUrl)}" alt="Signature" /></div>` : ""}
+        </body>
+      </html>
+    `;
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      win.print();
+    }
+  };
+
   const handleReturn = async () => {
     if (!returnModal) return;
     if (!returnModal.motif.trim()) {
@@ -387,6 +449,22 @@ export default function AffectationsPage() {
       showToast({ type: "success", title: "Bien retourne au registre actif" });
     } finally {
       setReturning(false);
+    }
+  };
+
+  const handleSignatureConfirm = async (dataUrl: string, validatorName: string) => {
+    if (!signingAffectation) return;
+    setSignatureModalOpen(false);
+    try {
+      showToast({ type: 'info', title: 'Génération du PDF signé...' });
+      const pdfBlob = await generateAffectationPdf(signingAffectation, signingAffectation.bien, { signerName: validatorName, signatureDataUrl: dataUrl });
+      await validerAffectationAvecDocument(signingAffectation.id!, pdfBlob, validatorName);
+      showToast({ type: 'success', title: 'Affectation validée et PDF signé enregistré' });
+      setSigningAffectation(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      showToast({ type: 'error', title: 'Erreur lors de l\'export/validation' });
     }
   };
 
@@ -426,6 +504,8 @@ export default function AffectationsPage() {
   };
 
   const [search, setSearch] = useState("");
+  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  const [signingAffectation, setSigningAffectation] = useState<Affectation | null>(null);
   const filtered = useMemo(() =>
     data.filter(item =>
       !search ||
@@ -756,6 +836,12 @@ export default function AffectationsPage() {
                     {canValidate && statut === "EN_ATTENTE" ? (
                       <button className="aff-action-btn btn-success" type="button" onClick={() => void handleValidate(item)}>✅ Valider</button>
                     ) : null}
+                    {canValidate && statut === "EN_ATTENTE" ? (
+                      <button className="aff-action-btn" type="button" onClick={() => { setSigningAffectation(item); setSignatureModalOpen(true); }}>📎 Export & Sign</button>
+                    ) : null}
+                    <button className="aff-action-btn" type="button" onClick={() => printAffectation(item)}>
+                      🖨️ Imprimer
+                    </button>
                     <button
                       className="aff-action-btn"
                       type="button"
@@ -833,6 +919,8 @@ export default function AffectationsPage() {
           </div>
         </div>
       ) : null}
+      {/* Signature modal for exporting signed PDF */}
+      <SignatureModal open={signatureModalOpen} onClose={() => { setSignatureModalOpen(false); setSigningAffectation(null); }} onConfirm={handleSignatureConfirm} />
     </div>
   );
 }

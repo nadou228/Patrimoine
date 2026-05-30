@@ -8,6 +8,7 @@ import java.util.Set;
 
 /**
  * Jeux de permissions par rôle système (source unique pour le seed en base).
+ * Inclut la Matrice de Validation Dynamique Haute Densité.
  */
 public final class RolePermissionBootstrap {
 
@@ -29,6 +30,7 @@ public final class RolePermissionBootstrap {
                         Permission.READ_INVENTAIRES,
                         Permission.CREATE_INVENTAIRES,
                         Permission.UPDATE_INVENTAIRES,
+                        Permission.VALIDATE_INVENTAIRES_AGENT,
                         Permission.VIEW_DASHBOARD
                 );
 
@@ -40,6 +42,7 @@ public final class RolePermissionBootstrap {
                         Permission.READ_STOCKS,
                         Permission.CREATE_STOCKS,
                         Permission.UPDATE_STOCKS,
+                        Permission.VALIDATE_STOCKS,
                         Permission.READ_INVENTAIRES,
                         Permission.CREATE_INVENTAIRES,
                         Permission.UPDATE_INVENTAIRES,
@@ -61,10 +64,14 @@ public final class RolePermissionBootstrap {
                         Permission.READ_STOCKS,
                         Permission.READ_INVENTAIRES,
                         Permission.READ_AFFECTATIONS,
+                        Permission.VALIDATE_AFFECTATIONS,
                         Permission.READ_REFORMES,
                         Permission.CREATE_REFORMES,
                         Permission.UPDATE_REFORMES,
                         Permission.DELETE_REFORMES,
+                        Permission.VALIDATE_REFORMES,
+                        Permission.VALIDATE_INVENTAIRES_SUPERVISEUR,
+                        Permission.VALIDATE_INVENTAIRES_ECART,
                         Permission.READ_SINISTRES,
                         Permission.READ_ENTRETIENS,
                         Permission.READ_AUDIT,
@@ -114,6 +121,7 @@ public final class RolePermissionBootstrap {
                         Permission.READ_STOCKS,
                         Permission.CREATE_STOCKS,
                         Permission.UPDATE_STOCKS,
+                        Permission.VALIDATE_STOCKS,
                         Permission.READ_INVENTAIRES,
                         Permission.VIEW_DASHBOARD
                 );
